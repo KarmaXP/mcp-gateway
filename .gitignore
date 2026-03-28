@@ -1,0 +1,24 @@
+# Binaries
+bin/
+gateway
+
+# Dependencies
+vendor/
+
+# Environment variables and secrets
+.env
+.env.*
+
+# IDEs and Editors
+.vscode/
+.idea/
+.cursor/
+*.swp
+
+# Logs and temporary files
+*.log
+tmp/
+
+# OS specific files
+.DS_Store
+Thumbs.db
