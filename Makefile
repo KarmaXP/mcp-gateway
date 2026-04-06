@@ -5,6 +5,8 @@ SHELL := /bin/bash
 # Variables
 BINARY_NAME=mcp-gateway
 MAIN_PATH=cmd/gateway/main.go
+COMPOSE=docker compose -f deployments/docker-compose.yaml --env-file .env
+GATEWAY_PORT ?= 8080
 
 # Colors
 BLUE 	:= \033[1;34m
@@ -13,7 +15,8 @@ CYAN    := \033[36m
 RESET   := \033[0m
 
 .DEFAULT_GOAL := help
-.PHONY: help build run test clean docker-up docker-down docker-logs tidy
+.PHONY: help build run stop test clean tidy \
+        docker-build docker-up docker-up-full docker-down docker-logs docker-clean
 
 # Help: sectioned list of targets (descriptions are defined here only)
 help:
@@ -26,13 +29,17 @@ help:
 	@printf "$(BLUE)▶ Development$(RESET)\n"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "build" "Compile the Go binary"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "run" "Start the Gateway in development mode"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "stop" "Stop the running Gateway process"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test" "Run all unit tests with race detection"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "tidy" "Clean up and verify Go modules"
 	@printf "\n"
 	@printf "$(BLUE)▶ Infrastructure & Docker$(RESET)\n"
-	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-up" "Spin up Qdrant and MCP mock servers"
-	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-down" "Stop and remove all containers"
-	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-logs" "Follow logs from infrastructure services"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-build"    "Build the gateway Docker image"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-up"       "Start infra (Qdrant · OTel · Tempo · Prometheus · Grafana)"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-up-full"  "Start infra + gateway container"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-down"     "Stop and remove all containers"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-logs"     "Follow logs from all running services"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-clean"    "Remove containers, volumes and built image"
 	@printf "\n"
 
 # Targets Implementation
@@ -45,6 +52,10 @@ build:
 run:
 	@echo "🚀 Starting $(BINARY_NAME)..."
 	@go run $(MAIN_PATH)
+
+stop:
+	@echo "🛑 Stopping $(BINARY_NAME)..."
+	@lsof -ti :$(GATEWAY_PORT) | xargs kill 2>/dev/null || echo "No running gateway process found"
 
 test:
 	@echo "🧪 Running tests..."
@@ -60,13 +71,26 @@ clean:
 	@rm -rf bin/
 	@rm -rf tmp/
 
+docker-build:
+	@echo "🐳 Building gateway image..."
+	@docker build -t mcp-gateway:dev .
+
 docker-up:
-	@echo "🐳 Starting Docker infrastructure..."
-	@docker-compose -f deployments/docker-compose.yaml up -d
+	@echo "🐳 Starting infrastructure..."
+	@$(COMPOSE) up -d
+
+docker-up-full: docker-build
+	@echo "🐳 Starting full stack (infra + gateway)..."
+	@$(COMPOSE) --profile gateway up -d
 
 docker-down:
-	@echo "🛑 Stopping infrastructure..."
-	@docker-compose -f deployments/docker-compose.yaml down
+	@echo "🛑 Stopping all containers..."
+	@$(COMPOSE) --profile gateway down
 
 docker-logs:
-	@docker-compose -f deployments/docker-compose.yaml logs -f
+	@$(COMPOSE) --profile gateway logs -f
+
+docker-clean:
+	@echo "🧹 Removing containers, volumes and image..."
+	@$(COMPOSE) --profile gateway down -v --remove-orphans
+	@docker rmi mcp-gateway:dev 2>/dev/null || true

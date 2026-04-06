@@ -1,0 +1,254 @@
+# =============================================================================
+# MCP Gateway — Infrastructure stack
+#
+# Tech stack (closed decisions):
+#   Vector store  : Qdrant     (Cosine similarity, 384-dim)
+#   Embeddings    : ONNX local (all-MiniLM-L6-v2)
+#   Traces        : Grafana Tempo  ← via OTel Collector (OTLP)
+#   Metrics       : Prometheus     ← scraped from OTel Collector + Tempo remote_write
+#   Dashboards    : Grafana        ← datasources provisioned automatically
+#   Transport     : SSE / HTTP     (JSON-RPC 2.0)
+#   Auth          : JWT Bearer     (JWKS validated in gateway)
+#
+# Default profile (make docker-up):
+#   qdrant · embed · otel-collector · tempo · prometheus · grafana
+#
+# Full profile — includes the gateway container (make docker-up-full):
+#   docker compose --profile gateway up -d
+#
+# URLs once running:
+#   Grafana     → http://localhost:3000   (admin / admin)
+#   Tempo       → http://localhost:3200   (API / health)
+#   Prometheus  → http://localhost:9090
+#   Qdrant UI   → http://localhost:6333/dashboard
+#   Embed API   → http://localhost:8001   (POST /embed, GET /healthz)
+#   Gateway     → http://localhost:8080   (profile: gateway only)
+# =============================================================================
+
+networks:
+  mcp-net:
+    driver: bridge
+
+volumes:
+  qdrant-data:
+  tempo-data:
+  prometheus-data:
+  grafana-data:
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Qdrant — vector store for the semantic router (§3.B)
+  # Collection must use Cosine distance with 384-dim vectors (all-MiniLM-L6-v2).
+  # ---------------------------------------------------------------------------
+  # Port strategy
+  # ─────────────────────────────────────────────────────────────────────────
+  # Services talk to each other via Docker's internal DNS (service name:port).
+  # Host port bindings are only needed when the gateway runs OUTSIDE Docker
+  # (make run) so it can reach infra via localhost.
+  #
+  # Override any port by setting the matching HOST_PORT_* variable in .env:
+  #   HOST_PORT_QDRANT_HTTP=16333   # avoids conflict on 6333
+  #
+  # Services accessed only by other containers (never by host code or browser)
+  # have no host binding at all — they cannot conflict with anything.
+  # ─────────────────────────────────────────────────────────────────────────
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.6
+    container_name: mcp-qdrant
+    restart: unless-stopped
+    ports:
+      # HTTP (dashboard + REST).  Override: HOST_PORT_QDRANT_HTTP=16333
+      - "${HOST_PORT_QDRANT_HTTP:-6333}:6333"
+      # gRPC — used by the gateway when running locally.  Override: HOST_PORT_QDRANT_GRPC=16334
+      - "${HOST_PORT_QDRANT_GRPC:-6334}:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    networks:
+      - mcp-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:6333/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Embed — local ONNX inference service (all-MiniLM-L6-v2, 384 dims)
+  # Model is baked into the image at build time; no internet access at runtime.
+  # POST /embed  {"texts":["..."]}  →  {"embeddings":[[...]], "dimensions":384}
+  # GET  /healthz
+  # ---------------------------------------------------------------------------
+  embed:
+    build:
+      context: ./embed
+      dockerfile: Dockerfile
+    image: mcp-embed:dev
+    container_name: mcp-embed
+    restart: unless-stopped
+    ports:
+      # Needed when gateway runs locally (make run).  Override: HOST_PORT_EMBED=18001
+      - "${HOST_PORT_EMBED:-8001}:8001"
+    networks:
+      - mcp-net
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/healthz').read()\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s   # ONNX model load takes ~20-30s on first start
+
+  # ---------------------------------------------------------------------------
+  # OpenTelemetry Collector — sidecar that receives OTLP from the gateway and
+  # fans out: traces → Tempo (OTLP gRPC), metrics → Prometheus (scrape exporter).
+  # ---------------------------------------------------------------------------
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.120.0
+    container_name: mcp-otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otel/otel-collector.yaml"]
+    ports:
+      # OTLP gRPC — gateway → collector.  Override: HOST_PORT_OTLP_GRPC=14317
+      - "${HOST_PORT_OTLP_GRPC:-4317}:4317"
+      # OTLP HTTP — gateway → collector.  Override: HOST_PORT_OTLP_HTTP=14318
+      - "${HOST_PORT_OTLP_HTTP:-4318}:4318"
+      # :8889 Prometheus scrape endpoint is internal-only — no host binding
+    volumes:
+      - ./otel-collector.yaml:/etc/otel/otel-collector.yaml:ro
+    networks:
+      - mcp-net
+    depends_on:
+      tempo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:13133/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ---------------------------------------------------------------------------
+  # Grafana Tempo — distributed tracing backend (OTLP-native)
+  # Receives traces from OTel Collector via OTLP gRPC (internal port 4317).
+  # Generates RED metrics (service-graphs, span-metrics) → Prometheus remote_write.
+  # Internal ports (4317/4318) have no host binding — only otel-collector talks to them.
+  # ---------------------------------------------------------------------------
+  tempo:
+    image: grafana/tempo:2.6.1
+    container_name: mcp-tempo
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    # :3200 HTTP API is accessed by Grafana internally — no host binding needed.
+    # Uncomment the line below only if you need direct curl access to Tempo:
+    # ports:
+    #   - "${HOST_PORT_TEMPO:-3200}:3200"
+    volumes:
+      - ./tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    networks:
+      - mcp-net
+    depends_on:
+      prometheus:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3200/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # Prometheus — metrics storage
+  # Scrapes OTel Collector (:8889) and accepts remote_write from Tempo (RED metrics).
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    container_name: mcp-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yaml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+      - "--web.enable-remote-write-receiver"   # Accepts remote_write from Tempo
+    ports:
+      # Override: HOST_PORT_PROMETHEUS=19090
+      - "${HOST_PORT_PROMETHEUS:-9090}:9090"
+    volumes:
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - mcp-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9090/-/healthy || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Grafana — dashboards for metrics (Prometheus) and traces (Tempo)
+  # Datasources provisioned from grafana/provisioning/datasources/.
+  # Default credentials: admin / admin
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:11.5.2
+    container_name: mcp-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor,metricsSummary
+    ports:
+      # Override: HOST_PORT_GRAFANA=13000
+      - "${HOST_PORT_GRAFANA:-3000}:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - mcp-net
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      tempo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # MCP Gateway — Go service.
+  # Only started when using the "gateway" profile (make docker-up-full).
+  # In normal development, run locally with: make run
+  # ---------------------------------------------------------------------------
+  gateway:
+    profiles: ["gateway"]
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: mcp-gateway:dev
+    container_name: mcp-gateway
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    ports:
+      # Override: HOST_PORT_GATEWAY=18080
+      - "${HOST_PORT_GATEWAY:-8080}:8080"
+    networks:
+      - mcp-net
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      embed:
+        condition: service_healthy
+      otel-collector:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
