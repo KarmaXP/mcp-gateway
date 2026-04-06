@@ -6,7 +6,7 @@ SHELL := /bin/bash
 BINARY_NAME=mcp-gateway
 MAIN_PATH=cmd/gateway/main.go
 COMPOSE=docker compose -f deployments/docker-compose.yaml --env-file .env
-GATEWAY_PORT ?= 8080
+GATEWAY_PORT ?= 18080
 
 # Colors
 BLUE 	:= \033[1;34m
