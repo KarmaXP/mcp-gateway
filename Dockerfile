@@ -43,6 +43,6 @@ USER mcp
 EXPOSE 8080
 
 HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 \
-  CMD wget -qO- http://localhost:8080/healthz || exit 1
+  CMD wget -qO- http://localhost:8080/healthz && wget -qO- http://localhost:8080/readyz || exit 1
 
 ENTRYPOINT ["/bin/mcp-gateway"]

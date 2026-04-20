@@ -745,9 +745,32 @@ This section is the **explicit inventory** of everything that must be **chosen a
 
 ---
 
+### 4.0 Decision register — thesis manuscript (source of truth)
+
+The **master’s thesis** (`mcp-thesis/build/main.pdf`, LaTeX: `mcp-thesis/chapters/chapter4.tex` — *Marco Metodológico*) records comparative tables and **final stack choices** as of the current draft. This subsection synchronises the **engineering plan** with that document so agents and reviewers see what is **already decided in prose** versus what remains **TBD in the thesis** or **implementation-only**.
+
+| Area | Closed in thesis (Cap. 4) | Still open / TBD |
+|------|---------------------------|------------------|
+| **Language** | **Go 1.26** — concurrency, static binary, ecosystem (JWT, OTLP, Qdrant gRPC). | Pin policy in `go.mod`, CI matrix. |
+| **Vector store** | **Qdrant** — HNSW, **metadata filters during ANN** (policy in-index); **gRPC client**; **cosine** distance; **384 dimensions** aligned with embeddings. | Collection naming / rotation, HNSW tuning, auth/TLS in non-local deploys, persistence strategy (see §4.1 residual). |
+| **Embeddings** | **Local ONNX Runtime**, model **all-MiniLM-L6-v2**; **384-d**, **L2-normalised** outputs; service **`embed:8001`**; image build bakes ONNX (no runtime download). | Indexed text template version, batch/rate limits, optional embedding cache, multilingual needs (§4.4 residual). |
+| **Host ↔ gateway transport** | **HTTP POST** (agent requests) + **SSE** (async responses); **JSON-RPC 2.0**; MCP **reference transport** for interoperability. | Normative MCP spec revision pinned in README/bibliography; TLS termination; body size limits, heartbeats, backpressure (§4.2 residual). |
+| **Trace backend** | **Grafana Tempo** (OTLP); **metrics_generator** RED → Prometheus; exemplars for trace–metric correlation. | Sampling ratios, retention, attribute redaction details (§4.3 residual). |
+| **Metrics / OTel topology** | **Prometheus** + **OpenTelemetry Collector** as **sidecar** (gateway → OTLP → Collector → Tempo + Prometheus scrape). | OTLP gRPC vs HTTP from gateway to Collector; prod sampling (§4.3 residual). |
+| **AuthN (design-time)** | **JWT Bearer** with **JWKS**; validate `iss`, `aud`, `exp`. **Phases 1–2** run with **`AUTH_MODE=none`** (dev-only; not for public exposure). | Concrete IdP URLs, key rotation ops, rate limits, mTLS vs JWT for mesh (§4.6 residual). |
+| **AuthZ / RAR** | **RAR (RFC 9396)** considered for per-tool consent; thesis states canonical **`authorization_details` for `mcp_tool`** cannot be fixed until **MCP client validation (phase 3)**. | Exact JSON schema for RAR object, glob rules, mapping to namespaced tools (§4.6). |
+| **Router hyperparameters** | Thesis includes comparison framework; **table marks `topK`, `T_min`, `AllowAutoRename`, BM25 hybrid as TBD** pending phase-2 calibration on synthetic catalog (≥20 tools). | All numeric thresholds and `config.example.yaml` final values (§4.5). |
+| **Orchestrator behaviour** | Plan §3.A; thesis defers detail to repo. **Repo:** multiplexor implements **`__` namespacing**, **host `id` preservation**, **partial backend omit on `initialize` / list (R6)**, **application error codes** (`internal/gateway/errcodes`). | Per-backend concurrency caps, strict vs omit policy flag, OpenAPI for HTTP surface, operational timeouts in config (§4.7 residual). |
+
+**§4.11 checklist vs thesis:** Items **1–4** and the **trace/metrics/embeddings narrative** are already covered by comparative tables in **Capítulo 4**. Item **5** (router hyperparameters) has a **structure + TBD state** in the thesis, not final numbers. Item **6** is **partially** closed (JWT direction + `AUTH_MODE=none`); **RAR canonical JSON remains open**. Item **7** is **partially** closed (**Go 1.26**); **MCP spec revision / dependency table** still to pin in repo and bibliography.
+
+---
+
 ### 4.1 Vector store — decision: Qdrant
 
-**Thesis decision:** the semantic router (§3.B) will use **Qdrant** as the vector database in implementation and in `docker-compose` / reference deployment.
+**Thesis decision (closed):** the semantic router (§3.B) will use **Qdrant** as the vector database in implementation and in `docker-compose` / reference deployment, with **gRPC**, **cosine** similarity, and **384-dimensional** vectors consistent with §4.4.
+
+**Repo / plan decision:** same as thesis; keep `internal/router/store` abstracted for tests.
 
 **Rationale:**
 
@@ -758,10 +781,10 @@ This section is the **explicit inventory** of everything that must be **chosen a
 
 **Alternatives to keep in the written thesis study (comparative table):** pgvector, ChromaDB — conclusion aligned with **Qdrant** for this work.
 
-**Open Qdrant operational choices to fix in implementation (justify in dissertation / README):**
+**Residual operational choices** (thesis core choice fixed; tune in implementation / README):
 
-- **Client:** gateway REST API vs official gRPC client (latency, maintenance, types).
-- **Distance / similarity:** Cosine vs Dot vs Euclidean — must be **consistent** with the embedding model chosen in §4.4.
+- **Client:** thesis text assumes **official gRPC client**; confirm in gateway implementation and document version.
+- **Distance / similarity:** **Cosine** fixed in thesis (aligned with L2-normalised ONNX outputs §4.4); only revisit if embedding model changes.
 - **Collection naming:** one global collection vs one per `catalog_version` vs prefixes; **deletion** policy when rotating catalog version.
 - **HNSW parameters** (or equivalent) by default and whether to tune after latency/recall benchmark in the thesis.
 - **Qdrant authentication** in non-local environments (API key, TLS).
@@ -773,12 +796,14 @@ This section is the **explicit inventory** of everything that must be **chosen a
 
 ### 4.2 Network transport, HTTP, and remote MCP
 
-**Mandatory comparative table in the dissertation:** SSE vs WebSockets vs gRPC (in the context of **how** the host talks to the gateway and **alignment with the MCP spec** revision the thesis uses).
+**Thesis decision (closed):** **SSE over HTTP** + **HTTP POST** for client requests, **JSON-RPC 2.0**, as **MCP reference transport** — see comparative table in thesis Cap. 4 (`tab:transport-comparison`).
 
-**Open choices:**
+**Mandatory comparative table in the dissertation:** satisfied in Cap. 4 (SSE vs WebSockets vs gRPC).
+
+**Residual / implementation choices:**
 
 - **Normative MCP revision:** version/commit or date of MCP spec and **Streamable HTTP / SSE** transport assumed by the project (fix in `go.mod` / README and bibliography).
-- **Concrete HTTP surface of the gateway:** routes (e.g. POST for messages, GET for SSE stream), **session** via cookie/header vs stateless with token.
+- **Concrete HTTP surface of the gateway:** thesis states pattern generically; **repo implements** `GET /mcp/sse`, `POST /mcp/rpc`, session header **`Mcp-Session-Id`** (document in OpenAPI when added).
 - **SSE format:** event names (`event:`), `data` field structure (raw JSON vs envelope), **heartbeats** and read/write timeouts.
 - **TLS:** termination at ingress vs TLS in the binary; certificate policy academic vs corporate.
 - **Limits:** max JSON-RPC body size, max time for an aggregated `tools/call`, stream **backpressure**.
@@ -792,15 +817,13 @@ This section is the **explicit inventory** of everything that must be **chosen a
 
 **Not 1:1 substitutes:** traces vs metrics vs unified platform. The thesis should **separate** the discussion.
 
-**Suggested comparative tables in the dissertation:**
+**Thesis decisions (closed):** **Grafana Tempo** for trace storage (OTLP, `metrics_generator` RED → Prometheus, exemplars); **Prometheus** + **OpenTelemetry Collector sidecar** for decoupled export — see tables in Cap. 4 (`tab:tracing-comparison`, `tab:metrics-comparison`).
 
-- (a) **Trace** backends via OTLP: Jaeger, Grafana Tempo, Honeycomb, (others) — OTLP column, self-hosted vs SaaS, retention.
-- (b) **Metrics:** Prometheus (Collector scrape), OTLP metrics to managed backend, or other — how `trace_id` correlates (exemplars, logs).
+**Suggested comparative tables in the dissertation:** satisfied in Cap. 4.
 
-**Open choices:**
+**Residual choices:**
 
-- **Topology:** OpenTelemetry **Collector** as sidecar/agent vs direct export from gateway to backend.
-- **OTLP protocol:** gRPC vs HTTP from gateway to collector or SaaS.
+- **OTLP protocol:** gRPC vs HTTP from gateway to collector (thesis prefers sidecar pattern; wire choice still to fix per deployment).
 - **Trace sampling:** `ParentBased` ratio in `dev` vs `prod`; cost risk on Honeycomb.
 - **Retention and privacy:** which attributes to strip before export (§3.D already forbids `arguments` on spans).
 - **Minimum thesis dashboard:** which queries (PromQL, etc.) prove the internal latency budget §6.
@@ -811,10 +834,10 @@ This section is the **explicit inventory** of everything that must be **chosen a
 
 ### 4.4 Embeddings and semantic model
 
-**Open choices (blocking for Phase 2 with Qdrant):**
+**Thesis decisions (closed):** **Local ONNX** inference; model **all-MiniLM-L6-v2**; **384** dimensions; **L2-normalised** vectors; **cosine** in Qdrant; auxiliary service **`embed:8001`**; ONNX baked at image build — see Cap. 4 (`tab:embed-comparison`).
 
-- **Provider:** cloud API (OpenAI, Voyage, Cohere, etc.) vs **local model** (Ollama, ONNX server, etc.) — implications for **PII**, cost, latency, and offline availability for the thesis.
-- **Concrete model** and **vector dimension** (must match Qdrant collection and distance metric §4.1).
+**Residual choices (Phase 2+ engineering):**
+
 - **Indexed text policy:** exact concatenation template (name, description, parameters) — `document_template_version` for reproducibility.
 - **Batch and rate limiting:** reindex batch size; retries on 429/5xx.
 - **Language:** if catalog mixes EN/ES, whether a multilingual model is required.
@@ -826,27 +849,32 @@ This section is the **explicit inventory** of everything that must be **chosen a
 
 ### 4.5 Semantic router: modes, signals, and hyperparameters
 
-**Open choices:**
+**Thesis status:** Cap. 4 §*Hiperparámetros del enrutador semántico* (`tab:router-hyperparams`) explicitly marks **`topK`**, **`T_min`**, **`AllowAutoRename`**, and **BM25 hybrid (α, β)** as **TBD**, to be calibrated in **phase 2** with a synthetic catalog (≥20 tools); final values to land in **`config.example.yaml`**.
+
+**Open choices (unchanged until calibration):**
 
 - **`tools/list` mode:** `assist_list` (full list to host, router only on `tools/call`) vs `filter_list` (reduced list) — if `filter_list`, **source of session intent** (header, first message, static config).
-- **`AllowAutoRename`:** default (`false` recommended for transparency) and when it is enabled.
+- **`AllowAutoRename`:** thesis default recommendation **conservative `false`**; final policy TBD.
 - **`IntentText`:** standard thesis mechanism (HTTP header name, JSON-RPC params field — **must be documented** and versioned).
-- **`topK` and `T_min` threshold** for accepting top-1; calibration with thesis synthetic dataset.
-- **Hybrid BM25 + vector search:** yes/no; if yes, weights α/β and where the lexical index lives (memory, sidecar).
+- **`topK` and `T_min` threshold** — **TBD** (thesis).
+- **Hybrid BM25 + vector search:** **TBD** (thesis); may be out of scope if vector-only suffices.
 - **Light classifier** before vector (rules vs small model): in thesis scope or deferred.
 - **Session history** (last N tools): N and privacy policy.
 
-**Closure criteria:** plan §3.B.8 + final hyperparameter table in repo (`config.example.yaml`).
+**Closure criteria:** plan §3.B.8 + final hyperparameter table in repo (`config.example.yaml`) after phase-2 calibration.
 
 ---
 
 ### 4.6 Security: AuthN, RAR, JSON Schema, and policy
 
-**Open choices:**
+**Thesis decisions (closed for design direction):** **JWT Bearer** with **JWKS** validation (`iss`, `aud`, `exp`) as primary AuthN; **Phases 1–2** use **`AUTH_MODE=none`** for development velocity (must be documented as **not production-safe**). Comparative table in Cap. 4 (`tab:auth-comparison`).
 
-- **Primary AuthN mode:** `Bearer JWT` only vs **mTLS** workload vs combination (academic vs “enterprise-like”).
-- **IdP:** issuer (`iss`), JWKS URL, `aud` validation, clock/skew.
-- **RAR / `authorization_details` format:** thesis **canonical** JSON for `mcp_tool` type (fields, globs, valid/invalid examples).
+**Explicitly open in thesis (Cap. 4):** canonical **`authorization_details`** for type **`mcp_tool`** (exact fields, glob semantics, mapping to namespaced tool names) — **cannot be fixed until MCP client testing in phase 3**.
+
+**Other open choices:**
+
+- **Primary AuthN mode (deployment):** mTLS workload vs combination with JWT (academic vs “enterprise-like”) — thesis centres on JWT; mesh variants optional.
+- **IdP:** issuer (`iss`), JWKS URL, `aud` validation, clock/skew — concrete values environment-specific.
 - **JSON Schema:** **draft** revision (e.g. 2020-12) and chosen **Go library** (license, performance, `$ref` support).
 - **List of “elevated” tools** requiring strict schema in non-dev (§3.C SEC3).
 - **Limits** on `arguments`: byte size, max JSON depth, max key count.
@@ -859,17 +887,22 @@ This section is the **explicit inventory** of everything that must be **chosen a
 
 ### 4.7 Orchestrator, MCP session, JSON-RPC, and caches
 
-**Open choices:**
+**Repo decisions implemented (aligned with §3.A, tests in tree):**
 
-- **`jsonrpc` `id` strategy:** strict preservation of host `id` vs internal mapping table (document choice and notification cases).
-- **`initialize` with partially down backends:** omit vs fail all (default policy and flags).
-- **TTL or invalidation** of aggregated `tools/list` cache; invalidation on backend reconnect.
-- **Concurrency limits:** global and **per `backend_id`** (semaphore).
-- **Namespacing separator** (`__`) and policy if native name contains the separator (escape, reject, explicit table).
-- **Per-backend and per-MCP-method timeouts** (default values in ms).
-- **Gateway application error code table** (stability for clients).
+- **`jsonrpc` `id` strategy:** **strict preservation** of host `id` on the forward path (notifications omit `id`; `id: null` rejected at parse).
+- **`initialize` with partially down backends:** **omit** failed backends from merge; **JSON-RPC error to host only if all fail** (R6).
+- **Aggregated `tools/list` cache:** TTL configurable (`aggregate.WithListTTL`); **invalidated after successful `initialize`**.
+- **Namespacing separator:** **`__`** (double underscore); native names containing the separator are **rejected** (`internal/gateway/namespace`).
+- **Gateway application error codes:** stable constants in **`internal/gateway/errcodes`** (see package doc).
 
-**Closure criteria:** unit tests §3.A.7 + documentation of behavior when a mock backend fails.
+**Still open / not yet in repo:**
+
+- **Concurrency limits:** global and **per `backend_id`** (semaphore) — spec §A.3; not implemented.
+- **Optional strict mode** for `initialize` (fail all if any backend fails) — policy flag only.
+- **Per-backend and per-MCP-method timeouts** — durations exist in code; **not yet driven from documented config** / OpenAPI.
+- **OpenAPI/Swagger** for HTTP surface (§6).
+
+**Closure criteria:** unit tests §3.A.7 + documentation of behavior when a mock backend fails — **largely met** for Phase 1 multiplexor; extend when real adapters and limits land.
 
 ---
 
@@ -889,9 +922,11 @@ This section is the **explicit inventory** of everything that must be **chosen a
 
 ### 4.9 Normative versions, Go dependencies, and quality
 
+**Thesis decision (closed):** **Go 1.26** as implementation language (Cap. 4 §4.1.1); `mcp-gateway/go.mod` uses **1.26.1** — keep in sync with manuscript.
+
 **Open choices:**
 
-- **Minimum Go version** for the module and update policy during the thesis.
+- **Minimum Go version** policy for the module (patch updates) during the thesis.
 - **Libraries:** JWT, HTTP client, SSE (if dedicated library), JSON Schema validator, Qdrant client — **pin** semver in `go.mod` with brief justification in dissertation.
 - **CI:** linter (`golangci-lint`), integration tests with Compose, coverage threshold for `internal/rpc` (§6).
 - **Dependency licenses** (compatibility with academic submission).
@@ -924,7 +959,19 @@ To justify the work before the committee, the final document should include at l
 6. **RAR schema** and AuthN policy §4.6.
 7. **Go dependencies** and cited MCP/JSON-RPC versions §4.9.
 
-**Plan status:** until each item above has a “**Decision:** …” row in the repo or dissertation, the choice remains **open**.
+**Plan status (synced with `mcp-thesis` Cap. 4, April 2026 draft):**
+
+| # | Deliverable | Thesis manuscript | Repo / implementation |
+|---|-------------|--------------------|------------------------|
+| 1 | Vector DB comparison | **Done** — `tab:vectordb-comparison` | Qdrant in Compose aligns |
+| 2 | Transport comparison | **Done** — `tab:transport-comparison` | `GET /mcp/sse`, `POST /mcp/rpc`, `Mcp-Session-Id` |
+| 3 | Telemetry comparison | **Done** — tracing + metrics tables | Compose: Tempo, Prometheus, OTel Collector |
+| 4 | Embeddings decision | **Done** — ONNX + MiniLM | `deployments/embed/` service |
+| 5 | Router hyperparams | **Partial** — table exists, values **TBD** | Await phase 2 + `config.example.yaml` |
+| 6 | RAR + AuthN | **Partial** — JWT direction + `AUTH_MODE=none`; **RAR JSON open** | Phase 3 |
+| 7 | Go + spec versions | **Partial** — **Go 1.26** stated; MCP revision still to pin in README/`go.mod` comment | `go.mod` 1.26.1 |
+
+Items **5–7** remain **open** until the thesis or repo closes the remaining rows; items **1–4** are **closed in the manuscript** and reflected in deployment scaffolding.
 
 ---
 

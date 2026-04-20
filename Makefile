@@ -58,7 +58,8 @@ stop:
 	@lsof -ti :$(GATEWAY_PORT) | xargs kill 2>/dev/null || echo "No running gateway process found"
 
 test:
-	@echo "🧪 Running tests..."
+	@echo "🧪 Running vet + tests..."
+	@go vet ./...
 	@go test -v -race ./...
 
 tidy:
