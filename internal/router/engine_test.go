@@ -2,6 +2,8 @@ package router
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -151,6 +153,16 @@ func TestEngineModeOff(t *testing.T) {
 	require.Equal(t, OutcomeNone, dec.Outcome)
 }
 
+func TestNilEngineSurface(t *testing.T) {
+	var e *Engine
+	require.False(t, e.Enabled())
+	require.NoError(t, e.Reindex(context.Background(), "v", nil))
+	name, dec, err := e.ResolveToolsCall(context.Background(), RoutingSignal{ToolName: "x"})
+	require.NoError(t, err)
+	require.Equal(t, "x", name)
+	require.Equal(t, OutcomeNone, dec.Outcome)
+}
+
 func TestDefaultConfigEmbedTimeout(t *testing.T) {
 	c := DefaultConfig()
 	require.NotZero(t, c.EmbedTimeout)
@@ -163,4 +175,72 @@ func TestEngineReindexRequiresEmbed(t *testing.T) {
 	e := NewEngine(cfg, nil, store.NewMemory(4), 4)
 	err := e.Reindex(context.Background(), "v1", []CatalogEntry{{ToolRow: index.ToolRow{Name: "a__b"}, BackendID: "x"}})
 	require.Error(t, err)
+}
+
+func TestReindexNoOpWhenRouterDisabled(t *testing.T) {
+	e := NewEngine(DefaultConfig(), nil, store.NewMemory(4), 4)
+	require.NoError(t, e.Reindex(context.Background(), "v1", []CatalogEntry{
+		{ToolRow: index.ToolRow{Name: "a__b"}, BackendID: "x"},
+	}))
+}
+
+func TestReindexRejectsEmptyCatalogVersion(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Mode = ModeAssistList
+	e := NewEngine(cfg, &mapEmbed{dim: 4}, store.NewMemory(4), 4)
+	err := e.Reindex(context.Background(), "", []CatalogEntry{
+		{ToolRow: index.ToolRow{Name: "a__b"}, BackendID: "x"},
+	})
+	require.Error(t, err)
+}
+
+func TestEngineRejectsStaleClientCatalogPin(t *testing.T) {
+	dim := 4
+	st := store.NewMemory(dim)
+	emb := &mapEmbed{vecs: map[string][]float32{}, dim: dim}
+	cfg := DefaultConfig()
+	cfg.Mode = ModeAssistList
+	e := NewEngine(cfg, emb, st, dim)
+	row := index.ToolRow{Name: "pre__tool", Description: "d", ParamKeys: nil}
+	require.NoError(t, e.Reindex(context.Background(), "v2", []CatalogEntry{{ToolRow: row, BackendID: "be1"}}))
+
+	_, dec, err := e.ResolveToolsCall(context.Background(), RoutingSignal{
+		ToolName:       "pre__tool",
+		CatalogVersion: "v1",
+	})
+	require.Error(t, err)
+	require.Equal(t, OutcomeMissStaleCatalog, dec.Outcome)
+}
+
+func TestBuildCatalogEntriesBackendLookupError(t *testing.T) {
+	raw := []byte(`{"tools":[{"name":"p__t","description":"","inputSchema":{"type":"object"}}]}`)
+	_, err := BuildCatalogEntries(raw, func(string) (string, error) {
+		return "", fmt.Errorf("no backend")
+	})
+	require.Error(t, err)
+}
+
+func TestEngineVectorQueryUsesArgumentKeysFromPayload(t *testing.T) {
+	dim := 4
+	st := store.NewMemory(dim)
+	emb := &mapEmbed{vecs: make(map[string][]float32), dim: dim}
+	t1 := index.ToolRow{Name: "a__one", Description: "first", ParamKeys: nil}
+	emb.vecs[index.FormatDocument(t1)] = []float32{1, 0, 0, 0}
+	q := index.FormatQuery("typo", "", []string{"k"})
+	emb.vecs[q] = []float32{1, 0, 0, 0}
+
+	cfg := DefaultConfig()
+	cfg.Mode = ModeAssistList
+	cfg.TopK = 4
+	cfg.ScoreMin = 0.99
+	cfg.AllowAutoRename = true
+	e := NewEngine(cfg, emb, st, dim)
+	require.NoError(t, e.Reindex(context.Background(), "v1", []CatalogEntry{{ToolRow: t1, BackendID: "b1"}}))
+
+	name, _, err := e.ResolveToolsCall(context.Background(), RoutingSignal{
+		ToolName:      "typo",
+		ArgumentsJSON: json.RawMessage(`{"k":true}`),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "a__one", name)
 }

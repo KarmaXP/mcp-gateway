@@ -47,3 +47,20 @@ func TestCosineViaQuery(t *testing.T) {
 	require.Len(t, out, 1)
 	require.InDelta(t, 1.0, out[0].Score, 1e-6)
 }
+
+func TestMemoryDeleteCatalogVersion(t *testing.T) {
+	ctx := context.Background()
+	m := NewMemory(3)
+	require.NoError(t, m.Upsert(ctx, []Point{
+		{ID: "a", Vector: []float32{1, 0, 0}, ToolName: "t1", Backend: "b", Version: "v1"},
+		{ID: "b", Vector: []float32{0, 1, 0}, ToolName: "t2", Backend: "b", Version: "v2"},
+	}))
+	require.NoError(t, m.DeleteCatalogVersion(ctx, "v1"))
+	res, err := m.Query(ctx, []float32{0, 1, 0}, 4, Filter{CatalogVersion: "v2"})
+	require.NoError(t, err)
+	require.Len(t, res, 1)
+	require.Equal(t, "t2", res[0].ToolName)
+	empty, err := m.Query(ctx, []float32{1, 0, 0}, 4, Filter{CatalogVersion: "v1"})
+	require.NoError(t, err)
+	require.Len(t, empty, 0)
+}

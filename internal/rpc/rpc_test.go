@@ -57,3 +57,24 @@ func TestNewResultPreservesID(t *testing.T) {
 	require.JSONEq(t, `"req-1"`, string(out["id"]))
 	require.JSONEq(t, `{"ok":true}`, string(out["result"]))
 }
+
+func TestNewErrorPreservesIDAndPayload(t *testing.T) {
+	id := json.RawMessage(`99`)
+	data := json.RawMessage(`{"hint":"x"}`)
+	res := NewError(id, -32000, "boom", data)
+	b, err := res.Marshal()
+	require.NoError(t, err)
+	var out struct {
+		ID    json.RawMessage `json:"id"`
+		Error struct {
+			Code    int             `json:"code"`
+			Message string          `json:"message"`
+			Data    json.RawMessage `json:"data"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(b, &out))
+	require.JSONEq(t, `99`, string(out.ID))
+	require.Equal(t, -32000, out.Error.Code)
+	require.Equal(t, "boom", out.Error.Message)
+	require.JSONEq(t, `{"hint":"x"}`, string(out.Error.Data))
+}

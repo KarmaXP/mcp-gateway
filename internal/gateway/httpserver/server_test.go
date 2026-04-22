@@ -19,6 +19,27 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
 
+func TestServerAddrAsHandlerAndMiddleware(t *testing.T) {
+	b1 := mock.New("b1", "alpha", []string{"echo"})
+	agg, err := aggregate.New([]backend.Backend{b1}, aggregate.WithListTTL(0))
+	require.NoError(t, err)
+	srv := New(agg, ":9999", WithHandlerMiddleware(func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Mw", "1")
+			h.ServeHTTP(w, r)
+		})
+	}))
+	require.Equal(t, ":9999", srv.Addr())
+	ts := httptest.NewServer(srv.AsHandler())
+	defer ts.Close()
+
+	res, err := http.Get(ts.URL + "/healthz")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, res.StatusCode)
+	require.Equal(t, "1", res.Header.Get("X-Mw"))
+	require.NoError(t, res.Body.Close())
+}
+
 func TestHealthEndpoints(t *testing.T) {
 	b1 := mock.New("b1", "alpha", []string{"echo"})
 	agg, err := aggregate.New([]backend.Backend{b1}, aggregate.WithListTTL(0))
