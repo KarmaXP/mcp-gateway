@@ -39,6 +39,11 @@ func Init(ctx context.Context, serviceName string) (shutdown func(context.Contex
 	}
 
 	ep := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
+	if ep != "" {
+		// Ensure a scheme so stdlib URL parsing (used by OTLP exporters and resource.FromEnv) succeeds.
+		ep = normalizeOTLP(ep)
+		_ = os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", ep)
+	}
 	var tp *sdktrace.TracerProvider
 	var mp *sdkmetric.MeterProvider
 

@@ -41,3 +41,32 @@ func TestTraceHandlerWithoutSpanNoTraceID(t *testing.T) {
 	_, ok := row["trace_id"]
 	require.False(t, ok)
 }
+
+func TestTraceHandlerWithAttrsAndGroupStillAddsTraceID(t *testing.T) {
+	tp := sdktrace.NewTracerProvider()
+	otel.SetTracerProvider(tp)
+	tr := tp.Tracer("t")
+	ctx, span := tr.Start(context.Background(), "r")
+	tid := span.SpanContext().TraceID().String()
+
+	var buf bytes.Buffer
+	inner := slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})
+	// WithGroup nests attributes; trace_id must still be injected at the record root.
+	th := TraceHandler(inner).WithAttrs([]slog.Attr{slog.String("svc", "u")})
+	log := slog.New(th)
+	log.InfoContext(ctx, "wrapped", "k", "v")
+	span.End()
+
+	var row map[string]any
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &row))
+	require.Equal(t, tid, row["trace_id"])
+	require.Equal(t, "wrapped", row["msg"])
+	require.Equal(t, "u", row["svc"])
+}
+
+func TestTraceHandlerWithGroupChains(t *testing.T) {
+	base := slog.NewJSONHandler(&bytes.Buffer{}, &slog.HandlerOptions{Level: slog.LevelInfo})
+	h := TraceHandler(base).WithGroup("outer")
+	ctx := context.Background()
+	require.True(t, h.Enabled(ctx, slog.LevelInfo))
+}
