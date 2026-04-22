@@ -34,6 +34,10 @@ type Server struct {
 	mux     *http.ServeMux
 	mws     []func(http.Handler) http.Handler
 
+	// shutdownCtx is cancelled when the process begins graceful shutdown (e.g. SIGTERM).
+	// Merged into each SSE request context so long-lived streams unwind and http.Server.Shutdown can complete.
+	shutdownCtx context.Context
+
 	addr    string
 	srv     *http.Server
 	handler http.Handler
@@ -47,6 +51,14 @@ type Option func(*Server)
 func WithHandlerMiddleware(mw func(http.Handler) http.Handler) Option {
 	return func(s *Server) {
 		s.mws = append(s.mws, mw)
+	}
+}
+
+// WithShutdownContext merges ctx into every SSE connection lifetime. When ctx is cancelled
+// (e.g. signal.NotifyContext on SIGINT/SIGTERM), open /mcp/sse handlers return and sessions drain.
+func WithShutdownContext(ctx context.Context) Option {
+	return func(s *Server) {
+		s.shutdownCtx = ctx
 	}
 }
 
@@ -106,7 +118,10 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	sess := s.manager.Create(r.Context())
+	connCtx, stopConn := mergeWithShutdown(r.Context(), s.shutdownCtx)
+	defer stopConn()
+
+	sess := s.manager.Create(connCtx)
 	telemetry.ActiveSessions.Add(1)
 	defer telemetry.ActiveSessions.Add(-1)
 
@@ -114,7 +129,6 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	fl.Flush()
 
-	ctx := r.Context()
 	var wg sync.WaitGroup
 	wg.Add(1)
 	// R4: one goroutine consumes sess.Out() and writes to the ResponseWriter, so SSE frames are never interleaved.
@@ -122,7 +136,7 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 		defer wg.Done()
 		for {
 			select {
-			case <-ctx.Done():
+			case <-connCtx.Done():
 				return
 			case payload, ok := <-sess.Out():
 				if !ok {
@@ -137,10 +151,23 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	<-ctx.Done()
+	<-connCtx.Done()
 	sess.Close()
 	s.manager.Remove(sess.ID())
 	wg.Wait()
+}
+
+// mergeWithShutdown returns a context cancelled when either the request ends or shutdown begins.
+func mergeWithShutdown(reqCtx, shutdownCtx context.Context) (context.Context, context.CancelFunc) {
+	if shutdownCtx == nil {
+		return reqCtx, func() {}
+	}
+	ctx, cancel := context.WithCancel(reqCtx)
+	stop := context.AfterFunc(shutdownCtx, cancel)
+	return ctx, func() {
+		stop()
+		cancel()
+	}
 }
 
 func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {

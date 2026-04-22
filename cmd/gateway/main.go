@@ -118,22 +118,25 @@ func main() {
 		os.Exit(1)
 	}
 
+	rootCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	httpOpts := orchestrator.HTTPMiddlewareOptions("mcp-gateway", authCfg, validator)
+	httpOpts = append(httpOpts, httpserver.WithShutdownContext(rootCtx))
 	srv := httpserver.New(agg, addr, httpOpts...)
 
 	go func() {
 		slog.Info("mcp-gateway listening", "addr", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("server", "err", err)
-			os.Exit(1)
+			stop()
 		}
 	}()
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	<-sig
+	<-rootCtx.Done()
+	slog.Info("shutdown signal received")
 
-	sctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	sctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(sctx); err != nil {
 		slog.Error("http shutdown", "err", err)
