@@ -8,19 +8,22 @@ import (
 	"fmt"
 )
 
+// Version is the only supported jsonrpc field value for MCP host messages.
 const Version = "2.0"
 
 var (
+	// ErrInvalidRequest wraps validation failures from ParseRequest.
 	ErrInvalidRequest = errors.New("rpc: invalid JSON-RPC request")
-	ErrNotObject      = errors.New("rpc: body must be a JSON object")
+	// ErrNotObject means the body was not a JSON object.
+	ErrNotObject = errors.New("rpc: body must be a JSON object")
 )
 
 // Request is a JSON-RPC 2.0 request object. ID is omitted for notifications.
 type Request struct {
-	JSONRPC string          `json:"jsonrpc"`
-	Method  string          `json:"method"`
-	Params  json.RawMessage `json:"params,omitempty"`
-	ID      json.RawMessage `json:"id,omitempty"`
+	JSONRPC string          `json:"jsonrpc"`          // must equal Version
+	Method  string          `json:"method"`           // MCP method name
+	Params  json.RawMessage `json:"params,omitempty"` // method-specific object
+	ID      json.RawMessage `json:"id,omitempty"`     // omitted for notifications
 }
 
 // IsNotification reports whether the message is a JSON-RPC notification (no id).
@@ -56,17 +59,17 @@ func ParseRequest(raw []byte) (*Request, error) {
 
 // ErrorObject is a JSON-RPC 2.0 error object.
 type ErrorObject struct {
-	Code    int             `json:"code"`
-	Message string          `json:"message"`
-	Data    json.RawMessage `json:"data,omitempty"`
+	Code    int             `json:"code"`           // application or JSON-RPC standard code
+	Message string          `json:"message"`        // human-readable summary
+	Data    json.RawMessage `json:"data,omitempty"` // optional machine-readable detail
 }
 
 // Response is a JSON-RPC 2.0 response. Exactly one of Result or Error should be set.
 type Response struct {
 	JSONRPC string          `json:"jsonrpc"`
-	ID      json.RawMessage `json:"id,omitempty"`
-	Result  json.RawMessage `json:"result,omitempty"`
-	Error   *ErrorObject    `json:"error,omitempty"`
+	ID      json.RawMessage `json:"id,omitempty"`     // echoes request id when present
+	Result  json.RawMessage `json:"result,omitempty"` // set on success
+	Error   *ErrorObject    `json:"error,omitempty"`  // set on failure
 }
 
 // NewResult builds a success response preserving the request id bytes.

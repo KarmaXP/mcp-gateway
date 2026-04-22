@@ -1,3 +1,4 @@
+// Package auth configures and enforces HTTP bearer JWT validation for MCP routes.
 package auth
 
 import (

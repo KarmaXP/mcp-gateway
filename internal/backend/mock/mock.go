@@ -1,3 +1,4 @@
+// Package mock provides in-process test doubles implementing backend.Backend.
 package mock
 
 import (

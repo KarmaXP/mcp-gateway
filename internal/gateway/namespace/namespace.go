@@ -7,12 +7,17 @@ import (
 	"strings"
 )
 
+// Separator is inserted between backend prefix and native MCP tool name (R1/R2).
 const Separator = "__"
 
 var (
-	ErrInvalidPrefix     = errors.New("namespace: invalid prefix")
-	ErrInvalidToolName   = errors.New("namespace: invalid namespaced tool name")
-	ErrAmbiguousPrefix   = errors.New("namespace: prefix is not unique in catalog")
+	// ErrInvalidPrefix reports an empty prefix or one containing Separator.
+	ErrInvalidPrefix = errors.New("namespace: invalid prefix")
+	// ErrInvalidToolName reports a malformed full namespaced tool name.
+	ErrInvalidToolName = errors.New("namespace: invalid namespaced tool name")
+	// ErrAmbiguousPrefix is reserved for catalog consistency checks when a prefix is not unique.
+	ErrAmbiguousPrefix = errors.New("namespace: prefix is not unique in catalog")
+	// ErrNativeContainsSep reports a native segment that contains the separator token.
 	ErrNativeContainsSep = errors.New("namespace: native tool name must not contain separator")
 )
 
