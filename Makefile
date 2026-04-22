@@ -15,7 +15,7 @@ CYAN    := \033[36m
 RESET   := \033[0m
 
 .DEFAULT_GOAL := help
-.PHONY: help build run stop test clean tidy \
+.PHONY: help build run stop test test-cover lint clean tidy \
         docker-build docker-up docker-up-full docker-down docker-logs docker-clean
 
 # Help: sectioned list of targets (descriptions are defined here only)
@@ -31,6 +31,8 @@ help:
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "run" "Start the Gateway in development mode"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "stop" "Stop the running Gateway process"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test" "Run all unit tests with race detection"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test-cover" "go test -race with coverage report (internal/*)"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "lint" "Run golangci-lint (install via go run if missing)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "tidy" "Clean up and verify Go modules"
 	@printf "\n"
 	@printf "$(BLUE)▶ Infrastructure & Docker$(RESET)\n"
@@ -61,6 +63,17 @@ test:
 	@echo "🧪 Running vet + tests..."
 	@go vet ./...
 	@go test -v -race ./...
+
+test-cover:
+	@echo "🧪 Coverage (internal packages)..."
+	@mkdir -p bin
+	@go vet ./...
+	@go test -race -coverprofile=bin/coverage.out -covermode=atomic ./internal/...
+	@go tool cover -func=bin/coverage.out | tail -n 25
+
+lint:
+	@echo "🔍 golangci-lint..."
+	@go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8 run ./...
 
 tidy:
 	@echo "📦 Tidying Go modules..."

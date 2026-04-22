@@ -384,7 +384,7 @@ func (a *Aggregator) ToolsCall(ctx context.Context, hostID json.RawMessage, para
 	}
 	forwardParams, err := json.Marshal(map[string]any{
 		"name":      native,
-		"arguments": json.RawMessage(coalesceArgs(p.Arguments)),
+		"arguments": coalesceArgs(p.Arguments),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("aggregate: marshal tools/call forward params: %w", err)

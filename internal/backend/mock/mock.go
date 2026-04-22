@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
@@ -16,6 +17,11 @@ type Backend struct {
 	prefix     string
 	toolNames  []string
 	lastNative string
+
+	// ToolsCallDelay simulates a slow upstream on tools/call only (honours ctx cancel).
+	ToolsCallDelay time.Duration
+	// ToolsCallErr, if set, makes tools/call return (nil, err) without invoking default logic.
+	ToolsCallErr error
 
 	mu sync.Mutex
 }
@@ -36,20 +42,19 @@ func (b *Backend) LastNativeTool() string {
 }
 
 func (b *Backend) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
-	_ = ctx
 	switch req.Method {
 	case "initialize":
-		return b.initialize(req)
+		return b.initialize(ctx, req)
 	case "tools/list":
-		return b.toolsList(req)
+		return b.toolsList(ctx, req)
 	case "tools/call":
-		return b.toolsCall(req)
+		return b.toolsCall(ctx, req)
 	default:
 		return rpc.NewError(req.ID, -32601, fmt.Sprintf("method not found: %s", req.Method), nil), nil
 	}
 }
 
-func (b *Backend) initialize(req *rpc.Request) (*rpc.Response, error) {
+func (b *Backend) initialize(_ context.Context, req *rpc.Request) (*rpc.Response, error) {
 	result := map[string]any{
 		"protocolVersion": "2024-11-05",
 		"capabilities": map[string]any{
@@ -66,7 +71,8 @@ func (b *Backend) initialize(req *rpc.Request) (*rpc.Response, error) {
 	return rpc.NewResult(req.ID, raw), nil
 }
 
-func (b *Backend) toolsList(req *rpc.Request) (*rpc.Response, error) {
+func (b *Backend) toolsList(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
+	_ = ctx
 	tools := make([]map[string]any, 0, len(b.toolNames))
 	for _, n := range b.toolNames {
 		tools = append(tools, map[string]any{
@@ -87,7 +93,21 @@ func (b *Backend) toolsList(req *rpc.Request) (*rpc.Response, error) {
 	return rpc.NewResult(req.ID, raw), nil
 }
 
-func (b *Backend) toolsCall(req *rpc.Request) (*rpc.Response, error) {
+func (b *Backend) toolsCall(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
+	b.mu.Lock()
+	errCall := b.ToolsCallErr
+	delay := b.ToolsCallDelay
+	b.mu.Unlock()
+	if errCall != nil {
+		return nil, errCall
+	}
+	if delay > 0 {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(delay):
+		}
+	}
 	var params struct {
 		Name      string          `json:"name"`
 		Arguments json.RawMessage `json:"arguments"`

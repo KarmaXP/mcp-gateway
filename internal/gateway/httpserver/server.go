@@ -144,6 +144,7 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
 	sid := strings.TrimSpace(r.Header.Get("Mcp-Session-Id"))
 	if sid == "" {
 		http.Error(w, "missing Mcp-Session-Id header", http.StatusBadRequest)
