@@ -239,6 +239,8 @@ func (a *Aggregator) ToolsList(ctx context.Context, hostID json.RawMessage) (*rp
 		tools []map[string]any
 	}
 	results := make([]listResult, len(a.backends))
+	// errgroup.WithContext cancels the derived ctx when Wait returns; Reindex must use the caller ctx.
+	listCtx := ctx
 	g, ctx := errgroup.WithContext(ctx)
 	var mu sync.Mutex
 
@@ -320,7 +322,7 @@ func (a *Aggregator) ToolsList(ctx context.Context, hostID json.RawMessage) (*rp
 		})
 		if err != nil {
 			slog.Warn("router catalog build skipped", "err", err)
-		} else if err := a.semantic.Reindex(ctx, ver, entries); err != nil {
+		} else if err := a.semantic.Reindex(listCtx, ver, entries); err != nil {
 			slog.Warn("router reindex failed", "err", err)
 		} else {
 			a.catMu.Lock()

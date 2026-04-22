@@ -12,6 +12,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/router"
+	"github.com/KarmaXP/mcp-gateway/internal/router/embed"
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 )
 
@@ -38,7 +39,19 @@ func (m *mapEmbed) Embed(ctx context.Context, texts []string) ([][]float32, erro
 	return out, nil
 }
 
-func routerTestEngine(t *testing.T, emb *mapEmbed, scoreMin float64, autoRename bool) (*router.Engine, *store.Memory) {
+// embedCtxDone fails Embed if ctx is already canceled (mirrors real HTTP clients after errgroup.Wait).
+type embedCtxDone struct {
+	inner *mapEmbed
+}
+
+func (e *embedCtxDone) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return e.inner.Embed(ctx, texts)
+}
+
+func routerTestEngine(t *testing.T, emb embed.Embedder, scoreMin float64, autoRename bool) (*router.Engine, *store.Memory) {
 	t.Helper()
 	st := store.NewMemory(4)
 	cfg := router.DefaultConfig()
@@ -49,6 +62,25 @@ func routerTestEngine(t *testing.T, emb *mapEmbed, scoreMin float64, autoRename 
 	cfg.EmbedTimeout = 5 * time.Second
 	cfg.QueryTimeout = 5 * time.Second
 	return router.NewEngine(cfg, emb, st, 4), st
+}
+
+func TestToolsListReindexAfterErrgroupDoesNotUseCanceledContext(t *testing.T) {
+	b1 := mock.New("b1", "p", []string{"echo"})
+	base := &mapEmbed{dim: 4, vecs: map[string][]float32{}}
+	emb := &embedCtxDone{inner: base}
+	eng, _ := routerTestEngine(t, emb, 0.99, true)
+
+	a, err := New([]backend.Backend{b1}, WithListTTL(0), WithSemanticRouter(eng))
+	require.NoError(t, err)
+	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
+	_, err = a.ToolsList(context.Background(), json.RawMessage(`2`))
+	require.NoError(t, err)
+
+	params, _ := json.Marshal(map[string]any{"name": "p__echo", "arguments": map[string]any{}})
+	resp, err := a.ToolsCall(context.Background(), json.RawMessage(`3`), params)
+	require.NoError(t, err)
+	require.Nil(t, resp.Error)
+	require.Equal(t, "echo", b1.LastNativeTool())
 }
 
 func TestAggregateSemanticRouterExactMatch(t *testing.T) {
