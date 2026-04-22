@@ -1,7 +1,9 @@
+// Package session manages per-host MCP sessions: handshake state, middleware, and SSE outbound queue.
 package session
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -12,6 +14,9 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
+
+// ErrUnknownSession is returned by Manager.Get when the id is not registered.
+var ErrUnknownSession = errors.New("session: unknown id")
 
 // Middleware is a Phase-1 extension point for later security (§3.C), router (§3.B), and telemetry (§3.D).
 // Return a non-nil error to abort the request with errcodes.RequestRejected.
@@ -25,7 +30,7 @@ type Manager struct {
 	middlewares []Middleware
 }
 
-// NewManager constructs a session manager.
+// NewManager constructs a session manager for the given aggregator and optional middleware chain.
 func NewManager(agg *aggregate.Aggregator, mws ...Middleware) *Manager {
 	return &Manager{
 		sessions:    make(map[string]*Session),
@@ -34,7 +39,7 @@ func NewManager(agg *aggregate.Aggregator, mws ...Middleware) *Manager {
 	}
 }
 
-// Create allocates a new session and returns its id.
+// Create registers a new session bound to ctx (typically the merged SSE request + shutdown context).
 func (m *Manager) Create(ctx context.Context) *Session {
 	id := uuid.NewString()
 	s := New(ctx, id, m.agg, m.middlewares)
@@ -44,18 +49,18 @@ func (m *Manager) Create(ctx context.Context) *Session {
 	return s
 }
 
-// Get returns an existing session.
+// Get returns an existing session or ErrUnknownSession.
 func (m *Manager) Get(id string) (*Session, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	s, ok := m.sessions[id]
 	if !ok {
-		return nil, fmt.Errorf("session: unknown id")
+		return nil, fmt.Errorf("%w", ErrUnknownSession)
 	}
 	return s, nil
 }
 
-// Remove deletes a session (e.g. SSE disconnect).
+// Remove deletes a session (for example when the SSE connection ends).
 func (m *Manager) Remove(id string) {
 	m.mu.Lock()
 	delete(m.sessions, id)
@@ -93,6 +98,7 @@ func New(parent context.Context, id string, agg *aggregate.Aggregator, mws []Mid
 	}
 }
 
+// ID returns the session UUID string (same value as the Mcp-Session-Id header).
 func (s *Session) ID() string { return s.id }
 
 // Close cancels the session context and stops background work.
@@ -104,7 +110,7 @@ func (s *Session) Close() {
 func (s *Session) EnqueueResponse(resp *rpc.Response) error {
 	b, err := resp.Marshal()
 	if err != nil {
-		return err
+		return fmt.Errorf("session: marshal response: %w", err)
 	}
 	select {
 	case <-s.ctx.Done():

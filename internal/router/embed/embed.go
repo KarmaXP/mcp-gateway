@@ -68,21 +68,21 @@ func (c *Client) Embed(ctx context.Context, texts []string) ([][]float32, error)
 	}
 	body, err := json.Marshal(embedRequest{Texts: texts})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("embed: marshal request: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/embed", bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("embed: new request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	res, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("embed: http: %w", err)
 	}
 	defer res.Body.Close()
 	rb, err := io.ReadAll(io.LimitReader(res.Body, 1<<22))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("embed: read body: %w", err)
 	}
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("embed: HTTP %d: %s", res.StatusCode, string(bytes.TrimSpace(rb)))

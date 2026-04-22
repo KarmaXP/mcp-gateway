@@ -3,6 +3,7 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -19,7 +20,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
-// ActiveSessions holds the number of open host SSE sessions (gauge observation).
+// ActiveSessions counts open host SSE connections; the OTLP metrics pipeline observes it periodically.
 var ActiveSessions atomic.Int64
 
 // Init installs the global TracerProvider and MeterProvider. When OTEL_EXPORTER_OTLP_ENDPOINT
@@ -85,15 +86,12 @@ func Init(ctx context.Context, serviceName string) (shutdown func(context.Contex
 	return func(c context.Context) error {
 		var errs []error
 		if err := mp.Shutdown(c); err != nil {
-			errs = append(errs, fmt.Errorf("meter shutdown: %w", err))
+			errs = append(errs, fmt.Errorf("telemetry: meter shutdown: %w", err))
 		}
 		if err := tp.Shutdown(c); err != nil {
-			errs = append(errs, fmt.Errorf("tracer shutdown: %w", err))
+			errs = append(errs, fmt.Errorf("telemetry: tracer shutdown: %w", err))
 		}
-		if len(errs) > 0 {
-			return fmt.Errorf("telemetry shutdown: %v", errs)
-		}
-		return nil
+		return errors.Join(errs...)
 	}, nil
 }
 

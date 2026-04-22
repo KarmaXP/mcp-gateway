@@ -1,3 +1,4 @@
+// Package aggregate merges MCP initialize and tools/list across backends and forwards tools/call (§3.A).
 package aggregate
 
 import (
@@ -77,7 +78,7 @@ func New(backends []backend.Backend, opts ...Option) (*Aggregator, error) {
 	for _, b := range backends {
 		p := b.Prefix()
 		if err := namespace.ValidatePrefix(p); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("aggregate: validate prefix: %w", err)
 		}
 		if _, dup := byPrefix[p]; dup {
 			return nil, fmt.Errorf("aggregate: duplicate prefix %q", p)
@@ -136,7 +137,7 @@ func (a *Aggregator) Initialize(ctx context.Context, hostID json.RawMessage) (*r
 		})
 	}
 	if err := g.Wait(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("aggregate: initialize backends: %w", err)
 	}
 
 	merged, err := mergeInitializeResults(results, a.backends)
@@ -274,7 +275,7 @@ func (a *Aggregator) ToolsList(ctx context.Context, hostID json.RawMessage) (*rp
 		})
 	}
 	if err := g.Wait(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("aggregate: tools/list backends: %w", err)
 	}
 
 	var merged []map[string]any
@@ -302,7 +303,7 @@ func (a *Aggregator) ToolsList(ctx context.Context, hostID json.RawMessage) (*rp
 
 	out, err := json.Marshal(map[string]any{"tools": merged})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("aggregate: marshal tools/list: %w", err)
 	}
 	if a.listTTL > 0 {
 		a.mu.Lock()
