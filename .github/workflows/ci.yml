@@ -1,4 +1,3 @@
-# CI when the git repository root is this directory (github.com/KarmaXP/mcp-gateway).
 name: CI
 
 on:
@@ -48,7 +47,7 @@ jobs:
           curl -sfS http://127.0.0.1:6333/healthz
           curl -sfS http://127.0.0.1:8001/healthz
 
-      - name: Integration tests (Qdrant + embed; OTLP test skips if collector absent)
+      - name: Integration tests
         env:
           QDRANT_URL: http://127.0.0.1:6333
           EMBED_URL: http://127.0.0.1:8001
