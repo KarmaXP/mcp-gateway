@@ -1,0 +1,133 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["mcp-gateway", "tfm", "otel"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "MCP Gateway — OTel metrics (router & sessions)",
+  "uid": "mcp-gw-otel-v1",
+  "version": 1,
+  "weekStart": "",
+  "panels": [
+    {
+      "gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "options": { "content": "**Prometheus** should scrape the OTel Collector metrics endpoint (compose: internal `:8889`, often mapped via a scrape config). OTel instrument names are normalized; if a panel is empty, open **Explore** and search metrics for `semantic_router` or `active_sse` and adjust the query. Custom app metrics are emitted from `internal/telemetry/metrics.go`." },
+      "title": "Notes",
+      "type": "text"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${prometheus_datasource}" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 3 },
+      "id": 2,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true } },
+      "targets": [
+        {
+          "expr": "sum by (outcome, result) (rate({__name__=~\".*semantic_router_outcomes_total\"}[5m]))",
+          "legendFormat": "{{outcome}} / {{result}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Semantic router outcomes (rate)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${prometheus_datasource}" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 3 },
+      "id": 3,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true } },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate({__name__=~\".*semantic_router_duration_seconds_bucket\"}[5m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate({__name__=~\".*semantic_router_duration_seconds_bucket\"}[5m])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate({__name__=~\".*semantic_router_duration_seconds_bucket\"}[5m])))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "title": "Router decision latency (histogram)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${prometheus_datasource}" },
+      "fieldConfig": { "defaults": { "unit": "none" }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 11 },
+      "id": 4,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } },
+      "targets": [
+        {
+          "expr": "{__name__=~\".*active_sse_sessions\"}",
+          "legendFormat": "{{__name__}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Open SSE sessions (gauge)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${prometheus_datasource}" },
+      "fieldConfig": { "defaults": { "unit": "ops", "color": { "mode": "palette-classic" } }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 11 },
+      "id": 5,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true } },
+      "targets": [
+        {
+          "expr": "sum(rate({__name__=~\".*semantic_router_outcomes_total\", result=\"miss\"}[5m]))",
+          "legendFormat": "router miss (all outcomes)",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (outcome) (rate({__name__=~\".*semantic_router_outcomes_total\", result=\"miss\"}[5m]))",
+          "legendFormat": "miss — {{outcome}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Routing / multiplexer pressure (proxy: router miss rate)",
+      "description": "Dedicated JSON-RPC multiplexor error counters are not exported yet; `result=\"miss\"` on the semantic router counter proxies routing failures (threshold, ambiguity, store errors, etc.).",
+      "type": "timeseries"
+    }
+  ],
+  "__inputs": [
+    {
+      "name": "prometheus_datasource",
+      "label": "Prometheus",
+      "description": "Datasource scraping the OTel Collector :8889 (or remote_write target)",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "__elements": {}
+}
