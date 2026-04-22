@@ -1,6 +1,7 @@
 # Binaries
 bin/
-gateway
+# Root-level binary only (do not use bare "gateway" — it ignores internal/gateway/)
+/gateway
 
 # Dependencies
 vendor/
@@ -8,6 +9,7 @@ vendor/
 # Environment variables and secrets
 .env
 .env.*
+!.env.example
 
 # IDEs and Editors
 .vscode/
