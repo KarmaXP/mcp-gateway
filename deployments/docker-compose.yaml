@@ -87,6 +87,9 @@ services:
     image: mcp-embed:dev
     container_name: mcp-embed
     restart: unless-stopped
+    environment:
+      # Host shells often export HF_HUB_OFFLINE=1; that breaks runtime load even with a baked cache.
+      HF_HUB_OFFLINE: "0"
     ports:
       # Needed when gateway runs locally (make run).  Override: HOST_PORT_EMBED=18001
       - "${HOST_PORT_EMBED:-8001}:8001"
