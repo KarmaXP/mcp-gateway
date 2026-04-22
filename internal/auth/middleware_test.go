@@ -89,3 +89,81 @@ func TestHTTPMiddlewareNoneModePassesThrough(t *testing.T) {
 	require.Equal(t, http.StatusTeapot, res.StatusCode)
 	require.NoError(t, res.Body.Close())
 }
+
+func TestHTTPMiddlewareSkipsConfiguredPrefixes(t *testing.T) {
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	cfg := Config{
+		Mode:             "jwt",
+		PublicKeyPEM:     rsaPublicPEM(t, &priv.PublicKey),
+		SkipPathPrefixes: []string{"/healthz", "/metrics"},
+	}
+	v, err := NewValidator(cfg)
+	require.NoError(t, err)
+	h := HTTPMiddleware(cfg, v)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+	}))
+	ts := httptest.NewServer(h)
+	defer ts.Close()
+
+	res, err := ts.Client().Get(ts.URL + "/healthz/live")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusTeapot, res.StatusCode)
+	require.NoError(t, res.Body.Close())
+}
+
+func TestHTTPMiddlewareRejectsNonBearerScheme(t *testing.T) {
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	cfg := Config{Mode: "jwt", PublicKeyPEM: rsaPublicPEM(t, &priv.PublicKey)}
+	v, err := NewValidator(cfg)
+	require.NoError(t, err)
+	h := HTTPMiddleware(cfg, v)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("handler reached")
+	}))
+	ts := httptest.NewServer(h)
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/mcp/sse", nil)
+	req.Header.Set("Authorization", "Basic dGVzdA==")
+	res, err := ts.Client().Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusUnauthorized, res.StatusCode)
+	require.NoError(t, res.Body.Close())
+}
+
+func TestHTTPMiddlewareRejectsEmptyBearerToken(t *testing.T) {
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	cfg := Config{Mode: "jwt", PublicKeyPEM: rsaPublicPEM(t, &priv.PublicKey)}
+	v, err := NewValidator(cfg)
+	require.NoError(t, err)
+	h := HTTPMiddleware(cfg, v)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("handler reached")
+	}))
+	ts := httptest.NewServer(h)
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/mcp/sse", nil)
+	req.Header.Set("Authorization", "Bearer   ")
+	res, err := ts.Client().Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusUnauthorized, res.StatusCode)
+	require.NoError(t, res.Body.Close())
+}
+
+func TestHTTPMiddlewareRejectsNilValidatorInJWTMode(t *testing.T) {
+	cfg := Config{Mode: "jwt"}
+	h := HTTPMiddleware(cfg, nil)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("handler reached")
+	}))
+	ts := httptest.NewServer(h)
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/mcp/sse", nil)
+	req.Header.Set("Authorization", "Bearer x.y.z")
+	res, err := ts.Client().Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusUnauthorized, res.StatusCode)
+	require.NoError(t, res.Body.Close())
+}

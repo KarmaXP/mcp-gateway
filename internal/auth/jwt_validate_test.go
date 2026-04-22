@@ -64,6 +64,9 @@ func TestValidator_TableDriven(t *testing.T) {
 		{"expired", sign(func(c *jwt.RegisteredClaims) {
 			c.ExpiresAt = jwt.NewNumericDate(time.Now().Add(-time.Hour))
 		}), true},
+		{"not_yet_valid", sign(func(c *jwt.RegisteredClaims) {
+			c.NotBefore = jwt.NewNumericDate(time.Now().Add(time.Hour))
+		}), true},
 		{"wrong_aud", sign(func(c *jwt.RegisteredClaims) {
 			c.Audience = jwt.ClaimStrings{"other"}
 		}), true},
@@ -71,6 +74,7 @@ func TestValidator_TableDriven(t *testing.T) {
 			c.Issuer = "evil"
 		}), true},
 		{"malformed", "not-a-jwt", true},
+		{"truncated_jwt", "aa.bb", true},
 		{"wrong_sig", func() string {
 			tok := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.RegisteredClaims{
 				Issuer:    baseCfg.Issuer,
@@ -80,6 +84,17 @@ func TestValidator_TableDriven(t *testing.T) {
 			})
 			tok.Header["kid"] = "k1"
 			s, err := tok.SignedString(wrongKey)
+			require.NoError(t, err)
+			return s
+		}(), true},
+		{"hs256_rejected", func() string {
+			tok := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.RegisteredClaims{
+				Issuer:    baseCfg.Issuer,
+				Audience:  jwt.ClaimStrings{baseCfg.Audience},
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+				IssuedAt:  jwt.NewNumericDate(time.Now().Add(-time.Minute)),
+			})
+			s, err := tok.SignedString([]byte("secret"))
 			require.NoError(t, err)
 			return s
 		}(), true},
