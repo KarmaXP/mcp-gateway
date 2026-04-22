@@ -26,7 +26,7 @@ info:
     | -32002 | `RequestRejected` | Middleware or policy rejected the request. |
     | -32004 | `ToolRoutingAmbiguous` | Semantic router could not pick a unique tool (threshold, ambiguity, rename policy). |
 
-    The numeric band `-32003` is intentionally unused (gap) to keep alignment with documented thesis ranges; do not rely on it.
+    The numeric band `-32003` is intentionally unused (reserved gap); do not rely on it.
   version: 0.1.0
   license:
     name: Proprietary

@@ -1,4 +1,4 @@
-# Load testing (TFM delivery)
+# Load testing
 
 ## Go MCP end-to-end (`main.go`)
 

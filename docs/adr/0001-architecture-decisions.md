@@ -29,7 +29,7 @@ Embeddings are produced by a sidecar (e.g. all-MiniLM-L6-v2) behind `POST /embed
 
 ### Rationale
 
-- **Privacy and compliance:** Tool names, descriptions, and argument *keys* (never secret values in our design) stay inside the deployment boundary—important for regulated tenants and for thesis reproducibility.
+- **Privacy and compliance:** Tool names, descriptions, and argument *keys* (never secret values in our design) stay inside the deployment boundary—important for regulated tenants and for reproducible, air-gapped deployments.
 - **Cost and predictability:** No per-token API spend or rate-limit coupling during catalog reindex or traffic spikes; capacity is bounded by local CPU/GPU.
 - **Latency SLOs:** A colocated embed service avoids WAN RTT variance; combined with Qdrant over the local network (or same host), the router path is suitable for tight P99 budgets.
 - **Offline and tests:** CI and air-gapped demos run with fixed models (`HF_HUB_OFFLINE`, local weights) without API keys.
@@ -40,7 +40,7 @@ Embeddings are produced by a sidecar (e.g. all-MiniLM-L6-v2) behind `POST /embed
 
 ## Decision 3: Qdrant for vector search
 
-Qdrant provides filtered cosine search over tool vectors with payload fields for catalog version and backend id—aligning with the thesis plan for explainable routing and versioned indexes.
+Qdrant provides filtered cosine search over tool vectors with payload fields for catalog version and backend id—supporting explainable routing and versioned indexes.
 
 ### Rationale
 

@@ -42,16 +42,15 @@ flowchart LR
 
 | Choice | Why |
 |--------|-----|
-| **Go** | Small static binary, excellent concurrency, fast JSON-RPC and HTTP, first-class context cancellation for timeouts and graceful shutdown—fits SRE-style services and thesis benchmarks. |
+| **Go** | Small static binary, excellent concurrency, fast JSON-RPC and HTTP, first-class context cancellation for timeouts and graceful shutdown—fits SRE-style services and low-latency gateways. |
 | **Qdrant** | Fast filtered ANN search over tool vectors; clear HTTP API and Docker story; supports catalog versioning and explainable candidates. |
 | **ONNX / local embeddings** | Keeps routing signals on-prem, removes per-call embedding API cost and tail latency from the public internet, and simplifies air-gapped or CI runs (privacy + predictability). |
 
 ## Quick start (Makefile)
 
-From the **repository root** (`tfm/`) or from **`mcp-gateway/`**:
+Clone the repository and run targets from the **module root** (this directory):
 
 ```bash
-cd mcp-gateway   # or stay at repo root: make runs `-C mcp-gateway`
 make help
 ```
 
@@ -90,8 +89,6 @@ Standard Go layout: `cmd/`, `internal/`, `deployments/`, `docs/`, `scripts/`. Pu
 ## Continuous integration
 
 GitHub Actions: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push and pull request: `setup-go` with module cache, `golangci-lint`, unit tests, and a job that starts Qdrant + embed from Compose and runs `-tags=integration` tests.
-
-If you keep a **parent monorepo** folder on disk only (no git at that level), an alternate workflow for `mcp-gateway/` as a subfolder may exist one level up; the file in _this_ repo is the one GitHub executes for `KarmaXP/mcp-gateway`.
 
 ## License
 

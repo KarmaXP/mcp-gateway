@@ -1,10 +1,10 @@
-# Thesis delivery artifacts
+# API and observability artifacts
 
 | Path | Purpose |
 |------|---------|
 | `openapi/openapi.yaml` | Host HTTP API (health, SSE, JSON-RPC POST) |
 | `grafana/mcp-gateway-observability.json` | Grafana dashboard (import + map Prometheus datasource) |
 
-Load testing lives in **`../../scripts/loadtest/`** (Go MCP latency + optional k6 baseline).
+Load testing: [`../../scripts/loadtest/`](../../scripts/loadtest/) (Go client for MCP latency).
 
-CI workflow: **`../../../.github/workflows/ci.yml`** (Git root = `tfm/`). If your remote repository root is only `mcp-gateway/`, move that workflow to `mcp-gateway/.github/workflows/ci.yml`, drop the `mcp-gateway/` prefix from paths, and set `working-directory: .` / `go-version-file: go.mod`.
+CI: [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) at the repository root.

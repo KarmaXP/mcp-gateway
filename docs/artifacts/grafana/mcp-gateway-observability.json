@@ -21,7 +21,7 @@
   "refresh": "30s",
   "schemaVersion": 39,
   "style": "dark",
-  "tags": ["mcp-gateway", "tfm", "otel"],
+  "tags": ["mcp-gateway", "otel"],
   "templating": { "list": [] },
   "time": { "from": "now-6h", "to": "now" },
   "timepicker": {},
