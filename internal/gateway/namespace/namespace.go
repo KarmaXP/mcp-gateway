@@ -1,4 +1,4 @@
-// Package namespace implements stable tool namespacing: <prefix>__<native> (golden rules R1–R2).
+// Package namespace implements tool namespacing as prefix__native.
 package namespace
 
 import (
@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// Separator is inserted between backend prefix and native MCP tool name (R1/R2).
+// Separator joins backend prefix and native tool name in namespaced ids (prefix + Separator + native).
 const Separator = "__"
 
 var (

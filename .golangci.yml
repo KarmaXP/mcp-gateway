@@ -1,4 +1,3 @@
-# https://golangci-lint.run/usage/configuration/
 run:
   timeout: 3m
   tests: true

@@ -1,4 +1,4 @@
-// Package index builds deterministic catalog text for embeddings (plan §3.B.3 — fixed template).
+// Package index builds deterministic embedding text from catalog rows (stable template).
 package index
 
 import (
@@ -17,7 +17,7 @@ type ToolRow struct {
 	ParamKeys   []string
 }
 
-// FormatDocument renders the canonical text stored per tool (reproducible; thesis §4.5).
+// FormatDocument renders the canonical text stored per tool for indexing.
 func FormatDocument(t ToolRow) string {
 	sort.Strings(t.ParamKeys)
 	params := strings.Join(t.ParamKeys, ", ")
@@ -28,7 +28,7 @@ func FormatDocument(t ToolRow) string {
 		t.Name, t.Description, params, TemplateVersion)
 }
 
-// FormatQuery builds embedding text for a tools/call request (plan §3.B.3 fixed order).
+// FormatQuery builds embedding text for a tools/call request.
 func FormatQuery(toolName string, intent string, argumentKeys []string) string {
 	sort.Strings(argumentKeys)
 	ak := strings.Join(argumentKeys, ", ")

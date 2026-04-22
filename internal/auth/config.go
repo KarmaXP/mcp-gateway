@@ -7,16 +7,16 @@ import (
 	"time"
 )
 
-// Config drives HTTP bearer validation (SEC1 — stateless signature check).
+// Config drives HTTP bearer JWT validation (stateless signature check).
 type Config struct {
 	Mode string // "none" (default), "jwt"
 
 	Issuer   string
 	Audience string
 
-	// JWKSURL is fetched with a TTL cache (SEC6).
+	// JWKSURL, when set, is fetched periodically using JWKSCacheTTL.
 	JWKSURL string
-	// PublicKeyPEM optional RS256 public key (PEM) for local dev when JWKSURL is empty.
+	// PublicKeyPEM is optional RS256 public key material for dev when JWKSURL is empty.
 	PublicKeyPEM string
 
 	JWKSCacheTTL time.Duration

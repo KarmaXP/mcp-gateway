@@ -66,7 +66,7 @@ func parseRSAPublicKey(pemStr string) (*rsa.PublicKey, error) {
 	return rsaKey, nil
 }
 
-// Validate parses and validates claims (SEC5: do not log token or raw claims).
+// Validate parses and validates claims without logging the token or raw claims.
 func (v *Validator) Validate(ctx context.Context, token string) error {
 	var claims jwt.RegisteredClaims
 	_, err := v.parser.ParseWithClaims(token, &claims, func(t *jwt.Token) (interface{}, error) {

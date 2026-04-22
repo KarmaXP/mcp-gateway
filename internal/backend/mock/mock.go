@@ -147,5 +147,4 @@ func (b *Backend) toolsCall(ctx context.Context, req *rpc.Request) (*rpc.Respons
 	return rpc.NewResult(req.ID, raw), nil
 }
 
-// Compile-time check.
 var _ backend.Backend = (*Backend)(nil)

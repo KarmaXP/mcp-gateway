@@ -1,15 +1,6 @@
-// Package httpserver exposes the host↔gateway HTTP transport: POST (JSON-RPC) + GET (SSE).
-//
-// SSE contract (Phase 1):
-//
-//   - Clients open a long-lived stream with GET /mcp/sse.
-//   - The response sets header Mcp-Session-Id (UUID) — send this value back on every POST.
-//   - Each JSON-RPC response from the gateway is delivered as one SSE event:
-//     event: jsonrpc
-//     data: <single-line JSON object, JSON-RPC 2.0 response>
-//     Blank lines follow the event per the SSE spec.
-//
-// POST /mcp/rpc with header Mcp-Session-Id and Content-Type application/json body (single JSON-RPC request).
+// Package httpserver is the host-facing HTTP transport: GET /mcp/sse (session + outbound events)
+// and POST /mcp/rpc (one JSON-RPC request per call). For requests with an id, results are pushed
+// on the SSE stream as "event: jsonrpc" with a single-line JSON-RPC 2.0 response in data.
 package httpserver
 
 import (
@@ -83,7 +74,7 @@ func New(agg *aggregate.Aggregator, addr string, opts ...Option) *Server {
 		Handler:           s.handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       60 * time.Second,
-		WriteTimeout:      0, // SSE: no global write timeout
+		WriteTimeout:      0, // SSE long poll: a global write deadline would kill slow clients
 		IdleTimeout:       120 * time.Second,
 	}
 	return s
@@ -102,7 +93,7 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
-	// Phase 1: no external deps to probe; extend with backend health checks later.
+	// Ready does not yet check backends or Qdrant; extend when those deps are required for traffic.
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("ok"))
 }
@@ -131,7 +122,7 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 
 	var wg sync.WaitGroup
 	wg.Add(1)
-	// R4: one goroutine consumes sess.Out() and writes to the ResponseWriter, so SSE frames are never interleaved.
+	// Single writer goroutine: SSE frames must not interleave on the ResponseWriter.
 	go func() {
 		defer wg.Done()
 		for {

@@ -3,7 +3,7 @@ package errcodes
 import "testing"
 
 func TestStableCodes(t *testing.T) {
-	// Guardrail: hosts and docs rely on these numeric contracts.
+	// Numeric contract for hosts and API docs.
 	if MethodNotFound != -32601 || InvalidParams != -32602 {
 		t.Fatal("standard JSON-RPC codes drifted")
 	}

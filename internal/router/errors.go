@@ -2,7 +2,7 @@ package router
 
 import "errors"
 
-// Sentinel errors for errors.Is / wrapping (library code must not panic on routing misses).
+// Sentinel errors for errors.Is and wrapping on routing miss paths.
 var (
 	errNilDeps = errors.New("missing dependencies")
 

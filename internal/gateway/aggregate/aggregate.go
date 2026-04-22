@@ -1,4 +1,4 @@
-// Package aggregate merges MCP initialize and tools/list across backends and forwards tools/call (§3.A).
+// Package aggregate merges initialize and tools/list across backends and forwards tools/call.
 package aggregate
 
 import (
@@ -24,7 +24,7 @@ import (
 
 var errNoBackends = errors.New("aggregate: no backends responded to initialize")
 
-// Aggregator merges initialize and tools/list across backends (§3.A). Order follows the backend slice (stable prefix order).
+// Aggregator merges initialize and tools/list across backends in configured order (stable prefix order).
 type Aggregator struct {
 	backends []backend.Backend
 	byPrefix map[string]backend.Backend
@@ -38,7 +38,7 @@ type Aggregator struct {
 	cachedAt   time.Time
 	listTTL    time.Duration
 
-	semantic *router.Engine // optional §3.B
+	semantic *router.Engine // optional semantic router
 
 	catMu  sync.RWMutex
 	catVer string // sha256 of last aggregated tools/list JSON (for optional client pinning)
@@ -47,7 +47,7 @@ type Aggregator struct {
 // Option configures the aggregator.
 type Option func(*Aggregator)
 
-// WithInitTimeout sets per-backend initialize deadline (R5).
+// WithInitTimeout sets per-backend initialize deadline.
 func WithInitTimeout(d time.Duration) Option {
 	return func(a *Aggregator) { a.initTimeout = d }
 }
@@ -67,7 +67,7 @@ func WithListTTL(d time.Duration) Option {
 	return func(a *Aggregator) { a.listTTL = d }
 }
 
-// WithSemanticRouter attaches the §3.B engine (nil-safe: no-op if e == nil or ModeOff).
+// WithSemanticRouter attaches the router engine (nil-safe; ModeOff is a no-op).
 func WithSemanticRouter(e *router.Engine) Option {
 	return func(a *Aggregator) { a.semantic = e }
 }
@@ -108,7 +108,7 @@ func (a *Aggregator) PrefixToBackendID() map[string]string {
 	return m
 }
 
-// Initialize fans out to all backends, omits failures (R6), errors only if all fail.
+// Initialize fans out to all backends, omits per-backend failures, and errors only if every backend fails.
 func (a *Aggregator) Initialize(ctx context.Context, hostID json.RawMessage) (*rpc.Response, error) {
 	results := make([]json.RawMessage, len(a.backends))
 	var mu sync.Mutex
@@ -153,7 +153,6 @@ func (a *Aggregator) Initialize(ctx context.Context, hostID json.RawMessage) (*r
 }
 
 func hostParams() json.RawMessage {
-	// Minimal initialize params acceptable to mocks/real servers.
 	p := map[string]any{
 		"protocolVersion": "2024-11-05",
 		"capabilities":    map[string]any{},
@@ -215,7 +214,6 @@ func shallowMerge(dst map[string]any, src any) {
 			dst[k] = v
 			continue
 		}
-		// shallow merge nested maps
 		dm, dOK := dst[k].(map[string]any)
 		vm, vOK := v.(map[string]any)
 		if dOK && vOK {
@@ -299,7 +297,6 @@ func (a *Aggregator) ToolsList(ctx context.Context, hostID json.RawMessage) (*rp
 			merged = append(merged, clone)
 		}
 	}
-	// Order: configured backend list (§A.7), then native tool name ascending within each backend.
 
 	out, err := json.Marshal(map[string]any{"tools": merged})
 	if err != nil {
@@ -349,7 +346,7 @@ func (a *Aggregator) invalidateToolCache() {
 	a.mu.Unlock()
 }
 
-// ToolsCall resolves prefix, strips name (R2), forwards with same JSON-RPC id (R3).
+// ToolsCall resolves the namespaced tool to a backend, strips the prefix for upstream, and preserves the JSON-RPC id.
 func (a *Aggregator) ToolsCall(ctx context.Context, hostID json.RawMessage, params json.RawMessage) (*rpc.Response, error) {
 	var p struct {
 		Name      string          `json:"name"`

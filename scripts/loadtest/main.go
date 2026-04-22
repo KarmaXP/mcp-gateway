@@ -1,9 +1,8 @@
-// Command loadtest measures tools/call latency (POST accepted → matching JSON-RPC payload on SSE).
+// Command loadtest benchmarks tools/call latency until the matching JSON-RPC result appears on SSE.
 //
-//	go run ./scripts/loadtest -url http://127.0.0.1:18080 -mode direct -workers 8 -duration 30s
-//	go run ./scripts/loadtest -url http://127.0.0.1:18080 -mode semantic -workers 8 -duration 30s
+// Examples: go run ./scripts/loadtest -url http://127.0.0.1:18080 -mode direct -workers 8 -duration 30s
 //
-// Semantic mode expects ROUTER_MODE=on and a healthy embed service for vector routing.
+// Semantic mode needs ROUTER_MODE=on and a healthy embed sidecar.
 package main
 
 import (

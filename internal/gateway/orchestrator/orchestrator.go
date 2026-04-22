@@ -10,8 +10,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/httpserver"
 )
 
-// HTTPMiddlewareOptions returns outer→inner middleware order [auth, otel] so inbound
-// requests hit auth first, then tracing, then the session/multiplexor (per SRE prompt).
+// HTTPMiddlewareOptions returns middleware in outer→inner order: auth, then OTel HTTP tracing, then the gateway mux.
 func HTTPMiddlewareOptions(serviceName string, authCfg auth.Config, v *auth.Validator) []httpserver.Option {
 	if serviceName == "" {
 		serviceName = "mcp-gateway"

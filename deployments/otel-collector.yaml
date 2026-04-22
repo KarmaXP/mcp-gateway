@@ -1,10 +1,4 @@
-# =============================================================================
-# OpenTelemetry Collector — sidecar pipeline
-#
-# Ingress  : OTLP gRPC (:4317) and HTTP (:4318) from the MCP Gateway
-# Egress   : Traces  → Grafana Tempo  (OTLP gRPC, internal :4317)
-#            Metrics → Prometheus     (scrape endpoint :8889)
-# =============================================================================
+# OTLP from gateway → Tempo (traces) and Prometheus exporter (:8889 for scrape).
 
 receivers:
   otlp:
@@ -15,14 +9,10 @@ receivers:
         endpoint: "0.0.0.0:4318"
 
 processors:
-  # Batch to reduce round-trips. Tune timeout to stay well under the 50ms
-  # internal latency budget: spans are exported async, not on the hot path.
   batch:
     timeout: 5s
     send_batch_size: 1024
     send_batch_max_size: 2048
-
-  # Inject deployment context on all signals
   resource:
     attributes:
       - key: deployment.environment
@@ -30,21 +20,15 @@ processors:
         action: upsert
 
 exporters:
-  # Forward traces to Grafana Tempo via OTLP gRPC (internal service name)
   otlp/tempo:
     endpoint: "tempo:4317"
     tls:
       insecure: true
-
-  # Expose gateway metrics for Prometheus to scrape on :8889
   prometheus:
     endpoint: "0.0.0.0:8889"
     namespace: "mcp"
-    # Constrain label cardinality: never add tool argument values as labels
     resource_to_telemetry_conversion:
       enabled: true
-
-  # Lightweight stdout debug (remove in production)
   debug:
     verbosity: basic
 
@@ -54,13 +38,11 @@ extensions:
 
 service:
   extensions: [health_check]
-
   pipelines:
     traces:
       receivers:  [otlp]
       processors: [resource, batch]
       exporters:  [otlp/tempo, debug]
-
     metrics:
       receivers:  [otlp]
       processors: [resource, batch]

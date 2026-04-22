@@ -5,7 +5,7 @@ import (
 	"context"
 )
 
-// Point is one indexed tool vector with filterable payload (plan §3.B — Qdrant payload fields).
+// Point is one indexed tool vector plus Qdrant payload fields (tool name, backend, catalog version).
 type Point struct {
 	ID       string
 	Vector   []float32
@@ -14,13 +14,13 @@ type Point struct {
 	Version  string
 }
 
-// Filter restricts search to a catalog version and optional allow-list (S1: enforced inside Query, not only post-filter).
+// Filter restricts search by catalog version and optional tool allow-list (applied inside Query).
 type Filter struct {
 	CatalogVersion string
 	AllowedTools   []string // if non-empty, only these namespaced tools are considered
 }
 
-// Store is the minimal vector index contract (plan §3.B vector DB contract).
+// Store is the vector index used by the semantic router.
 type Store interface {
 	Upsert(ctx context.Context, points []Point) error
 	Query(ctx context.Context, vector []float32, topK int, filter Filter) ([]Result, error)

@@ -20,7 +20,7 @@ type CatalogEntry struct {
 	BackendID string
 }
 
-// Engine runs the Signal→Decision pipeline (plan §3.B).
+// Engine runs signal → routing decision for tools/call.
 type Engine struct {
 	cfg      Config
 	embedder embed.Embedder
@@ -28,9 +28,9 @@ type Engine struct {
 	dim      int
 
 	mu            sync.RWMutex
-	catalog       map[string]struct{} // exact namespaced tool names
+	catalog       map[string]struct{}
 	catalogVer    string
-	backendByTool map[string]string // toolName -> backend id
+	backendByTool map[string]string
 }
 
 // NewEngine constructs a router engine. embedder may be nil only when ModeOff.
@@ -60,7 +60,7 @@ func (e *Engine) CatalogVersion() string {
 	return e.catalogVer
 }
 
-// Reindex rebuilds the vector index from aggregated tools/list (plan §3.B.3 Phase 1).
+// Reindex rebuilds the vector index from an aggregated tools/list snapshot.
 func (e *Engine) Reindex(ctx context.Context, version string, entries []CatalogEntry) error {
 	if e == nil || !e.Enabled() {
 		return nil
@@ -132,7 +132,7 @@ func (e *Engine) Reindex(ctx context.Context, version string, entries []CatalogE
 	return nil
 }
 
-// ResolveToolsCall returns the namespaced tool name to use for §3.A dispatch.
+// ResolveToolsCall returns the namespaced tool name to forward to the multiplexer.
 func (e *Engine) ResolveToolsCall(ctx context.Context, sig RoutingSignal) (string, *RoutingDecision, error) {
 	if e == nil || !e.Enabled() {
 		return sig.ToolName, &RoutingDecision{FallbackLayer: "none", Outcome: OutcomeNone}, nil
@@ -140,7 +140,6 @@ func (e *Engine) ResolveToolsCall(ctx context.Context, sig RoutingSignal) (strin
 	start := time.Now()
 	dec := &RoutingDecision{FallbackLayer: "vector"}
 
-	// Optional host-supplied catalog pin (future §3.C headers); empty skips check.
 	if sig.CatalogVersion != "" && e.CatalogVersion() != "" && sig.CatalogVersion != e.CatalogVersion() {
 		dec.Outcome = OutcomeMissStaleCatalog
 		dec.LatencyMS = time.Since(start).Milliseconds()
@@ -150,7 +149,6 @@ func (e *Engine) ResolveToolsCall(ctx context.Context, sig RoutingSignal) (strin
 	allowed := sig.AllowedTools
 	filter := store.Filter{CatalogVersion: e.CatalogVersion(), AllowedTools: allowed}
 
-	// S3 — deterministic shortcut
 	if sig.ToolName != "" && e.exactInCatalog(sig.ToolName) && e.allowed(sig.ToolName, allowed) {
 		bid := e.backendID(sig.ToolName)
 		dec.BackendID = bid
@@ -241,7 +239,7 @@ func (e *Engine) ResolveToolsCall(ctx context.Context, sig RoutingSignal) (strin
 }
 
 func summarizeSignal(sig RoutingSignal) string {
-	// SEC5 / O3: no argument payloads — tool name and intent length only
+	// Log dimensions only, not tool arguments (security / cardinality).
 	return fmt.Sprintf("tool_len=%d intent_len=%d", len(sig.ToolName), len(sig.IntentText))
 }
 

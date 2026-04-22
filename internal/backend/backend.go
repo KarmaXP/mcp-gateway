@@ -13,7 +13,7 @@ type Caller interface {
 	Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error)
 }
 
-// Backend is a configured upstream with stable id and namespace prefix (R1).
+// Backend is a configured upstream with stable id and namespace prefix.
 type Backend interface {
 	ID() string
 	Prefix() string

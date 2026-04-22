@@ -14,7 +14,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
 
-// initFailBackend simulates a backend that errors on initialize only (R6 partial failure).
+// initFailBackend fails initialize only; other methods delegate.
 type initFailBackend struct {
 	inner backend.Backend
 }
@@ -28,7 +28,7 @@ func (f *initFailBackend) Call(ctx context.Context, req *rpc.Request) (*rpc.Resp
 	return f.inner.Call(ctx, req)
 }
 
-// listFailBackend fails tools/list only (R6 on catalog path).
+// listFailBackend fails tools/list only; other methods delegate.
 type listFailBackend struct {
 	inner backend.Backend
 }
@@ -42,7 +42,7 @@ func (f *listFailBackend) Call(ctx context.Context, req *rpc.Request) (*rpc.Resp
 	return f.inner.Call(ctx, req)
 }
 
-// errReplyBackend returns a JSON-RPC error on tools/call (forward path must preserve host id / R3).
+// errReplyBackend returns a JSON-RPC error on tools/call while preserving the host request id.
 type errReplyBackend struct {
 	inner *mock.Backend
 }
@@ -73,7 +73,7 @@ func TestInitializeMergeTwoBackends(t *testing.T) {
 	require.Len(t, backends, 2)
 }
 
-func TestInitializeOmitsFailedBackendR6(t *testing.T) {
+func TestInitializeOmitsFailedBackend(t *testing.T) {
 	b1 := mock.New("b1", "alpha", []string{"echo"})
 	b2 := mock.New("b2", "beta", []string{"ping"})
 	a, err := New([]backend.Backend{
@@ -110,7 +110,7 @@ func TestInitializeAllBackendsFail(t *testing.T) {
 	require.JSONEq(t, `7`, string(resp.ID))
 }
 
-func TestToolsListOmitsFailedBackendR6(t *testing.T) {
+func TestToolsListOmitsFailedBackend(t *testing.T) {
 	b1 := mock.New("b1", "alpha", []string{"echo"})
 	b2 := mock.New("b2", "beta", []string{"ping"})
 	a, err := New([]backend.Backend{

@@ -23,8 +23,8 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
 )
 
-// aggregatorOptions returns base options plus optional semantic router (plan §3.B).
-// Enable with ROUTER_MODE=on (or assist_list). EMBED_URL defaults to http://127.0.0.1:8001.
+// aggregatorOptions returns defaults plus the semantic router when ROUTER_MODE is on or assist_list.
+// EMBED_URL defaults to http://127.0.0.1:8001.
 func aggregatorOptions() []aggregate.Option {
 	opts := []aggregate.Option{aggregate.WithListTTL(0)}
 	mode := strings.ToLower(strings.TrimSpace(os.Getenv("ROUTER_MODE")))
@@ -105,7 +105,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Phase 1: two mock backends with distinct prefixes (§A.7 acceptance criteria).
 	b1 := mock.New("backend-alpha", "alpha", []string{"echo", "list"})
 	b2 := mock.New("backend-beta", "beta", []string{"ping"})
 

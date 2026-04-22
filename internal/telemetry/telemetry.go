@@ -1,4 +1,4 @@
-// Package telemetry configures OpenTelemetry tracing and metrics (plan §3.D, O1–O6).
+// Package telemetry configures OpenTelemetry tracing and metrics.
 package telemetry
 
 import (

@@ -18,8 +18,7 @@ import (
 // ErrUnknownSession is returned by Manager.Get when the id is not registered.
 var ErrUnknownSession = errors.New("session: unknown id")
 
-// Middleware is a Phase-1 extension point for later security (§3.C), router (§3.B), and telemetry (§3.D).
-// Return a non-nil error to abort the request with errcodes.RequestRejected.
+// Middleware runs before dispatch; a non-nil error becomes errcodes.RequestRejected for calls (not notifications).
 type Middleware func(ctx context.Context, req *rpc.Request) error
 
 // Manager owns host sessions keyed by id.
@@ -69,9 +68,8 @@ func (m *Manager) Remove(id string) {
 
 // Session is one host MCP connection: handshake state + outbound SSE queue.
 type Session struct {
-	id string
-	// ctx is cancelled when the SSE connection ends.
-	ctx    context.Context
+	id     string
+	ctx    context.Context // cancelled when the SSE connection ends
 	cancel context.CancelFunc
 
 	agg *aggregate.Aggregator
@@ -182,7 +180,6 @@ func (s *Session) handleNotification(ctx context.Context, req *rpc.Request) erro
 		slog.Debug("session handshake notification", "session_id", s.id, "method", req.Method)
 		return nil
 	default:
-		// Unknown notifications ignored in Phase 1
 		slog.Debug("ignored notification", "method", req.Method)
 		return nil
 	}

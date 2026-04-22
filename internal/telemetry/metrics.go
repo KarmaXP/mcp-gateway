@@ -22,7 +22,7 @@ func registerInstruments() error {
 	m := otel.Meter("github.com/KarmaXP/mcp-gateway")
 	var err error
 	semanticOutcomes, err = m.Int64Counter("mcp.gateway.semantic_router.outcomes",
-		metric.WithDescription("Semantic router resolutions by coarse result and outcome (bounded labels per O5)"))
+		metric.WithDescription("Semantic router resolutions by hit/miss and outcome (low-cardinality labels)"))
 	if err != nil {
 		return fmt.Errorf("telemetry: semantic counter: %w", err)
 	}

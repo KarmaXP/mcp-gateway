@@ -1,10 +1,6 @@
 apiVersion: 1
 
 datasources:
-
-  # ---------------------------------------------------------------------------
-  # Prometheus — gateway metrics (histograms, counters, RED metrics from Tempo)
-  # ---------------------------------------------------------------------------
   - name: Prometheus
     type: prometheus
     uid: prometheus
@@ -13,15 +9,10 @@ datasources:
     editable: false
     jsonData:
       timeInterval: "15s"
-      # Link metric exemplars back to Tempo traces
       exemplarTraceIdDestinations:
         - name: trace_id
           datasourceUid: tempo
 
-  # ---------------------------------------------------------------------------
-  # Grafana Tempo — distributed traces (replaces Jaeger)
-  # Enables TraceQL queries and auto-links traces → metrics in Grafana.
-  # ---------------------------------------------------------------------------
   - name: Tempo
     type: tempo
     uid: tempo
@@ -29,13 +20,10 @@ datasources:
     editable: false
     jsonData:
       httpMethod: GET
-      # Link trace spans to Prometheus service graph metrics
       serviceMap:
         datasourceUid: prometheus
-      # Enable node graph view
       nodeGraph:
         enabled: true
-      # Enable TraceQL search
       search:
         hide: false
       spanBar:

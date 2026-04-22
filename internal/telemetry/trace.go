@@ -12,7 +12,7 @@ func Tracer() trace.Tracer {
 	return otel.Tracer("github.com/KarmaXP/mcp-gateway")
 }
 
-// StartSpan is a thin wrapper for child spans (O3: no argument payloads in attributes).
+// StartSpan starts a child span; avoid putting request payloads in attributes (cardinality and secrets).
 func StartSpan(ctx context.Context, name string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
 	return Tracer().Start(ctx, name, opts...)
 }

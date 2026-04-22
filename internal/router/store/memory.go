@@ -19,7 +19,6 @@ func NewMemory(dim int) *Memory {
 	return &Memory{dim: dim}
 }
 
-// Upsert implements Store.
 func (m *Memory) Upsert(ctx context.Context, points []Point) error {
 	_ = ctx
 	for _, p := range points {
@@ -48,7 +47,7 @@ func (m *Memory) DeleteCatalogVersion(ctx context.Context, version string) error
 	return nil
 }
 
-// Query implements Store with cosine similarity; applies Filter before ranking (S1).
+// Query applies Filter in the scan, then ranks by cosine similarity.
 func (m *Memory) Query(ctx context.Context, vector []float32, topK int, filter Filter) ([]Result, error) {
 	_ = ctx
 	if len(vector) != m.dim {
@@ -90,7 +89,6 @@ func (m *Memory) Query(ctx context.Context, vector []float32, topK int, filter F
 			score: s,
 		})
 	}
-	// partial sort topK
 	for i := 0; i < len(cand); i++ {
 		for j := i + 1; j < len(cand); j++ {
 			if cand[j].score > cand[i].score {
@@ -113,7 +111,6 @@ func cosineSim(a, b []float32) float64 {
 	for i := range a {
 		dot += float64(a[i] * b[i])
 	}
-	// assume L2-normalised; clamp
 	if dot > 1 {
 		dot = 1
 	}

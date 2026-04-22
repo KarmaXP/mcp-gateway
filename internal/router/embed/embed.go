@@ -24,8 +24,7 @@ type Client struct {
 	httpClient *http.Client
 }
 
-// NewClient builds a client; baseURL should be like "http://127.0.0.1:8001" (no trailing slash).
-// The HTTP transport pools idle connections for reuse across embedding calls.
+// NewClient targets the embedding sidecar (e.g. http://127.0.0.1:8001, no trailing slash).
 func NewClient(baseURL string) *Client {
 	tr := &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,

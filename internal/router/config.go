@@ -2,7 +2,7 @@ package router
 
 import "time"
 
-// Config holds router hyperparameters (plan §3.B.5 / §4.5 — defaults conservative).
+// Config holds router tuning parameters (conservative defaults).
 type Config struct {
 	Mode Mode
 
@@ -14,13 +14,13 @@ type Config struct {
 	// AllowAutoRename permits replacing the host tool name with the vector winner when they differ.
 	AllowAutoRename bool
 
-	// EmbedTimeout bounds HTTP calls to the embedding service (R5).
+	// EmbedTimeout bounds HTTP calls to the embedding service.
 	EmbedTimeout time.Duration
 	// QueryTimeout bounds store queries.
 	QueryTimeout time.Duration
 }
 
-// DefaultConfig returns thesis-friendly defaults; ModeOff must be set explicitly to enable routing.
+// DefaultConfig returns conservative defaults; routing stays off until Mode is set to something other than ModeOff.
 func DefaultConfig() Config {
 	return Config{
 		Mode:            ModeOff,

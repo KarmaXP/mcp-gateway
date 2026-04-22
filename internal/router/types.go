@@ -1,9 +1,9 @@
-// Package router implements the semantic router (§3.B): Signal→Decision before multiplexor dispatch.
+// Package router implements semantic routing (intent/signal → tool decision) before multiplex dispatch.
 package router
 
 import "encoding/json"
 
-// Mode controls whether vector routing runs (plan §3.B operating modes).
+// Mode controls whether vector routing runs.
 type Mode string
 
 const (
@@ -13,8 +13,7 @@ const (
 	ModeAssistList Mode = "assist_list"
 )
 
-// RoutingOutcome is a stable classifier for observability and policy (bounded cardinality, O5).
-// It is always set on RoutingDecision, including on error paths, so callers can emit metrics without parsing errors.
+// RoutingOutcome is a low-cardinality classifier for metrics and logs; always set on RoutingDecision, including errors.
 type RoutingOutcome string
 
 const (
@@ -32,18 +31,18 @@ const (
 	OutcomeMissStoreError       RoutingOutcome = "miss_store_error"
 )
 
-// RoutingSignal is the per-request input to the router (plan §3.B.2).
+// RoutingSignal is the per-request router input.
 type RoutingSignal struct {
 	SessionID      string
 	Method         string
 	ToolName       string
 	ArgumentsJSON  json.RawMessage
 	IntentText     string
-	AllowedTools   []string // namespaced names; empty = all tools in current catalog version (until §3.C)
+	AllowedTools   []string // namespaced names; empty means no allow-list filter
 	CatalogVersion string
 }
 
-// RoutingDecision is the router output consumed by the orchestrator (plan §3.B.2).
+// RoutingDecision is the router output consumed by the orchestrator.
 type RoutingDecision struct {
 	Outcome            RoutingOutcome
 	BackendID          string
@@ -54,7 +53,7 @@ type RoutingDecision struct {
 	LatencyMS          int64
 }
 
-// ScoredTool is one candidate for explainability logs (plan §3.B / S7).
+// ScoredTool is one ranked neighbour for logs and debugging.
 type ScoredTool struct {
 	Name   string
 	Score  float64
