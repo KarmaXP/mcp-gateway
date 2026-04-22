@@ -89,7 +89,9 @@ Standard Go layout: `cmd/`, `internal/`, `deployments/`, `docs/`, `scripts/`. Pu
 
 ## Continuous integration
 
-In the TFM monorepo, [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on changes under `mcp-gateway/**` (and the workflow file itself): module cache via `setup-go`, `golangci-lint`, unit tests, and a job that starts Qdrant + embed from Compose and runs `-tags=integration` tests.
+GitHub Actions: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push and pull request: `setup-go` with module cache, `golangci-lint`, unit tests, and a job that starts Qdrant + embed from Compose and runs `-tags=integration` tests.
+
+If you keep a **parent monorepo** folder on disk only (no git at that level), an alternate workflow for `mcp-gateway/` as a subfolder may exist one level up; the file in _this_ repo is the one GitHub executes for `KarmaXP/mcp-gateway`.
 
 ## License
 

@@ -1,0 +1,56 @@
+# CI when the git repository root is this directory (github.com/KarmaXP/mcp-gateway).
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint-and-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: golangci-lint
+        run: go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8 run ./...
+
+      - name: Vet and unit tests
+        run: |
+          go vet ./...
+          go test -race -count=1 ./...
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Start Qdrant and embed (compose)
+        run: |
+          docker compose -f deployments/docker-compose.yaml up -d qdrant embed
+          for i in $(seq 1 90); do
+            curl -sfS http://127.0.0.1:6333/healthz && break
+            sleep 2
+          done
+          for i in $(seq 1 120); do
+            curl -sfS http://127.0.0.1:8001/healthz && break
+            sleep 2
+          done
+          curl -sfS http://127.0.0.1:6333/healthz
+          curl -sfS http://127.0.0.1:8001/healthz
+
+      - name: Integration tests (Qdrant + embed; OTLP test skips if collector absent)
+        env:
+          QDRANT_URL: http://127.0.0.1:6333
+          EMBED_URL: http://127.0.0.1:8001
+        run: |
+          go test -tags=integration -race -count=1 ./internal/router/... ./internal/telemetry/...
