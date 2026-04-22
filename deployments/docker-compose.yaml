@@ -234,6 +234,12 @@ services:
     restart: unless-stopped
     env_file:
       - ../.env
+    environment:
+      # Always listen on 8080 inside the container (matches EXPOSE / healthcheck).
+      # Host port is HOST_PORT_GATEWAY; do not inherit PORT=18080 from a local dev .env.
+      PORT: "8080"
+      EMBED_URL: http://embed:8001
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       # Override: HOST_PORT_GATEWAY=18080
       - "${HOST_PORT_GATEWAY:-8080}:8080"

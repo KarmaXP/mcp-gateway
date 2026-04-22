@@ -51,7 +51,7 @@ build:
 
 run:
 	@echo "🚀 Starting $(BINARY_NAME)..."
-	@go run $(MAIN_PATH)
+	@set -a && ([ -f .env ] && . ./.env || true) && set +a && go run $(MAIN_PATH)
 
 stop:
 	@echo "🛑 Stopping $(BINARY_NAME)..."
