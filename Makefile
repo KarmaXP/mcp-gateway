@@ -15,7 +15,7 @@ CYAN    := \033[36m
 RESET   := \033[0m
 
 .DEFAULT_GOAL := help
-.PHONY: help build run stop test test-cover lint clean tidy \
+.PHONY: help build run stop test test-cover test-integration lint clean tidy \
         docker-build docker-up docker-up-full docker-down docker-logs docker-clean
 
 # Help: sectioned list of targets (descriptions are defined here only)
@@ -32,6 +32,7 @@ help:
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "stop" "Stop the running Gateway process"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test" "Run all unit tests with race detection"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test-cover" "go test -race with coverage report (internal/*)"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test-integration" "go test -tags=integration (Qdrant + embed + OTLP; needs compose)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "lint" "Run golangci-lint (install via go run if missing)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "tidy" "Clean up and verify Go modules"
 	@printf "\n"
@@ -70,6 +71,16 @@ test-cover:
 	@go vet ./...
 	@go test -race -coverprofile=bin/coverage.out -covermode=atomic ./internal/...
 	@go tool cover -func=bin/coverage.out | tail -n 25
+
+test-integration:
+	@echo "🧪 Integration tests (docker: qdrant, embed, otel-collector recommended)..."
+	@go vet ./...
+	@QDRANT_URL=$${QDRANT_URL:-http://127.0.0.1:6333} \
+	 EMBED_URL=$${EMBED_URL:-http://127.0.0.1:18001} \
+	 OTEL_EXPORTER_OTLP_ENDPOINT=$${OTEL_EXPORTER_OTLP_ENDPOINT:-http://127.0.0.1:4318} \
+	 go test -tags=integration -race -count=1 \
+		./internal/router/... \
+		./internal/telemetry/...
 
 lint:
 	@echo "🔍 golangci-lint..."
