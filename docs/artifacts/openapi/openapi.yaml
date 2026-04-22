@@ -10,6 +10,23 @@ info:
       (`event: jsonrpc`, `data: { ... }`), not in the POST response body.
 
     When `AUTH_MODE=jwt`, all routes except configured health prefixes require a valid `Authorization: Bearer` JWT.
+
+    ### JSON-RPC error codes (gateway contract)
+
+    Errors delivered on the SSE stream (`event: jsonrpc`) use JSON-RPC 2.0 `error.code` values.
+    The gateway defines constants in `internal/gateway/errcodes`:
+
+    | Code | Name | Meaning |
+    |------|------|---------|
+    | -32601 | `MethodNotFound` | Method not supported on this session. |
+    | -32602 | `InvalidParams` | Malformed or invalid `params` (e.g. `tools/call`). |
+    | -32603 | `InternalError` | Standard JSON-RPC server error (reserved by spec). |
+    | -32000 | `GatewayInternal` | Upstream/aggregate failure, transport error, or initialize/tools failure. |
+    | -32001 | `HandshakeIncomplete` | `tools/*` before `initialize` + `notifications/initialized`. |
+    | -32002 | `RequestRejected` | Middleware or policy rejected the request. |
+    | -32004 | `ToolRoutingAmbiguous` | Semantic router could not pick a unique tool (threshold, ambiguity, rename policy). |
+
+    The numeric band `-32003` is intentionally unused (gap) to keep alignment with documented thesis ranges; do not rely on it.
   version: 0.1.0
   license:
     name: Proprietary
@@ -226,8 +243,17 @@ components:
         code:
           type: integer
           description: |
-            JSON-RPC error code. Gateway application band includes e.g. -32000 (internal),
-            -32001 (handshake incomplete), -32002 (request rejected), -32004 (tool routing).
+            JSON-RPC error code. Must match `internal/gateway/errcodes` for gateway-generated errors:
+
+            - **-32601** — `MethodNotFound`
+            - **-32602** — `InvalidParams`
+            - **-32603** — `InternalError` (spec reserved)
+            - **-32000** — `GatewayInternal`
+            - **-32001** — `HandshakeIncomplete`
+            - **-32002** — `RequestRejected`
+            - **-32004** — `ToolRoutingAmbiguous`
+
+            Values **-32003** and other `-32005..-32099` are reserved for future gateway use.
         message:
           type: string
         data:
