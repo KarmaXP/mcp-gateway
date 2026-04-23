@@ -1,0 +1,38 @@
+# Example MCP Gateway upstream table. Copy to gateway.yaml or set MCP_GATEWAY_CONFIG.
+#
+# Each backend uses either:
+#   - url: MCP server with GET /mcp/sse + POST /mcp/rpc (same contract as this gateway), or
+#   - command: stdio MCP server (newline-delimited JSON-RPC on stdin/stdout).
+#
+# Optional: auth_token or auth_token_env for HTTP Bearer on upstream requests.
+
+backends:
+  - id: backend-alpha
+    prefix: alpha
+    url: http://127.0.0.1:3101
+    max_concurrency: 8
+  - id: backend-beta
+    prefix: beta
+    url: http://127.0.0.1:3102
+    max_concurrency: 4
+  # - id: local-stdio
+  #   prefix: demo
+  #   command: ["npx", "-y", "@modelcontextprotocol/server-everything"]
+  #   max_concurrency: 2
+
+# Semantic router (optional). Env ROUTER_MODE still overrides when set after load.
+# When mode is on or assist_list, set QDRANT_URL (and EMBED_URL) in the environment.
+router:
+  mode: off
+  # top_k: 8
+  # score_min: 0.35
+  # allow_auto_rename: false
+  # vector_dim: 384
+  # embed_timeout: 10s
+  # query_timeout: 5s
+
+qdrant:
+  collection: mcp_tool_catalog
+
+embed:
+  url: http://127.0.0.1:8001

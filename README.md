@@ -68,8 +68,9 @@ OpenAPI: [`docs/artifacts/openapi/openapi.yaml`](docs/artifacts/openapi/openapi.
 
 ## Configuration highlights
 
+- **Backends:** `MCP_GATEWAY_CONFIG` (YAML) and/or `MCP_GATEWAY_BACKENDS` (JSON list). Each entry has `id`, `prefix`, and either `url` (HTTP+SSE MCP) or `command` (stdio). See [`deployments/gateway.example.yaml`](deployments/gateway.example.yaml).
 - **Auth:** `AUTH_MODE=none|jwt` — JWT validates RS256 (PEM or JWKS). Health paths are skipped by default.
-- **Semantic router:** `ROUTER_MODE=on` or `assist_list`, `EMBED_URL`, `QDRANT_URL` (when using HTTP store), `ROUTER_*` tuning — see `cmd/gateway/main.go` aggregator options.
+- **Semantic router:** `ROUTER_MODE=on` or `assist_list` requires **`QDRANT_URL`**; tune with `ROUTER_*` env vars or the `router:` block in YAML (`top_k`, `score_min`, `allow_auto_rename`, timeouts, `vector_dim`). `EMBED_URL` / `embed.url` points at the embedding sidecar.
 - **Telemetry:** `OTEL_EXPORTER_OTLP_ENDPOINT` (e.g. `http://127.0.0.1:4318`) — traces and metrics export via OTLP HTTP.
 
 ## Observability (Prometheus · Grafana · Tempo)

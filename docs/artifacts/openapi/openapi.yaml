@@ -2,12 +2,27 @@ openapi: 3.1.0
 info:
   title: MCP Gateway HTTP API
   description: |
-    Host-facing HTTP surface for the MCP multiplexing gateway (Phase 1).
+    Host-facing HTTP surface for the MCP multiplexing gateway: **one SSE session** pairs with
+    **many stateless POSTs** carrying JSON-RPC envelopes.
 
-    - **SSE**: long-lived `GET /mcp/sse` stream; responses carry `Mcp-Session-Id`.
-    - **JSON-RPC**: single request per `POST /mcp/rpc` with `Mcp-Session-Id` echo header.
-    - JSON-RPC **responses** for requests with an `id` are delivered asynchronously as SSE events
-      (`event: jsonrpc`, `data: { ... }`), not in the POST response body.
+    ### End-to-end flow (host client)
+
+    1. **Open stream** — `GET /mcp/sse` with `Accept: text/event-stream`. The gateway responds `200`
+       and sets response header **`Mcp-Session-Id`** (UUID). Keep this connection open for the whole session.
+    2. **Send RPC** — For each JSON-RPC message, `POST /mcp/rpc` with body = one JSON object and request header
+       **`Mcp-Session-Id`** equal to the value from step 1. Use `Content-Type: application/json`.
+    3. **Read replies** — For requests that include an `id`, the gateway does **not** return the JSON-RPC
+       result in the POST body. Instead it responds **`202 Accepted`** immediately (empty body). The
+       matching **result** or **error** object is delivered on the SSE connection as a frame:
+       `event: jsonrpc` followed by `data: ` + single-line JSON matching `JsonRpcResponse`.
+    4. **Handshake** — After `initialize` (response on SSE), send notification `notifications/initialized`
+       (or `initialized`) with no `id` before calling `tools/list` or `tools/call`; otherwise the gateway
+       returns error code **-32001** (`HandshakeIncomplete`) on the SSE stream.
+    5. **Shutdown** — Closing the SSE connection cancels in-flight work tied to that session; the gateway
+       merges process shutdown context so SIGTERM drains streams cleanly.
+
+    - **SSE**: long-lived `GET /mcp/sse`; **`Mcp-Session-Id` is only on the GET response** (clients copy it onto every POST).
+    - **JSON-RPC**: single request per `POST /mcp/rpc`; responses for requests with `id` are **SSE-only**.
 
     When `AUTH_MODE=jwt`, all routes except configured health prefixes require a valid `Authorization: Bearer` JWT.
 
@@ -105,8 +120,16 @@ paths:
           content:
             text/event-stream:
               schema:
-                type: string
-                description: SSE stream of `event: jsonrpc` frames
+                $ref: "#/components/schemas/SseJsonRpcFrame"
+              examples:
+                initializeResult:
+                  summary: Example SSE data line after initialize
+                  value: |
+                    event: jsonrpc
+                    data: {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","capabilities":{},"serverInfo":{"name":"mcp-gateway"}}}
+
+                    event: jsonrpc
+                    data: {"jsonrpc":"2.0","id":4,"error":{"code":-32001,"message":"handshake incomplete: send initialize then notifications/initialized"}}
         "401":
           description: Missing or invalid JWT (when AUTH_MODE=jwt)
         "500":
@@ -175,7 +198,10 @@ paths:
                     arguments: {}
       responses:
         "202":
-          description: Request accepted for processing; response follows on SSE (if `id` was set)
+          description: |
+            Request accepted. If the body was a **request** (JSON field `id` present), the JSON-RPC
+            **response** (`result` or `error`) is emitted only on the open SSE session as `event: jsonrpc`.
+            If the body was a **notification** (no `id`), no SSE reply is expected.
         "400":
           description: Missing session header, invalid body, or invalid JSON-RPC envelope
           content:
@@ -198,6 +224,15 @@ components:
       description: RS256 JWT when AUTH_MODE=jwt (optional in dev when AUTH_MODE=none)
 
   schemas:
+    SseJsonRpcFrame:
+      type: string
+      description: |
+        One SSE event delivered as two lines, then a blank line:
+        `event: jsonrpc` and `data: ` + serialized `JsonRpcResponse` (single line, no literal newlines inside JSON).
+      example: |
+        event: jsonrpc
+        data: {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","capabilities":{},"serverInfo":{"name":"mcp-gateway"}}}
+
     JsonRpcRequest:
       type: object
       required: [jsonrpc, method]
