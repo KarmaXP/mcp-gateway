@@ -23,14 +23,14 @@ type Config struct {
 
 // Backend is one upstream MCP server (HTTP+SSE or stdio).
 type Backend struct {
-	ID              string            `yaml:"id"`
-	Prefix          string            `yaml:"prefix"`
-	URL             string            `yaml:"url"`
-	Command         []string          `yaml:"command"`
-	Env             map[string]string `yaml:"env"`
-	MaxConcurrency  int               `yaml:"max_concurrency"`
-	AuthToken       string            `yaml:"auth_token"`
-	AuthTokenEnv    string            `yaml:"auth_token_env"` // env var name holding bearer token
+	ID             string            `yaml:"id"`
+	Prefix         string            `yaml:"prefix"`
+	URL            string            `yaml:"url"`
+	Command        []string          `yaml:"command"`
+	Env            map[string]string `yaml:"env"`
+	MaxConcurrency int               `yaml:"max_concurrency"`
+	AuthToken      string            `yaml:"auth_token"`
+	AuthTokenEnv   string            `yaml:"auth_token_env"` // env var name holding bearer token
 }
 
 // Router holds semantic router tuning (env overrides after load).
