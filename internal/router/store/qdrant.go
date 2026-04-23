@@ -222,6 +222,28 @@ func (q *Qdrant) Query(ctx context.Context, vector []float32, topK int, filter F
 	return out, nil
 }
 
+// PingCollections checks that the Qdrant HTTP API is reachable (GET /collections).
+func PingCollections(ctx context.Context, baseURL string) error {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if baseURL == "" {
+		return fmt.Errorf("router/store/qdrant: empty baseURL")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/collections", nil)
+	if err != nil {
+		return err
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 512))
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("router/store/qdrant: ping: status %d", res.StatusCode)
+	}
+	return nil
+}
+
 func payloadString(v any) string {
 	switch x := v.(type) {
 	case string:

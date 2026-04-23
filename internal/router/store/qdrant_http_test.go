@@ -66,3 +66,15 @@ func TestQdrantQueryDimensionMismatch(t *testing.T) {
 	_, err = q.Query(context.Background(), []float32{1, 1}, 2, Filter{})
 	require.ErrorIs(t, err, ErrDimensionMismatch)
 }
+
+func TestPingCollections(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/collections" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	require.NoError(t, PingCollections(context.Background(), srv.URL))
+}
