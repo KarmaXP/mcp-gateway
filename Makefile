@@ -15,7 +15,7 @@ CYAN    := \033[36m
 RESET   := \033[0m
 
 .DEFAULT_GOAL := help
-.PHONY: help build run stop test test-cover test-integration lint clean tidy \
+.PHONY: help build run stop test test-cover test-integration smoke lint clean tidy \
         docker-build docker-up docker-up-full docker-down docker-logs docker-clean
 
 # Help: sectioned list of targets (descriptions are defined here only)
@@ -33,6 +33,7 @@ help:
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test" "Run all unit tests with race detection"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test-cover" "go test -race with coverage report (internal/*)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test-integration" "go test -tags=integration (Qdrant + embed + OTLP; needs compose)"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "smoke" "curl MCP flow against gateway + scripts/smoke_upstream (sets SMOKE_AUTO_START_GATEWAY=1)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "lint" "Run golangci-lint (install via go run if missing)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "tidy" "Clean up and verify Go modules"
 	@printf "\n"
@@ -81,6 +82,11 @@ test-integration:
 	 go test -tags=integration -race -count=1 \
 		./internal/router/... \
 		./internal/telemetry/...
+
+smoke:
+	@echo "🔥 Smoke test (smoke_upstream + gateway MCP over curl)..."
+	@chmod +x scripts/smoke_test.sh
+	@SMOKE_AUTO_START_GATEWAY=1 bash scripts/smoke_test.sh
 
 lint:
 	@echo "🔍 golangci-lint..."
