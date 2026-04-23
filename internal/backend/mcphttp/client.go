@@ -62,8 +62,8 @@ func New(lifecycle context.Context, id, prefix, baseURL string, maxConcurrency i
 		client: &http.Client{
 			Transport: http.DefaultTransport,
 		},
-		sem: semaphore.NewWeighted(maxConcurrency),
-		pending:   make(map[string]chan *rpc.Response),
+		sem:     semaphore.NewWeighted(maxConcurrency),
+		pending: make(map[string]chan *rpc.Response),
 	}
 	cleanup := func() { c.close() }
 	return c, cleanup, nil
@@ -72,7 +72,7 @@ func New(lifecycle context.Context, id, prefix, baseURL string, maxConcurrency i
 func (c *Client) ID() string     { return c.id }
 func (c *Client) Prefix() string { return c.prefix }
 
-func (c *Client) sseURL() string  { return c.base + "/mcp/sse" }
+func (c *Client) sseURL() string { return c.base + "/mcp/sse" }
 func (c *Client) rpcURL() string { return c.base + "/mcp/rpc" }
 
 func (c *Client) setAuth(req *http.Request) {
@@ -99,16 +99,26 @@ func (c *Client) connectLocked() error {
 
 	resp, err := c.client.Do(req)
 	if err != nil {
+		if resp != nil && resp.Body != nil {
+			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 8<<10))
+			_ = resp.Body.Close()
+		}
 		return fmt.Errorf("mcphttp %s: GET sse: %w", c.id, err)
 	}
+
+	handedOff := false
+	defer func() {
+		if !handedOff && resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+	}()
+
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		_ = resp.Body.Close()
 		return fmt.Errorf("mcphttp %s: GET sse: %s: %s", c.id, resp.Status, strings.TrimSpace(string(b)))
 	}
 	sid := strings.TrimSpace(resp.Header.Get("Mcp-Session-Id"))
 	if sid == "" {
-		_ = resp.Body.Close()
 		return fmt.Errorf("mcphttp %s: missing Mcp-Session-Id on sse response", c.id)
 	}
 	c.sessID = sid
@@ -116,10 +126,12 @@ func (c *Client) connectLocked() error {
 	readCtx, cancel := context.WithCancel(c.lifecycle)
 	c.readCancel = cancel
 	c.readWG.Add(1)
+	body := resp.Body
+	handedOff = true
 	go func() {
 		defer c.readWG.Done()
-		defer func() { _ = resp.Body.Close() }()
-		c.readSSE(resp.Body, readCtx)
+		defer func() { _ = body.Close() }()
+		c.readSSE(body, readCtx)
 	}()
 	return nil
 }
