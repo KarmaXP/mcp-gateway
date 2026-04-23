@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"sync"
 
 	"github.com/google/uuid"
@@ -128,8 +127,6 @@ func (s *Session) Dispatch(reqCtx context.Context, req *rpc.Request) error {
 	ctx, cancel := mergedCancel(s.ctx, reqCtx)
 	defer cancel()
 
-	slog.DebugContext(ctx, "mcp.dispatch", "session_id", s.id, "method", req.Method, "notification", req.IsNotification())
-
 	for _, mw := range s.middlewares {
 		if mw == nil {
 			continue
@@ -177,10 +174,8 @@ func (s *Session) handleNotification(ctx context.Context, req *rpc.Request) erro
 			s.ready = true
 		}
 		s.mu.Unlock()
-		slog.Debug("session handshake notification", "session_id", s.id, "method", req.Method)
 		return nil
 	default:
-		slog.Debug("ignored notification", "method", req.Method)
 		return nil
 	}
 }
