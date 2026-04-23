@@ -58,6 +58,42 @@ func TestNewResultPreservesID(t *testing.T) {
 	require.JSONEq(t, `{"ok":true}`, string(out["result"]))
 }
 
+func TestParseResponseResult(t *testing.T) {
+	raw := []byte(`{"jsonrpc":"2.0","id":7,"result":{"tools":[]}}`)
+	resp, err := ParseResponse(raw)
+	require.NoError(t, err)
+	require.NotNil(t, resp.Result)
+	require.Nil(t, resp.Error)
+	require.JSONEq(t, `7`, string(resp.ID))
+}
+
+func TestParseResponseError(t *testing.T) {
+	raw := []byte(`{"jsonrpc":"2.0","id":"x","error":{"code":-32001,"message":"handshake"}}`)
+	resp, err := ParseResponse(raw)
+	require.NoError(t, err)
+	require.Nil(t, resp.Result)
+	require.NotNil(t, resp.Error)
+	require.Equal(t, -32001, resp.Error.Code)
+	require.Equal(t, "handshake", resp.Error.Message)
+}
+
+func TestParseResponseInvalid(t *testing.T) {
+	_, err := ParseResponse([]byte(`{}`))
+	require.Error(t, err)
+	_, err = ParseResponse([]byte(`{"jsonrpc":"2.0","id":1}`))
+	require.Error(t, err)
+}
+
+func TestMarshalRequest(t *testing.T) {
+	b, err := MarshalRequest(&Request{
+		JSONRPC: Version,
+		Method:  "tools/list",
+		ID:      json.RawMessage(`"g1"`),
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"jsonrpc":"2.0","method":"tools/list","id":"g1"}`, string(b))
+}
+
 func TestNewErrorPreservesIDAndPayload(t *testing.T) {
 	id := json.RawMessage(`99`)
 	data := json.RawMessage(`{"hint":"x"}`)

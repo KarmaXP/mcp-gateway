@@ -98,3 +98,45 @@ func NewError(id json.RawMessage, code int, message string, data json.RawMessage
 func (r *Response) Marshal() ([]byte, error) {
 	return json.Marshal(r)
 }
+
+// ParseResponse decodes a JSON-RPC 2.0 response (result or error).
+func ParseResponse(raw []byte) (*Response, error) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 {
+		return nil, fmt.Errorf("%w: empty body", ErrInvalidRequest)
+	}
+	if raw[0] != '{' {
+		return nil, ErrNotObject
+	}
+	var resp Response
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return nil, fmt.Errorf("rpc: decode response: %w", err)
+	}
+	if resp.JSONRPC != Version {
+		return nil, fmt.Errorf("%w: jsonrpc must be %q", ErrInvalidRequest, Version)
+	}
+	if resp.Error == nil && resp.Result == nil {
+		return nil, fmt.Errorf("%w: response must include result or error", ErrInvalidRequest)
+	}
+	return &resp, nil
+}
+
+// MarshalRequest serializes a JSON-RPC request for upstream transport.
+func MarshalRequest(req *Request) ([]byte, error) {
+	ver := req.JSONRPC
+	if ver == "" {
+		ver = Version
+	}
+	type wire struct {
+		JSONRPC string          `json:"jsonrpc"`
+		Method  string          `json:"method"`
+		Params  json.RawMessage `json:"params,omitempty"`
+		ID      json.RawMessage `json:"id,omitempty"`
+	}
+	return json.Marshal(wire{
+		JSONRPC: ver,
+		Method:  req.Method,
+		Params:  req.Params,
+		ID:      req.ID,
+	})
+}
