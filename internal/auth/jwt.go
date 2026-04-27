@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -66,24 +67,28 @@ func parseRSAPublicKey(pemStr string) (*rsa.PublicKey, error) {
 	return rsaKey, nil
 }
 
-// Validate parses and validates claims without logging the token or raw claims.
-func (v *Validator) Validate(ctx context.Context, token string) error {
-	var claims jwt.RegisteredClaims
-	_, err := v.parser.ParseWithClaims(token, &claims, func(t *jwt.Token) (interface{}, error) {
+type registeredWithTools struct {
+	jwt.RegisteredClaims
+	// McpTools lists namespaced tool ids the subject may invoke; forwarded to the semantic router allow-list (§3.C → §3.B).
+	McpTools []string `json:"mcp_tools,omitempty"`
+}
+
+func (v *Validator) keyFunc(ctx context.Context) jwt.Keyfunc {
+	return func(t *jwt.Token) (interface{}, error) {
 		if v.pemKey != nil {
 			return v.pemKey, nil
 		}
 		return v.keyFromJWKS(ctx, t)
-	})
-	if err != nil {
-		return fmt.Errorf("auth: jwt: %w", err)
 	}
-	if v.cfg.Issuer != "" && claims.Issuer != v.cfg.Issuer {
+}
+
+func (v *Validator) checkIssAud(c *jwt.RegisteredClaims) error {
+	if v.cfg.Issuer != "" && c.Issuer != v.cfg.Issuer {
 		return fmt.Errorf("auth: jwt: invalid iss")
 	}
 	if v.cfg.Audience != "" {
 		ok := false
-		for _, a := range claims.Audience {
+		for _, a := range c.Audience {
 			if a == v.cfg.Audience {
 				ok = true
 				break
@@ -94,6 +99,47 @@ func (v *Validator) Validate(ctx context.Context, token string) error {
 		}
 	}
 	return nil
+}
+
+// Validate parses and validates claims without logging the token or raw claims.
+func (v *Validator) Validate(ctx context.Context, token string) error {
+	var claims jwt.RegisteredClaims
+	_, err := v.parser.ParseWithClaims(token, &claims, v.keyFunc(ctx))
+	if err != nil {
+		return fmt.Errorf("auth: jwt: %w", err)
+	}
+	return v.checkIssAud(&claims)
+}
+
+// ValidateWithAllowedTools parses and validates the token and returns the optional mcp_tools claim for semantic routing.
+// An empty slice means no allow-list restriction (same as AUTH_MODE=none for tools).
+func (v *Validator) ValidateWithAllowedTools(ctx context.Context, token string) ([]string, error) {
+	var claims registeredWithTools
+	_, err := v.parser.ParseWithClaims(token, &claims, v.keyFunc(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("auth: jwt: %w", err)
+	}
+	if err := v.checkIssAud(&claims.RegisteredClaims); err != nil {
+		return nil, err
+	}
+	return normalizeMcpToolNames(claims.McpTools), nil
+}
+
+func normalizeMcpToolNames(in []string) []string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			out = append(out, s)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func (v *Validator) keyFromJWKS(ctx context.Context, t *jwt.Token) (interface{}, error) {

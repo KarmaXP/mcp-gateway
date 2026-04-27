@@ -110,3 +110,50 @@ func TestValidator_TableDriven(t *testing.T) {
 		})
 	}
 }
+
+func TestValidator_ValidateWithAllowedTools(t *testing.T) {
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	pubPEM := rsaPubPEM(t, &priv.PublicKey)
+	cfg := Config{
+		Mode:         "jwt",
+		Issuer:       "https://issuer.example",
+		Audience:     "mcp-aud",
+		PublicKeyPEM: pubPEM,
+	}
+	v, err := NewValidator(cfg)
+	require.NoError(t, err)
+	ctx := context.Background()
+
+	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, registeredWithTools{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    cfg.Issuer,
+			Audience:  jwt.ClaimStrings{cfg.Audience},
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now().Add(-time.Minute)),
+		},
+		McpTools: []string{"  k8s__logs ", "prom__q"},
+	})
+	tok.Header["kid"] = "k1"
+	s, err := tok.SignedString(priv)
+	require.NoError(t, err)
+
+	tools, err := v.ValidateWithAllowedTools(ctx, s)
+	require.NoError(t, err)
+	require.Equal(t, []string{"k8s__logs", "prom__q"}, tools)
+
+	emptyTok := jwt.NewWithClaims(jwt.SigningMethodRS256, registeredWithTools{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    cfg.Issuer,
+			Audience:  jwt.ClaimStrings{cfg.Audience},
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now().Add(-time.Minute)),
+		},
+	})
+	emptyTok.Header["kid"] = "k1"
+	es, err := emptyTok.SignedString(priv)
+	require.NoError(t, err)
+	tools, err = v.ValidateWithAllowedTools(ctx, es)
+	require.NoError(t, err)
+	require.Nil(t, tools)
+}

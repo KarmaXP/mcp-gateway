@@ -3,6 +3,8 @@ package auth
 import (
 	"net/http"
 	"strings"
+
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/ingress"
 )
 
 // HTTPMiddleware enforces bearer JWT on MCP routes (health paths skipped).
@@ -32,11 +34,13 @@ func HTTPMiddleware(cfg Config, v *Validator) func(http.Handler) http.Handler {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
-			if err := v.Validate(r.Context(), tok); err != nil {
+			tools, err := v.ValidateWithAllowedTools(r.Context(), tok)
+			if err != nil {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
-			next.ServeHTTP(w, r)
+			ctx := ingress.WithAllowedTools(r.Context(), tools)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }

@@ -12,6 +12,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
+
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/ingress"
 )
 
 func rsaPublicPEM(t *testing.T, pub *rsa.PublicKey) string {
@@ -20,6 +22,43 @@ func rsaPublicPEM(t *testing.T, pub *rsa.PublicKey) string {
 	require.NoError(t, err)
 	b := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der})
 	return string(b)
+}
+
+func TestHTTPMiddlewareInjectsAllowedToolsFromJWT(t *testing.T) {
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	cfg := Config{Mode: "jwt", Issuer: "iss", Audience: "aud", PublicKeyPEM: rsaPublicPEM(t, &priv.PublicKey)}
+	v, err := NewValidator(cfg)
+	require.NoError(t, err)
+
+	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, registeredWithTools{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    "iss",
+			Audience:  jwt.ClaimStrings{"aud"},
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now().Add(-time.Minute)),
+		},
+		McpTools: []string{"alpha__echo"},
+	})
+	tok.Header["kid"] = "k1"
+	s, err := tok.SignedString(priv)
+	require.NoError(t, err)
+
+	var got []string
+	h := HTTPMiddleware(cfg, v)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = ingress.AllowedToolsFromContext(r.Context())
+		w.WriteHeader(http.StatusOK)
+	}))
+	ts := httptest.NewServer(h)
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/mcp/rpc", nil)
+	req.Header.Set("Authorization", "Bearer "+s)
+	res, err := ts.Client().Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, res.StatusCode)
+	require.NoError(t, res.Body.Close())
+	require.Equal(t, []string{"alpha__echo"}, got)
 }
 
 func TestHTTPMiddlewareJWTAcceptsValidToken(t *testing.T) {
