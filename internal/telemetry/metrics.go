@@ -13,9 +13,10 @@ import (
 )
 
 var (
-	metricsReady     atomic.Bool
-	semanticOutcomes metric.Int64Counter
-	semanticDuration metric.Float64Histogram
+	metricsReady        atomic.Bool
+	indexedCatalogTools atomic.Int64
+	semanticOutcomes    metric.Int64Counter
+	semanticDuration    metric.Float64Histogram
 )
 
 func registerInstruments() error {
@@ -46,8 +47,30 @@ func registerInstruments() error {
 	if err != nil {
 		return fmt.Errorf("telemetry: sessions callback: %w", err)
 	}
+
+	idx, err := m.Int64ObservableGauge("mcp.gateway.semantic_router.indexed_tools",
+		metric.WithDescription("Tool count in the vector index after the last successful catalog reindex"))
+	if err != nil {
+		return fmt.Errorf("telemetry: indexed_tools gauge: %w", err)
+	}
+	_, err = m.RegisterCallback(func(_ context.Context, obs metric.Observer) error {
+		obs.ObserveInt64(idx, indexedCatalogTools.Load())
+		return nil
+	}, idx)
+	if err != nil {
+		return fmt.Errorf("telemetry: indexed_tools callback: %w", err)
+	}
+
 	metricsReady.Store(true)
 	return nil
+}
+
+// SetIndexedCatalogToolCount updates the observable gauge for indexed tools (call after successful router Reindex).
+func SetIndexedCatalogToolCount(n int64) {
+	if n < 0 {
+		n = 0
+	}
+	indexedCatalogTools.Store(n)
 }
 
 // RecordSemanticRouting emits router metrics from a completed decision (err may be non-nil).
@@ -63,9 +86,14 @@ func RecordSemanticRouting(ctx context.Context, dec *router.RoutingDecision, res
 	if outcome == "" {
 		outcome = "unknown"
 	}
+	layer := dec.FallbackLayer
+	if layer == "" {
+		layer = "unknown"
+	}
 	attrs := []attribute.KeyValue{
 		attribute.String("result", result),
 		attribute.String("outcome", outcome),
+		attribute.String("layer", layer),
 	}
 	semanticOutcomes.Add(ctx, 1, metric.WithAttributes(attrs...))
 	if dec.LatencyMS > 0 {

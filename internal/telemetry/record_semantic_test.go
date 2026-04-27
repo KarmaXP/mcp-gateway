@@ -20,7 +20,7 @@ func TestRecordSemanticRoutingNoPanic(t *testing.T) {
 		_ = shutdown(ctx)
 	}()
 
-	dec := &router.RoutingDecision{Outcome: router.OutcomeExact, LatencyMS: 3}
+	dec := &router.RoutingDecision{Outcome: router.OutcomeExact, FallbackLayer: "exact", LatencyMS: 3}
 	RecordSemanticRouting(context.Background(), dec, nil)
 	RecordSemanticRouting(context.Background(), dec, context.Canceled)
 	RecordSemanticRouting(context.Background(), nil, nil)
