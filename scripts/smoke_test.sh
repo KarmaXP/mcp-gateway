@@ -145,6 +145,21 @@ echo "==> initialize: JSON-RPC result seen on SSE (proves host session + multipl
 echo "==> notifications/initialized"
 post_rpc '{"jsonrpc":"2.0","method":"notifications/initialized"}'
 
+echo "==> ping (MCP spec)"
+post_rpc '{"jsonrpc":"2.0","id":2,"method":"ping"}'
+sleep 0.35
+grep -q '"id":2' "${SSE_OUT}" || {
+  echo "expected ping response id 2 on SSE stream:"
+  head -40 "${SSE_OUT}"
+  exit 1
+}
+grep -q '"result":{}' "${SSE_OUT}" || {
+  echo "expected ping empty result object on SSE stream:"
+  head -40 "${SSE_OUT}"
+  exit 1
+}
+echo "==> ping: empty JSON-RPC result (spec compliance)"
+
 echo "==> tools/list"
 post_rpc '{"jsonrpc":"2.0","id":3,"method":"tools/list"}'
 sleep 0.4
