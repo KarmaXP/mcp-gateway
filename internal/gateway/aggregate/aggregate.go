@@ -12,14 +12,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/santhosh-tekuri/jsonschema/v6"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/ingress"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/namespace"
 	"github.com/KarmaXP/mcp-gateway/internal/router"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 var errNoBackends = errors.New("aggregate: no backends responded to initialize")
@@ -42,6 +45,9 @@ type Aggregator struct {
 
 	catMu  sync.RWMutex
 	catVer string // sha256 of last aggregated tools/list JSON (for optional client pinning)
+
+	schemaMu       sync.RWMutex
+	toolValidators map[string]*jsonschema.Schema // namespaced tool -> compiled inputSchema
 }
 
 // Option configures the aggregator.
@@ -110,10 +116,13 @@ func (a *Aggregator) PrefixToBackendID() map[string]string {
 
 // Initialize fans out to all backends, omits per-backend failures, and errors only if every backend fails.
 func (a *Aggregator) Initialize(ctx context.Context, hostID json.RawMessage) (*rpc.Response, error) {
+	tctx, span := telemetry.StartSpan(ctx, "mcp.aggregate.initialize")
+	defer span.End()
+
 	results := make([]json.RawMessage, len(a.backends))
 	var mu sync.Mutex
 
-	g, ctx := errgroup.WithContext(ctx)
+	g, ctx := errgroup.WithContext(tctx)
 	for i, b := range a.backends {
 		i, b := i, b
 		g.Go(func() error {
@@ -223,12 +232,20 @@ func shallowMerge(dst map[string]any, src any) {
 }
 
 // ToolsList returns aggregated namespaced tools in stable order: backend order, then native name.
+// When the request context carries JWT claim mcp_tools (via ingress), the list is filtered to that allow-list
+// (full catalog is still cached and used for router reindex and schema compilation).
 func (a *Aggregator) ToolsList(ctx context.Context, hostID json.RawMessage) (*rpc.Response, error) {
-	if a.listTTL > 0 {
+	tctx, span := telemetry.StartSpan(ctx, "mcp.aggregate.tools_list")
+	defer span.End()
+
+	allowed := ingress.AllowedToolsFromContext(tctx)
+
+	if a.listTTL > 0 && len(allowed) == 0 {
 		a.mu.RLock()
 		if len(a.cachedList) > 0 && time.Since(a.cachedAt) < a.listTTL {
 			c := append(json.RawMessage(nil), a.cachedList...)
 			a.mu.RUnlock()
+			a.refreshToolSchemasFromListJSON(c)
 			return rpc.NewResult(hostID, c), nil
 		}
 		a.mu.RUnlock()
@@ -238,15 +255,13 @@ func (a *Aggregator) ToolsList(ctx context.Context, hostID json.RawMessage) (*rp
 		tools []map[string]any
 	}
 	results := make([]listResult, len(a.backends))
-	// errgroup.WithContext cancels the derived ctx when Wait returns; Reindex must use the caller ctx.
-	listCtx := ctx
-	g, ctx := errgroup.WithContext(ctx)
+	g, gctx := errgroup.WithContext(tctx)
 	var mu sync.Mutex
 
 	for i, b := range a.backends {
 		i, b := i, b
 		g.Go(func() error {
-			callCtx, cancel := context.WithTimeout(ctx, a.listTimeout)
+			callCtx, cancel := context.WithTimeout(gctx, a.listTimeout)
 			defer cancel()
 			subID := json.RawMessage(fmt.Sprintf(`"gw-list-%s"`, b.ID()))
 			req := &rpc.Request{JSONRPC: rpc.Version, Method: "tools/list", ID: subID, Params: nil}
@@ -298,20 +313,22 @@ func (a *Aggregator) ToolsList(ctx context.Context, hostID json.RawMessage) (*rp
 		}
 	}
 
-	out, err := json.Marshal(map[string]any{"tools": merged})
+	a.replaceToolSchemasFromMerged(merged)
+
+	outFull, err := json.Marshal(map[string]any{"tools": merged})
 	if err != nil {
 		return nil, fmt.Errorf("aggregate: marshal tools/list: %w", err)
 	}
-	if a.listTTL > 0 {
+	if a.listTTL > 0 && len(allowed) == 0 {
 		a.mu.Lock()
-		a.cachedList = append(json.RawMessage(nil), out...)
+		a.cachedList = append(json.RawMessage(nil), outFull...)
 		a.cachedAt = time.Now()
 		a.mu.Unlock()
 	}
 
 	if a.semantic != nil && a.semantic.Enabled() {
-		ver := fmt.Sprintf("%x", sha256.Sum256(out))
-		entries, err := router.BuildCatalogEntries(out, func(prefix string) (string, error) {
+		ver := fmt.Sprintf("%x", sha256.Sum256(outFull))
+		entries, err := router.BuildCatalogEntries(outFull, func(prefix string) (string, error) {
 			b, ok := a.byPrefix[prefix]
 			if !ok {
 				return "", fmt.Errorf("unknown prefix %q", prefix)
@@ -320,16 +337,27 @@ func (a *Aggregator) ToolsList(ctx context.Context, hostID json.RawMessage) (*rp
 		})
 		if err != nil {
 			slog.Warn("router catalog build skipped", "err", err)
-		} else if err := a.semantic.Reindex(listCtx, ver, entries); err != nil {
+		} else if err := a.semantic.Reindex(tctx, ver, entries); err != nil {
 			slog.Warn("router reindex failed", "err", err)
 		} else {
 			a.catMu.Lock()
 			a.catVer = ver
 			a.catMu.Unlock()
+			telemetry.SetIndexedCatalogToolCount(int64(len(entries)))
 		}
 	}
 
-	return rpc.NewResult(hostID, out), nil
+	toReturn := outFull
+	if len(allowed) > 0 {
+		filtered := filterToolsForPolicy(merged, allowed)
+		filteredRaw, err := json.Marshal(map[string]any{"tools": filtered})
+		if err != nil {
+			return nil, fmt.Errorf("aggregate: marshal filtered tools/list: %w", err)
+		}
+		toReturn = filteredRaw
+	}
+
+	return rpc.NewResult(hostID, toReturn), nil
 }
 
 func cloneMap(m map[string]any) map[string]any {
@@ -344,6 +372,9 @@ func (a *Aggregator) invalidateToolCache() {
 	a.mu.Lock()
 	a.cachedList = nil
 	a.mu.Unlock()
+	a.schemaMu.Lock()
+	a.toolValidators = nil
+	a.schemaMu.Unlock()
 }
 
 // ToolsCall resolves the namespaced tool to a backend, strips the prefix for upstream, and preserves the JSON-RPC id.
@@ -358,11 +389,7 @@ func (a *Aggregator) ToolsCall(ctx context.Context, hostID json.RawMessage, para
 
 	if a.semantic != nil && a.semantic.Enabled() {
 		rctx, span := telemetry.StartSpan(ctx, "mcp.router.semantic")
-		sig := router.RoutingSignal{
-			Method:        "tools/call",
-			ToolName:      p.Name,
-			ArgumentsJSON: p.Arguments,
-		}
+		sig := a.semanticRoutingSignal(ctx, p.Name, p.Arguments)
 		resolved, dec, err := a.semantic.ResolveToolsCall(rctx, sig)
 		telemetry.RecordSemanticRouting(rctx, dec, err)
 		if err != nil {
@@ -374,6 +401,11 @@ func (a *Aggregator) ToolsCall(ctx context.Context, hostID json.RawMessage, para
 		p.Name = resolved
 	}
 
+	allowed := ingress.AllowedToolsFromContext(ctx)
+	if err := enforceToolPolicy(allowed, p.Name); err != nil {
+		return rpc.NewError(hostID, errcodes.RequestRejected, err.Error(), nil), nil
+	}
+
 	prefix, native, err := namespace.Split(p.Name)
 	if err != nil {
 		return rpc.NewError(hostID, errcodes.InvalidParams, err.Error(), nil), nil
@@ -382,17 +414,24 @@ func (a *Aggregator) ToolsCall(ctx context.Context, hostID json.RawMessage, para
 	if !ok {
 		return rpc.NewError(hostID, errcodes.InvalidParams, fmt.Sprintf("unknown tool prefix in %q", p.Name), nil), nil
 	}
+
+	argsForForward := coalesceArgs(p.Arguments)
+	if err := a.validateToolArgs(p.Name, argsForForward); err != nil {
+		return rpc.NewError(hostID, errcodes.InvalidParams, err.Error(), nil), nil
+	}
+
 	forwardParams, err := json.Marshal(map[string]any{
 		"name":      native,
-		"arguments": coalesceArgs(p.Arguments),
+		"arguments": argsForForward,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("aggregate: marshal tools/call forward params: %w", err)
 	}
 	callCtx, cancel := context.WithTimeout(ctx, a.callTimeout)
 	defer cancel()
-	bctx, bspan := telemetry.StartSpan(callCtx, "mcp.backend.tools_call")
+	bctx, bspan := telemetry.StartSpan(callCtx, "mcp.backend.call")
 	defer bspan.End()
+	bspan.SetAttributes(attribute.String("backend_id", b.ID()))
 	req := &rpc.Request{
 		JSONRPC: rpc.Version,
 		Method:  "tools/call",
@@ -412,4 +451,19 @@ func coalesceArgs(a json.RawMessage) json.RawMessage {
 		return json.RawMessage(`{}`)
 	}
 	return a
+}
+
+func (a *Aggregator) semanticRoutingSignal(ctx context.Context, toolName string, args json.RawMessage) router.RoutingSignal {
+	a.catMu.RLock()
+	ver := a.catVer
+	a.catMu.RUnlock()
+	allowedList := ingress.AllowedToolsFromContext(ctx)
+	return router.RoutingSignal{
+		Method:         "tools/call",
+		ToolName:       toolName,
+		ArgumentsJSON:  args,
+		IntentText:     ingress.MCPIntentFromContext(ctx),
+		AllowedTools:   allowedList,
+		CatalogVersion: ver,
+	}
 }

@@ -24,6 +24,9 @@ type Backend struct {
 	// ToolsCallErr, if set, makes tools/call return (nil, err) without invoking default logic.
 	ToolsCallErr error
 
+	// InputSchemaByTool overrides inputSchema for a native tool name in tools/list (for JSON Schema tests).
+	InputSchemaByTool map[string]map[string]any
+
 	mu sync.Mutex
 }
 
@@ -76,14 +79,20 @@ func (b *Backend) toolsList(ctx context.Context, req *rpc.Request) (*rpc.Respons
 	_ = ctx
 	tools := make([]map[string]any, 0, len(b.toolNames))
 	for _, n := range b.toolNames {
+		schema := map[string]any{
+			"type":                 "object",
+			"additionalProperties": false,
+			"properties":           map[string]any{},
+		}
+		if b.InputSchemaByTool != nil {
+			if s, ok := b.InputSchemaByTool[n]; ok && s != nil {
+				schema = s
+			}
+		}
 		tools = append(tools, map[string]any{
 			"name":        n,
 			"description": "mock tool " + n,
-			"inputSchema": map[string]any{
-				"type":                 "object",
-				"additionalProperties": false,
-				"properties":           map[string]any{},
-			},
+			"inputSchema": schema,
 		})
 	}
 	result := map[string]any{"tools": tools}
