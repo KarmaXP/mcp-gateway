@@ -3,6 +3,7 @@ package session
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -146,6 +147,8 @@ func (s *Session) Dispatch(reqCtx context.Context, req *rpc.Request) error {
 	switch req.Method {
 	case "initialize":
 		return s.handleInitialize(ctx, req)
+	case "ping":
+		return s.handlePing(ctx, req)
 	case "tools/list":
 		return s.handleToolsList(ctx, req)
 	case "tools/call":
@@ -192,6 +195,15 @@ func (s *Session) handleInitialize(ctx context.Context, req *rpc.Request) error 
 	s.initCompleted = true
 	s.mu.Unlock()
 	return s.EnqueueResponse(resp)
+}
+
+// handlePing implements MCP ping: JSON-RPC success with an empty object result per spec.
+func (s *Session) handlePing(ctx context.Context, req *rpc.Request) error {
+	_ = ctx
+	if req.IsNotification() {
+		return nil
+	}
+	return s.EnqueueResponse(rpc.NewResult(req.ID, json.RawMessage("{}")))
 }
 
 func (s *Session) handleToolsList(ctx context.Context, req *rpc.Request) error {

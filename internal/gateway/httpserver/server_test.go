@@ -16,6 +16,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/aggregate"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/ingress"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
 
@@ -160,6 +161,64 @@ func TestMCPHappyPathOverHTTP(t *testing.T) {
 		t.Fatal("timeout waiting for tools/list")
 	}
 
+	cancelSSE()
+	wg.Wait()
+}
+
+func TestMCPPingOverHTTP(t *testing.T) {
+	b1 := mock.New("b1", "alpha", []string{"echo"})
+	agg, err := aggregate.New([]backend.Backend{b1}, aggregate.WithListTTL(0))
+	require.NoError(t, err)
+	srv := New(agg, "")
+	ts := httptest.NewServer(srv)
+	defer ts.Close()
+
+	ctx, cancelSSE := context.WithCancel(context.Background())
+	defer cancelSSE()
+	client := ts.Client()
+	sseReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+"/mcp/sse", nil)
+	sseResp, err := client.Do(sseReq)
+	require.NoError(t, err)
+	sid := sseResp.Header.Get("Mcp-Session-Id")
+	require.NotEmpty(t, sid)
+
+	dataCh := make(chan string, 4)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer sseResp.Body.Close()
+		br := bufio.NewReader(sseResp.Body)
+		for {
+			line, err := br.ReadString('\n')
+			if err != nil {
+				return
+			}
+			if strings.HasPrefix(line, "data: ") {
+				dataCh <- strings.TrimSpace(strings.TrimPrefix(line, "data: "))
+			}
+		}
+	}()
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp/rpc", strings.NewReader(`{"jsonrpc":"2.0","id":99,"method":"ping"}`))
+	req.Header.Set("Mcp-Session-Id", sid)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(ingress.HeaderMCPIntent, "optional intent for transport test")
+	pr, err := client.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusAccepted, pr.StatusCode)
+	require.NoError(t, pr.Body.Close())
+
+	select {
+	case d := <-dataCh:
+		var jr rpc.Response
+		require.NoError(t, json.Unmarshal([]byte(d), &jr))
+		require.Nil(t, jr.Error)
+		require.JSONEq(t, `99`, string(jr.ID))
+		require.JSONEq(t, `{}`, string(jr.Result))
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for ping on SSE")
+	}
 	cancelSSE()
 	wg.Wait()
 }

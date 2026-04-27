@@ -49,6 +49,25 @@ func TestSessionMethodNotFound(t *testing.T) {
 	require.Equal(t, errcodes.MethodNotFound, resp.Error.Code)
 }
 
+func TestSessionPingReturnsEmptyResult(t *testing.T) {
+	b1 := mock.New("b1", "alpha", []string{"echo"})
+	agg, err := aggregate.New([]backend.Backend{b1}, aggregate.WithListTTL(0))
+	require.NoError(t, err)
+	s := New(context.Background(), "ping-session", agg, nil)
+	// Ping is spec-first-class and does not require initialize / initialized.
+	require.NoError(t, s.Dispatch(context.Background(), &rpc.Request{
+		JSONRPC: rpc.Version,
+		Method:  "ping",
+		ID:      json.RawMessage(`42`),
+	}))
+	raw := <-s.Out()
+	var resp rpc.Response
+	require.NoError(t, json.Unmarshal(raw, &resp))
+	require.Nil(t, resp.Error)
+	require.JSONEq(t, `42`, string(resp.ID))
+	require.JSONEq(t, `{}`, string(resp.Result))
+}
+
 func TestSessionLegacyInitializedNotification(t *testing.T) {
 	b1 := mock.New("b1", "alpha", []string{"echo"})
 	agg, err := aggregate.New([]backend.Backend{b1}, aggregate.WithListTTL(0))

@@ -1,6 +1,14 @@
 // Package httpserver is the host-facing HTTP transport: GET /mcp/sse (session + outbound events)
-// and POST /mcp/rpc (one JSON-RPC request per call). For requests with an id, results are pushed
-// on the SSE stream as "event: jsonrpc" with a single-line JSON-RPC 2.0 response in data.
+// and POST /mcp/rpc (one JSON-RPC request per call).
+//
+// SSE outbound scheme (W3C Server-Sent Events): each JSON-RPC response for a request that includes
+// an "id" is sent as a named event **jsonrpc** — two field lines per event, then a blank line:
+//
+//	event: jsonrpc
+//	data: {"jsonrpc":"2.0","id":...,"result":...}  // or "error" instead of "result"
+//
+// Clients MUST parse SSE frames (event name + data payload) and treat each data line as one
+// complete JSON-RPC 2.0 response object (single line, no embedded newlines).
 package httpserver
 
 import (
@@ -13,7 +21,10 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel/codes"
+
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/aggregate"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/ingress"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/session"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
@@ -123,6 +134,7 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	// Single writer goroutine: SSE frames must not interleave on the ResponseWriter.
+	// Frame format: W3C SSE named event "jsonrpc" + one data line (see package doc).
 	go func() {
 		defer wg.Done()
 		for {
@@ -163,31 +175,43 @@ func mergeWithShutdown(reqCtx, shutdownCtx context.Context) (context.Context, co
 
 func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
+	rctx, span := telemetry.StartSpan(r.Context(), "mcp.host.request")
+	defer span.End()
+
+	httpErr := func(msg string, code int) {
+		span.SetStatus(codes.Error, msg)
+		http.Error(w, msg, code)
+	}
+
 	sid := strings.TrimSpace(r.Header.Get("Mcp-Session-Id"))
 	if sid == "" {
-		http.Error(w, "missing Mcp-Session-Id header", http.StatusBadRequest)
+		httpErr("missing Mcp-Session-Id header", http.StatusBadRequest)
 		return
 	}
 	sess, err := s.manager.Get(sid)
 	if err != nil {
-		http.Error(w, "unknown session", http.StatusNotFound)
+		httpErr("unknown session", http.StatusNotFound)
 		return
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
-		http.Error(w, "read body", http.StatusBadRequest)
+		httpErr("read body", http.StatusBadRequest)
 		return
 	}
 	req, err := rpc.ParseRequest(body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		span.RecordError(err)
+		httpErr(err.Error(), http.StatusBadRequest)
 		return
 	}
-	if err := sess.Dispatch(r.Context(), req); err != nil {
+	ctx := ingress.WithMCPIntent(rctx, r.Header.Get(ingress.HeaderMCPIntent))
+	if err := sess.Dispatch(ctx, req); err != nil {
 		slog.WarnContext(r.Context(), "dispatch", "err", err)
-		http.Error(w, "dispatch failed", http.StatusInternalServerError)
+		span.RecordError(err)
+		httpErr("dispatch failed", http.StatusInternalServerError)
 		return
 	}
+	span.SetStatus(codes.Ok, "")
 	w.WriteHeader(http.StatusAccepted)
 }
 
