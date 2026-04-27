@@ -5,12 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/namespace"
+	"github.com/KarmaXP/mcp-gateway/internal/router/bm25"
 	"github.com/KarmaXP/mcp-gateway/internal/router/embed"
 	"github.com/KarmaXP/mcp-gateway/internal/router/index"
+	"github.com/KarmaXP/mcp-gateway/internal/router/rules"
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 )
 
@@ -31,6 +35,9 @@ type Engine struct {
 	catalog       map[string]struct{}
 	catalogVer    string
 	backendByTool map[string]string
+	toolDoc       map[string]string // tool name → indexed document text (BM25 rerank)
+
+	rules *rules.Rules
 }
 
 // NewEngine constructs a router engine. embedder may be nil only when ModeOff.
@@ -45,7 +52,18 @@ func NewEngine(cfg Config, e embed.Embedder, st store.Store, vectorDim int) *Eng
 		dim:           vectorDim,
 		catalog:       make(map[string]struct{}),
 		backendByTool: make(map[string]string),
+		toolDoc:       make(map[string]string),
 	}
+}
+
+// SetRules installs the optional rules layer (aliases, silo narrowing). Nil disables rules.
+func (e *Engine) SetRules(r *rules.Rules) {
+	if e == nil {
+		return
+	}
+	e.mu.Lock()
+	e.rules = r
+	e.mu.Unlock()
 }
 
 // Enabled reports whether vector routing is active.
@@ -122,9 +140,11 @@ func (e *Engine) Reindex(ctx context.Context, version string, entries []CatalogE
 	e.catalogVer = version
 	e.catalog = make(map[string]struct{}, len(entries))
 	e.backendByTool = make(map[string]string, len(entries))
+	e.toolDoc = make(map[string]string, len(entries))
 	for _, ent := range entries {
 		e.catalog[ent.ToolRow.Name] = struct{}{}
 		e.backendByTool[ent.ToolRow.Name] = ent.BackendID
+		e.toolDoc[ent.ToolRow.Name] = index.FormatDocument(ent.ToolRow)
 	}
 	e.mu.Unlock()
 
@@ -146,20 +166,40 @@ func (e *Engine) ResolveToolsCall(ctx context.Context, sig RoutingSignal) (strin
 		return "", dec, fmt.Errorf("%w: client %q vs server %q", ErrStaleCatalog, sig.CatalogVersion, e.CatalogVersion())
 	}
 
-	allowed := sig.AllowedTools
+	allowed := append([]string(nil), sig.AllowedTools...)
+	e.mu.RLock()
+	rl := e.rules
+	e.mu.RUnlock()
+	if rl != nil {
+		allowed = rl.NarrowAllowed(sig.IntentText, allowed, e.listCatalog())
+	}
+
+	toolForExact := sig.ToolName
+	if rl != nil {
+		if c := rl.CanonicalAlias(sig.ToolName); c != "" {
+			toolForExact = c
+		}
+	}
+
 	filter := store.Filter{CatalogVersion: e.CatalogVersion(), AllowedTools: allowed}
 
-	if sig.ToolName != "" && e.exactInCatalog(sig.ToolName) && e.allowed(sig.ToolName, allowed) {
-		bid := e.backendID(sig.ToolName)
+	if toolForExact != "" && e.exactInCatalog(toolForExact) && e.allowed(toolForExact, allowed) {
+		bid := e.backendID(toolForExact)
 		dec.BackendID = bid
-		dec.ToolNameNamespaced = sig.ToolName
+		dec.ToolNameNamespaced = toolForExact
 		dec.Confidence = 1
-		dec.FallbackLayer = "exact"
-		dec.Outcome = OutcomeExact
-		dec.Candidates = []ScoredTool{{Name: sig.ToolName, Score: 1, Source: "exact"}}
+		if rl != nil && strings.TrimSpace(sig.ToolName) != "" && toolForExact != sig.ToolName {
+			dec.FallbackLayer = "rules"
+			dec.Outcome = OutcomeRulesAlias
+			dec.Candidates = []ScoredTool{{Name: toolForExact, Score: 1, Source: "rules"}}
+		} else {
+			dec.FallbackLayer = "exact"
+			dec.Outcome = OutcomeExact
+			dec.Candidates = []ScoredTool{{Name: toolForExact, Score: 1, Source: "exact"}}
+		}
 		dec.LatencyMS = time.Since(start).Milliseconds()
-		slog.InfoContext(ctx, "router decision", "layer", "exact", "tool", sig.ToolName, "latency_ms", dec.LatencyMS)
-		return sig.ToolName, dec, nil
+		slog.InfoContext(ctx, "router decision", "layer", dec.FallbackLayer, "tool", toolForExact, "latency_ms", dec.LatencyMS)
+		return toolForExact, dec, nil
 	}
 
 	qtext := index.FormatQuery(sig.ToolName, sig.IntentText, jsonKeys(sig.ArgumentsJSON))
@@ -168,13 +208,13 @@ func (e *Engine) ResolveToolsCall(ctx context.Context, sig RoutingSignal) (strin
 	cancel()
 	if err != nil {
 		slog.WarnContext(ctx, "router embed failed, degraded exact-only", "err", err)
-		if sig.ToolName != "" && e.exactInCatalog(sig.ToolName) && e.allowed(sig.ToolName, allowed) {
-			dec.ToolNameNamespaced = sig.ToolName
-			dec.BackendID = e.backendID(sig.ToolName)
+		if toolForExact != "" && e.exactInCatalog(toolForExact) && e.allowed(toolForExact, allowed) {
+			dec.ToolNameNamespaced = toolForExact
+			dec.BackendID = e.backendID(toolForExact)
 			dec.FallbackLayer = "degraded_exact"
 			dec.Outcome = OutcomeDegradedExact
 			dec.LatencyMS = time.Since(start).Milliseconds()
-			return sig.ToolName, dec, nil
+			return toolForExact, dec, nil
 		}
 		dec.Outcome = OutcomeMissDegradedNoExact
 		dec.LatencyMS = time.Since(start).Milliseconds()
@@ -196,8 +236,15 @@ func (e *Engine) ResolveToolsCall(ctx context.Context, sig RoutingSignal) (strin
 		dec.LatencyMS = time.Since(start).Milliseconds()
 		return "", dec, fmt.Errorf("router: store query: %w", err)
 	}
+	if e.cfg.HybridAlpha > 0 && len(results) > 0 {
+		results = e.hybridRerank(qtext, results)
+	}
+	src := "vector"
+	if e.cfg.HybridAlpha > 0 {
+		src = "bm25_hybrid"
+	}
 	for _, r := range results {
-		dec.Candidates = append(dec.Candidates, ScoredTool{Name: r.ToolName, Score: r.Score, Source: "vector"})
+		dec.Candidates = append(dec.Candidates, ScoredTool{Name: r.ToolName, Score: r.Score, Source: src})
 	}
 	if len(results) == 0 {
 		dec.Outcome = OutcomeMissNoCandidates
@@ -236,6 +283,54 @@ func (e *Engine) ResolveToolsCall(ctx context.Context, sig RoutingSignal) (strin
 	dec.LatencyMS = time.Since(start).Milliseconds()
 	slog.InfoContext(ctx, "router decision", "layer", "vector", "tool", top.ToolName, "score", top.Score, "latency_ms", dec.LatencyMS, "signal", summarizeSignal(sig))
 	return top.ToolName, dec, nil
+}
+
+func (e *Engine) listCatalog() []string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	out := make([]string, 0, len(e.catalog))
+	for k := range e.catalog {
+		out = append(out, k)
+	}
+	return out
+}
+
+type hybridPair struct {
+	res store.Result
+	w   float64
+}
+
+func (e *Engine) hybridRerank(query string, results []store.Result) []store.Result {
+	if e == nil || e.cfg.HybridAlpha <= 0 || len(results) == 0 {
+		return results
+	}
+	e.mu.RLock()
+	docs := make([]string, len(results))
+	for i, r := range results {
+		if d, ok := e.toolDoc[r.ToolName]; ok {
+			docs[i] = d
+		} else {
+			docs[i] = r.ToolName
+		}
+	}
+	e.mu.RUnlock()
+	vecScores := make([]float64, len(results))
+	for i, r := range results {
+		vecScores[i] = r.Score
+	}
+	weights := bm25.RerankWeights(query, docs, vecScores, e.cfg.HybridAlpha)
+	pairs := make([]hybridPair, len(results))
+	for i := range results {
+		pairs[i] = hybridPair{res: results[i], w: weights[i]}
+	}
+	sort.Slice(pairs, func(a, b int) bool { return pairs[a].w > pairs[b].w })
+	out := make([]store.Result, len(pairs))
+	for i := range pairs {
+		r := pairs[i].res
+		r.Score = pairs[i].w
+		out[i] = r
+	}
+	return out
 }
 
 func summarizeSignal(sig RoutingSignal) string {

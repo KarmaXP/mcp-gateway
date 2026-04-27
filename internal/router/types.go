@@ -19,6 +19,7 @@ type RoutingOutcome string
 const (
 	OutcomeNone                 RoutingOutcome = "none"
 	OutcomeExact                RoutingOutcome = "exact"
+	OutcomeRulesAlias           RoutingOutcome = "rules_alias"
 	OutcomeVectorHit            RoutingOutcome = "vector_hit"
 	OutcomeDegradedExact        RoutingOutcome = "degraded_exact"
 	OutcomeMissStaleCatalog     RoutingOutcome = "miss_stale_catalog"
@@ -57,5 +58,5 @@ type RoutingDecision struct {
 type ScoredTool struct {
 	Name   string
 	Score  float64
-	Source string // "vector", "exact"
+	Source string // "vector", "exact", "rules", "bm25_hybrid"
 }

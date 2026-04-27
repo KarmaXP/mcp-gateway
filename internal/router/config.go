@@ -11,6 +11,10 @@ type Config struct {
 	// ScoreMin is the minimum cosine similarity [0,1] to accept a unique top-1 match.
 	ScoreMin float64
 
+	// HybridAlpha blends BM25 lexical scores with cosine: (1-α)*cosine + α*normBM25 on store results.
+	// Zero disables hybrid reranking.
+	HybridAlpha float64
+
 	// AllowAutoRename permits replacing the host tool name with the vector winner when they differ.
 	AllowAutoRename bool
 
@@ -26,6 +30,7 @@ func DefaultConfig() Config {
 		Mode:            ModeOff,
 		TopK:            8,
 		ScoreMin:        0.35,
+		HybridAlpha:     0,
 		AllowAutoRename: false,
 		EmbedTimeout:    10 * time.Second,
 		QueryTimeout:    5 * time.Second,

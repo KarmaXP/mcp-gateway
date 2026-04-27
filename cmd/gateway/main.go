@@ -19,6 +19,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/orchestrator"
 	"github.com/KarmaXP/mcp-gateway/internal/router"
 	"github.com/KarmaXP/mcp-gateway/internal/router/embed"
+	"github.com/KarmaXP/mcp-gateway/internal/router/rules"
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
 )
@@ -76,6 +77,9 @@ func aggregatorOptions(cfg config.Config) ([]aggregate.Option, error) {
 	if cfg.Router.ScoreMin > 0 {
 		rcfg.ScoreMin = cfg.Router.ScoreMin
 	}
+	if cfg.Router.HybridAlpha > 0 {
+		rcfg.HybridAlpha = cfg.Router.HybridAlpha
+	}
 	if cfg.Router.AllowAutoRename {
 		rcfg.AllowAutoRename = true
 	}
@@ -92,12 +96,16 @@ func aggregatorOptions(cfg config.Config) ([]aggregate.Option, error) {
 	}
 
 	e := router.NewEngine(rcfg, embed.NewClient(embedURL), st, dim)
+	if len(cfg.Router.Rules.Aliases) > 0 || len(cfg.Router.Rules.SiloKeywords) > 0 {
+		e.SetRules(rules.New(cfg.Router.Rules.Aliases, cfg.Router.Rules.SiloKeywords))
+	}
 	opts = append(opts, aggregate.WithSemanticRouter(e))
 	slog.Info("semantic router enabled",
 		"embed_url", embedURL,
 		"vector_dim", dim,
 		"score_min", rcfg.ScoreMin,
 		"top_k", rcfg.TopK,
+		"hybrid_alpha", rcfg.HybridAlpha,
 		"allow_auto_rename", rcfg.AllowAutoRename,
 		"qdrant_collection", cfg.QdrantCollection(),
 	)

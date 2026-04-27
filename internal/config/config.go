@@ -35,13 +35,21 @@ type Backend struct {
 
 // Router holds semantic router tuning (env overrides after load).
 type Router struct {
-	Mode            string  `yaml:"mode"` // off | on | assist_list
-	TopK            int     `yaml:"top_k"`
-	ScoreMin        float64 `yaml:"score_min"`
-	AllowAutoRename bool    `yaml:"allow_auto_rename"`
-	EmbedTimeout    string  `yaml:"embed_timeout"`
-	QueryTimeout    string  `yaml:"query_timeout"`
-	VectorDim       int     `yaml:"vector_dim"`
+	Mode            string      `yaml:"mode"` // off | on | assist_list
+	TopK            int         `yaml:"top_k"`
+	ScoreMin        float64     `yaml:"score_min"`
+	HybridAlpha     float64     `yaml:"hybrid_alpha"` // BM25–vector blend on store results; 0 disables
+	AllowAutoRename bool        `yaml:"allow_auto_rename"`
+	EmbedTimeout    string      `yaml:"embed_timeout"`
+	QueryTimeout    string      `yaml:"query_timeout"`
+	VectorDim       int         `yaml:"vector_dim"`
+	Rules           RouterRules `yaml:"rules"`
+}
+
+// RouterRules configures the deterministic rules layer (aliases, silo keywords).
+type RouterRules struct {
+	Aliases      map[string]string `yaml:"aliases"`
+	SiloKeywords map[string]string `yaml:"silo_keywords"`
 }
 
 // Qdrant names the vector collection; URL comes from QDRANT_URL.
@@ -129,6 +137,9 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("config: router.mode must be off, on, or assist_list")
 		}
 	}
+	if c.Router.HybridAlpha < 0 || c.Router.HybridAlpha > 1 {
+		return fmt.Errorf("config: router.hybrid_alpha must be between 0 and 1")
+	}
 	return nil
 }
 
@@ -157,6 +168,11 @@ func (c *Config) ApplyEnvOverrides() {
 	if v := os.Getenv("ROUTER_SCORE_MIN"); v != "" {
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
 			c.Router.ScoreMin = f
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("ROUTER_HYBRID_ALPHA")); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			c.Router.HybridAlpha = f
 		}
 	}
 	if v := strings.ToLower(strings.TrimSpace(os.Getenv("ROUTER_ALLOW_AUTO_RENAME"))); v != "" {

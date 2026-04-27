@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/KarmaXP/mcp-gateway/internal/router/index"
+	"github.com/KarmaXP/mcp-gateway/internal/router/rules"
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 )
 
@@ -142,6 +143,24 @@ func TestEngineAllowedToolsFilter(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, "a__one", name)
+}
+
+func TestEngineRulesAliasExact(t *testing.T) {
+	dim := 4
+	st := store.NewMemory(dim)
+	emb := &mapEmbed{vecs: map[string][]float32{}, dim: dim}
+	cfg := DefaultConfig()
+	cfg.Mode = ModeAssistList
+	e := NewEngine(cfg, emb, st, dim)
+	e.SetRules(rules.New(map[string]string{"legacy__logs": "pre__tool"}, nil))
+	row := index.ToolRow{Name: "pre__tool", Description: "d", ParamKeys: nil}
+	require.NoError(t, e.Reindex(context.Background(), "v1", []CatalogEntry{{ToolRow: row, BackendID: "be1"}}))
+
+	name, dec, err := e.ResolveToolsCall(context.Background(), RoutingSignal{ToolName: "legacy__logs"})
+	require.NoError(t, err)
+	require.Equal(t, "pre__tool", name)
+	require.Equal(t, "rules", dec.FallbackLayer)
+	require.Equal(t, OutcomeRulesAlias, dec.Outcome)
 }
 
 func TestEngineModeOff(t *testing.T) {
