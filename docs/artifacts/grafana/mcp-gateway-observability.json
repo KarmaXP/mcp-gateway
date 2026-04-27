@@ -34,7 +34,7 @@
     {
       "gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 },
       "id": 1,
-      "options": { "content": "**Prometheus** should scrape the OTel Collector metrics endpoint (compose: internal `:8889`, often mapped via a scrape config). OTel instrument names are normalized; if a panel is empty, open **Explore** and search metrics for `semantic_router` or `active_sse` and adjust the query. Custom app metrics are emitted from `internal/telemetry/metrics.go`." },
+      "options": { "content": "**Prometheus** should scrape the OTel Collector metrics endpoint (compose: internal `:8889`, often mapped via a scrape config). OTel instrument names are normalized; if a panel is empty, open **Explore** and search metrics for `semantic_router` or `active_sse` and adjust the query. Custom app metrics are emitted from `internal/telemetry/metrics.go` — router counters and histograms include **`layer`** (`exact`, `rules`, `vector`, `degraded_exact`, `none`, `unknown`)." },
       "title": "Notes",
       "type": "text"
     },
@@ -46,8 +46,8 @@
       "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true } },
       "targets": [
         {
-          "expr": "sum by (outcome, result) (rate({__name__=~\".*semantic_router_outcomes_total\"}[5m]))",
-          "legendFormat": "{{outcome}} / {{result}}",
+          "expr": "sum by (outcome, result, layer) (rate({__name__=~\".*semantic_router_outcomes_total\"}[5m]))",
+          "legendFormat": "{{outcome}} / {{result}} / {{layer}}",
           "refId": "A"
         }
       ],
@@ -62,18 +62,18 @@
       "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true } },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le) (rate({__name__=~\".*semantic_router_duration_seconds_bucket\"}[5m])))",
-          "legendFormat": "p50",
+          "expr": "histogram_quantile(0.50, sum by (le, layer) (rate({__name__=~\".*semantic_router_duration_seconds_bucket\"}[5m])))",
+          "legendFormat": "p50 {{layer}}",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le) (rate({__name__=~\".*semantic_router_duration_seconds_bucket\"}[5m])))",
-          "legendFormat": "p95",
+          "expr": "histogram_quantile(0.95, sum by (le, layer) (rate({__name__=~\".*semantic_router_duration_seconds_bucket\"}[5m])))",
+          "legendFormat": "p95 {{layer}}",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le) (rate({__name__=~\".*semantic_router_duration_seconds_bucket\"}[5m])))",
-          "legendFormat": "p99",
+          "expr": "histogram_quantile(0.99, sum by (le, layer) (rate({__name__=~\".*semantic_router_duration_seconds_bucket\"}[5m])))",
+          "legendFormat": "p99 {{layer}}",
           "refId": "C"
         }
       ],
@@ -109,8 +109,8 @@
           "refId": "A"
         },
         {
-          "expr": "sum by (outcome) (rate({__name__=~\".*semantic_router_outcomes_total\", result=\"miss\"}[5m]))",
-          "legendFormat": "miss — {{outcome}}",
+          "expr": "sum by (outcome, layer) (rate({__name__=~\".*semantic_router_outcomes_total\", result=\"miss\"}[5m]))",
+          "legendFormat": "miss — {{outcome}} / {{layer}}",
           "refId": "B"
         }
       ],

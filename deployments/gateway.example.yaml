@@ -26,10 +26,17 @@ router:
   mode: off
   # top_k: 8
   # score_min: 0.35
+  # hybrid_alpha: 0.2   # optional BM25 rerank on vector neighbours (0 = off)
   # allow_auto_rename: false
   # vector_dim: 384
   # embed_timeout: 10s
   # query_timeout: 5s
+  # rules:
+  #   aliases:
+  #     legacy_logs: k8s__get_logs
+  #   silo_keywords:
+  #     kubernetes: k8s
+  #     aws: aws
 
 qdrant:
   collection: mcp_tool_catalog

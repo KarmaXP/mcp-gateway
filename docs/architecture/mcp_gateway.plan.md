@@ -2,6 +2,9 @@
 name: MCP Gateway architecture plan
 overview: "In-repository technical specification and decision log for the MCP Gateway. Optional export of the body to standalone Markdown (without this YAML front matter). Stack choices and open items are tracked in §4.x."
 todos:
+  - id: router-phase2-benchmark
+    content: Synthetic router eval (≥20 tools, recall + p95) — internal/router/eval
+    status: completed
   - id: expand-sections
     content: Expand §1–8 with full prose (paragraphs, filled tables, Mermaid diagrams) in this file
     status: pending
@@ -423,6 +426,8 @@ flowchart TD
 - Reproducible benchmark: p95 of vector + embedding phase under the budget agreed in §6 (excluding MCP backend latency).
 - Document default `topK`, `T_min`, `AllowAutoRename`, and the exact indexed document format in the repo.
 
+**In-repo harness:** `internal/router/eval` — synthetic catalog (`SyntheticCatalog`, 24 tools), golden intents, `TestPhase2VectorRecallLexical` (recall@1), `TestPhase2EmbedAndQueryP95`, and silo narrowing coverage. Run: `go test ./internal/router/eval -run Phase2 -v`. The lexical embedder is deterministic (no live ONNX); repeat the same tests against **all-MiniLM-L6-v2** + Qdrant for thesis-grade numbers.
+
 ### C. Security layer — P1 (high)
 
 The security layer implements **authentication**, **per-tool authorization**, and **input validation** before a request reaches the semantic router (§3.B) and multiplexer (§3.A). Goal: reduce abuse surface (injection, lateral escalation via dangerous tools, exfiltration via malformed arguments) and align the gateway with **Zero Trust** practice (explicit identity, least privilege, logged decisions).
@@ -751,8 +756,8 @@ This subsection records **stack choices already reflected in this repository** v
 
 | Area | Closed (decided) | Still open / TBD |
 |------|---------------------------|------------------|
-| **Language** | **Go 1.26** — concurrency, static binary, ecosystem (JWT, OTLP, Qdrant gRPC). | Pin policy in `go.mod`, CI matrix. |
-| **Vector store** | **Qdrant** — HNSW, **metadata filters during ANN** (policy in-index); **gRPC client**; **cosine** distance; **384 dimensions** aligned with embeddings. | Collection naming / rotation, HNSW tuning, auth/TLS in non-local deploys, persistence strategy (see §4.1 residual). |
+| **Language** | **Go 1.26** — concurrency, static binary, ecosystem (JWT, OTLP, Qdrant HTTP). | Pin policy in `go.mod`, CI matrix. |
+| **Vector store** | **Qdrant** — HNSW, **metadata filters during ANN** (policy in-index); **HTTP API client** in gateway (`internal/router/store/qdrant.go`); **cosine** distance; **384 dimensions** aligned with embeddings. | Collection naming / rotation, HNSW tuning, auth/TLS in non-local deploys, persistence strategy (see §4.1 residual). |
 | **Embeddings** | **Local ONNX Runtime**, model **all-MiniLM-L6-v2**; **384-d**, **L2-normalised** outputs; service **`embed:8001`**; image build bakes ONNX (no runtime download). | Indexed text template version, batch/rate limits, optional embedding cache, multilingual needs (§4.4 residual). |
 | **Host ↔ gateway transport** | **HTTP POST** (agent requests) + **SSE** (async responses); **JSON-RPC 2.0**; MCP **reference transport** for interoperability. | Normative MCP spec revision pinned in README/bibliography; TLS termination; body size limits, heartbeats, backpressure (§4.2 residual). |
 | **Trace backend** | **Grafana Tempo** (OTLP); **metrics_generator** RED → Prometheus; exemplars for trace–metric correlation. | Sampling ratios, retention, attribute redaction details (§4.3 residual). |
@@ -768,7 +773,7 @@ This subsection records **stack choices already reflected in this repository** v
 
 ### 4.1 Vector store — decision: Qdrant
 
-**Architecture decision (closed):** the semantic router (§3.B) will use **Qdrant** as the vector database in implementation and in `docker-compose` / reference deployment, with **gRPC**, **cosine** similarity, and **384-dimensional** vectors consistent with §4.4.
+**Architecture decision (closed):** the semantic router (§3.B) will use **Qdrant** as the vector database in implementation and in `docker-compose` / reference deployment, with the gateway speaking Qdrant’s **HTTP JSON API** (see `internal/router/store/qdrant.go`), **cosine** similarity, and **384-dimensional** vectors consistent with §4.4. (gRPC remains available on Qdrant for other clients; the gateway implementation chose HTTP for a minimal `net/http` dependency.)
 
 **Repo / plan decision:** aligned with the above; keep `internal/router/store` abstracted for tests.
 
@@ -783,7 +788,7 @@ This subsection records **stack choices already reflected in this repository** v
 
 **Residual operational choices** (architecture core choice fixed; tune in implementation / README):
 
-- **Client:** this specification assumes **official gRPC client**; confirm in gateway implementation and document version.
+- **Client:** gateway implementation uses Qdrant’s **REST API** over HTTP; a future revision may add gRPC for latency-sensitive deployments.
 - **Distance / similarity:** **Cosine** fixed in this design (aligned with L2-normalised ONNX outputs §4.4); only revisit if embedding model changes.
 - **Collection naming:** one global collection vs one per `catalog_version` vs prefixes; **deletion** policy when rotating catalog version.
 - **HNSW parameters** (or equivalent) by default and whether to tune after latency/recall benchmark during rollout.
@@ -849,19 +854,19 @@ This subsection records **stack choices already reflected in this repository** v
 
 ### 4.5 Semantic router: modes, signals, and hyperparameters
 
-**Plan status:** §4 (`tab:router-hyperparams`) explicitly marks **`topK`**, **`T_min`**, **`AllowAutoRename`**, and **BM25 hybrid (α, β)** as **TBD**, to be calibrated in **phase 2** with a synthetic catalog (≥20 tools); final values to land in **`config.example.yaml`**.
+**Plan status:** **`internal/router/eval`** provides a reproducible Phase-2 benchmark (synthetic catalog, recall@1 + p95 tests; see §3.B.8). **`internal/router/rules`** implements aliases and silo→prefix narrowing (§3.B.6). **Hybrid BM25** reranks the vector TopK with **`router.hybrid_alpha`** ∈ [0,1] (`(1-α)·cosine + α·normBM25` on indexed document text). Defaults for **`topK`**, **`T_min`**, and **`AllowAutoRename`** remain conservative in code and **`deployments/gateway.example.yaml`** until you calibrate on the **live** embedding model + Qdrant in your environment.
 
 **Open choices (unchanged until calibration):**
 
 - **`tools/list` mode:** `assist_list` (full list to host, router only on `tools/call`) vs `filter_list` (reduced list) — if `filter_list`, **source of session intent** (header, first message, static config).
 - **`AllowAutoRename`:** recommended default **conservative `false`**; final policy TBD.
 - **`IntentText`:** standard documented mechanism (HTTP header name, JSON-RPC params field — **must be documented** and versioned).
-- **`topK` and `T_min` threshold** — **TBD** (to document).
-- **Hybrid BM25 + vector search:** **TBD** (to document); may be out of scope if vector-only suffices.
+- **`topK` and `T_min` threshold** — **TBD** for production (defaults are starting points; measure with live embeddings).
+- **Hybrid BM25 + vector:** α is configurable; optional second pass on weights or corpus-wide BM25 remains future work if needed.
 - **Light classifier** before vector (rules vs small model): in scope or deferred.
 - **Session history** (last N tools): N and privacy policy.
 
-**Closure criteria:** plan §3.B.8 + final hyperparameter table in repo (`config.example.yaml`) after phase-2 calibration.
+**Closure criteria:** plan §3.B.8 satisfied by in-tree eval tests; **final numeric table** for your deployment still requires one calibration run with the real embedder and recorded p95/recall.
 
 ---
 

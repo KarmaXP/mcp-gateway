@@ -13,8 +13,9 @@ info:
        **`Mcp-Session-Id`** equal to the value from step 1. Use `Content-Type: application/json`.
     3. **Read replies** — For requests that include an `id`, the gateway does **not** return the JSON-RPC
        result in the POST body. Instead it responds **`202 Accepted`** immediately (empty body). The
-       matching **result** or **error** object is delivered on the SSE connection as a frame:
-       `event: jsonrpc` followed by `data: ` + single-line JSON matching `JsonRpcResponse`.
+       matching **result** or **error** object is delivered on the SSE connection as a **W3C SSE** frame:
+       named event **`jsonrpc`** (`event: jsonrpc`) and one **`data:`** line containing a single-line JSON
+       object matching `JsonRpcResponse` (no literal newlines inside the JSON).
     4. **Handshake** — After `initialize` (response on SSE), send notification `notifications/initialized`
        (or `initialized`) with no `id` before calling `tools/list` or `tools/call`; otherwise the gateway
        returns error code **-32001** (`HandshakeIncomplete`) on the SSE stream.
@@ -94,13 +95,7 @@ paths:
         `Mcp-Session-Id` response header. The client MUST send this value on every `POST /mcp/rpc`.
 
         While this connection stays open, JSON-RPC **results** and **errors** (for requests that include `id`)
-        are written as SSE events:
-
-        ```
-        event: jsonrpc
-        data: {"jsonrpc":"2.0","id":1,"result":{...}}
-
-        ```
+        are written as **W3C Server-Sent Events** using the fixed event name **`jsonrpc`** (see `SseJsonRpcFrame`).
       operationId: openMcpSSE
       security:
         - bearerAuth: []
@@ -144,8 +139,14 @@ paths:
         when accepted. For **requests** (`id` present), the server returns `202 Accepted` immediately; the
         JSON-RPC **response** is delivered on the open SSE connection for the same session.
 
-        Supported methods (Phase 1): `initialize`, `notifications/initialized` (or `initialized`),
+        Supported methods (Phase 1–2 baseline): `initialize`, `ping`, `notifications/initialized` (or `initialized`),
         `tools/list`, `tools/call`. Other methods receive a JSON-RPC error on the SSE stream.
+
+        Optional header **`X-MCP-Intent`**: free-text session or user intent; copied into the semantic router for
+        **`tools/call`** when `ROUTER_MODE` enables routing (ignored when the router is off).
+
+        When **`AUTH_MODE=jwt`**, optional claim **`mcp_tools`** filters **`tools/list`** and rejects **`tools/call`**
+        for tools outside that list; see `bearerAuth`.
       operationId: postMcpRpc
       security:
         - bearerAuth: []
@@ -157,6 +158,15 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: X-MCP-Intent
+          in: header
+          required: false
+          description: |
+            Optional natural-language intent for **semantic routing** on `tools/call` (forwarded as router intent text).
+            Safe to omit for exact tool names or when the router is disabled.
+          schema:
+            type: string
+            example: List pods in the production namespace
       requestBody:
         required: true
         content:
@@ -196,6 +206,12 @@ paths:
                   params:
                     name: alpha__echo
                     arguments: {}
+              ping:
+                summary: MCP ping (empty result object)
+                value:
+                  jsonrpc: "2.0"
+                  id: 2
+                  method: ping
       responses:
         "202":
           description: |
@@ -221,7 +237,9 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: RS256 JWT when AUTH_MODE=jwt (optional in dev when AUTH_MODE=none)
+      description: |
+        RS256 JWT when AUTH_MODE=jwt (optional in dev when AUTH_MODE=none).
+        Optional claim **`mcp_tools`**: JSON array of namespaced tool names the subject may invoke; forwarded to the semantic router allow-list on **`tools/call`**. Omit for no restriction.
 
   schemas:
     SseJsonRpcFrame:

@@ -34,9 +34,10 @@ flowchart LR
   Gateway -. traces / metrics .-> OTel
 ```
 
-- **Ingress:** `GET /mcp/sse` opens the session; JSON-RPC **responses** (for requests with `id`) are pushed as SSE events. `POST /mcp/rpc` accepts one request per call (`202` when accepted).
+- **Ingress:** `GET /mcp/sse` opens the session; JSON-RPC **responses** (for requests with `id`) are pushed as **SSE named events** `event: jsonrpc` with a single-line JSON-RPC object in `data:` (see OpenAPI). `POST /mcp/rpc` accepts one request per call (`202` when accepted).
+- **Intent for routing:** Optional header **`X-MCP-Intent`** on `POST /mcp/rpc` is forwarded into the semantic router as `RoutingSignal.IntentText` for **`tools/call`** (improves recall when the tool name is vague). Omitted header means empty intent.
 - **Core:** `internal/gateway/aggregate` merges `initialize` and `tools/list`; `tools/call` is forwarded with stable namespacing (`prefix__tool`).
-- **Router:** `internal/router` optionally rewrites ambiguous tool names using embeddings + vector search (see [ADR 0001](docs/adr/0001-architecture-decisions.md)).
+- **Router:** `internal/router` optionally rewrites ambiguous tool names using embeddings + vector search (see [ADR 0001](docs/adr/0001-architecture-decisions.md)). **`filter_list`** (intent-filtered `tools/list`) is explicitly **deferred** to Phase 3 — [ADR 0002](docs/adr/0002-tools-list-filter-list-deferred.md).
 
 ## Why this stack
 
@@ -69,7 +70,7 @@ OpenAPI: [`docs/artifacts/openapi/openapi.yaml`](docs/artifacts/openapi/openapi.
 ## Configuration highlights
 
 - **Backends:** `MCP_GATEWAY_CONFIG` (YAML) and/or `MCP_GATEWAY_BACKENDS` (JSON list). Each entry has `id`, `prefix`, and either `url` (HTTP+SSE MCP) or `command` (stdio). See [`deployments/gateway.example.yaml`](deployments/gateway.example.yaml).
-- **Auth:** `AUTH_MODE=none|jwt` — JWT validates RS256 (PEM or JWKS). Health paths are skipped by default.
+- **Auth:** `AUTH_MODE=none|jwt` — JWT validates RS256 (PEM or JWKS). Health paths are skipped by default. Optional JWT claim **`mcp_tools`** (array of namespaced tool ids): restricts **`tools/list`** to that subset (metadata leak reduction), enforces the same allow-list on **`tools/call`** (returns `RequestRejected` if the tool is not listed), and feeds the semantic router vector filter. **`tools/call`** arguments are validated against each tool’s aggregated **`inputSchema`** (JSON Schema, draft from `$schema` or Draft 7 default) after the last successful **`tools/list`**. See OpenAPI `bearerAuth` and `.env.example`.
 - **Semantic router:** `ROUTER_MODE=on` or `assist_list` requires **`QDRANT_URL`**; tune with `ROUTER_*` env vars or the `router:` block in YAML (`top_k`, `score_min`, `allow_auto_rename`, timeouts, `vector_dim`). `EMBED_URL` / `embed.url` points at the embedding sidecar.
 - **Telemetry:** `OTEL_EXPORTER_OTLP_ENDPOINT` (e.g. `http://127.0.0.1:4318`) — traces and metrics export via OTLP HTTP.
 
@@ -79,7 +80,7 @@ With `make docker-up`, Compose brings up a minimal observability stack (exact se
 
 - **Prometheus** scrapes gateway-relevant targets where configured.
 - **Grafana** dashboards for metrics; **Tempo** receives traces from the OpenTelemetry Collector.
-- Application metrics include semantic router outcomes and latency (`mcp.gateway.semantic_router.*`) and an **active SSE sessions** gauge (`mcp.gateway.active_sse_sessions`).
+- Application metrics include semantic router outcomes and latency (`mcp.gateway.semantic_router.*`) with **`layer`** labels (`exact`, `rules`, `vector`, …), **`indexed_tools`** (gauge after each successful catalog reindex), and an **active SSE sessions** gauge (`mcp.gateway.active_sse_sessions`).
 
 Structured logs use `log/slog` with a handler that attaches **trace_id** when a span is present.
 
