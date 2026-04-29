@@ -1,9 +1,11 @@
-# Local stack: Qdrant, ONNX embed, OTel collector, Tempo, Prometheus, Grafana.
-# Default: infra only (make docker-up). Gateway container: profile gateway (make docker-up-full).
+# Local mcp-gateway stack: Qdrant, ONNX embed, OTel collector, Tempo, Prometheus, Grafana.
+# Default: dependencies only (make docker-up). Gateway container: profile gateway (make docker-up-full).
 # URLs: Grafana :3000 (admin/admin), Prometheus :9090, Qdrant :6333, embed :8001, gateway :8080 (profile).
 
+name: mcp-gateway
+
 networks:
-  mcp-net:
+  mcp-gateway-net:
     driver: bridge
 
 volumes:
@@ -18,7 +20,7 @@ services:
 
   qdrant:
     image: qdrant/qdrant:v1.13.6
-    container_name: mcp-qdrant
+    container_name: mcp-gateway-qdrant
     restart: unless-stopped
     ports:
       # HTTP (dashboard + REST).  Override: HOST_PORT_QDRANT_HTTP=16333
@@ -28,7 +30,7 @@ services:
     volumes:
       - qdrant-data:/qdrant/storage
     networks:
-      - mcp-net
+      - mcp-gateway-net
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:6333/healthz || exit 1"]
       interval: 15s
@@ -41,8 +43,8 @@ services:
     build:
       context: ./embed
       dockerfile: Dockerfile
-    image: mcp-embed:dev
-    container_name: mcp-embed
+    image: mcp-gateway-embed:dev
+    container_name: mcp-gateway-embed
     restart: unless-stopped
     environment:
       HF_HUB_OFFLINE: "0" # avoid inheriting HF_HUB_OFFLINE=1 from host; breaks startup with baked model
@@ -50,7 +52,7 @@ services:
       # Needed when gateway runs locally (make run).  Override: HOST_PORT_EMBED=18001
       - "${HOST_PORT_EMBED:-8001}:8001"
     networks:
-      - mcp-net
+      - mcp-gateway-net
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/healthz').read()\""]
       interval: 15s
@@ -61,7 +63,7 @@ services:
   # OTel collector: OTLP in from gateway; traces → Tempo, metrics scrape endpoint for Prometheus.
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.120.0
-    container_name: mcp-otel-collector
+    container_name: mcp-gateway-otel-collector
     restart: unless-stopped
     command: ["--config=/etc/otel/otel-collector.yaml"]
     ports:
@@ -72,7 +74,7 @@ services:
     volumes:
       - ./otel-collector.yaml:/etc/otel/otel-collector.yaml:ro
     networks:
-      - mcp-net
+      - mcp-gateway-net
     depends_on:
       tempo:
         condition: service_healthy
@@ -86,14 +88,14 @@ services:
   # Tempo: OTLP from collector; metrics_generator remote_writes RED metrics to Prometheus.
   tempo:
     image: grafana/tempo:2.6.1
-    container_name: mcp-tempo
+    container_name: mcp-gateway-tempo
     restart: unless-stopped
     command: ["-config.file=/etc/tempo/tempo.yaml"]
     volumes:
       - ./tempo.yaml:/etc/tempo/tempo.yaml:ro
       - tempo-data:/var/tempo
     networks:
-      - mcp-net
+      - mcp-gateway-net
     depends_on:
       prometheus:
         condition: service_started
@@ -106,7 +108,7 @@ services:
 
   prometheus:
     image: prom/prometheus:v3.1.0
-    container_name: mcp-prometheus
+    container_name: mcp-gateway-prometheus
     restart: unless-stopped
     command:
       - "--config.file=/etc/prometheus/prometheus.yaml"
@@ -120,7 +122,7 @@ services:
       - ./prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
       - prometheus-data:/prometheus
     networks:
-      - mcp-net
+      - mcp-gateway-net
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:9090/-/healthy || exit 1"]
       interval: 15s
@@ -130,7 +132,7 @@ services:
 
   grafana:
     image: grafana/grafana:11.5.2
-    container_name: mcp-grafana
+    container_name: mcp-gateway-grafana
     restart: unless-stopped
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
@@ -143,7 +145,7 @@ services:
       - grafana-data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
     networks:
-      - mcp-net
+      - mcp-gateway-net
     depends_on:
       prometheus:
         condition: service_healthy
@@ -163,7 +165,7 @@ services:
       context: ..
       dockerfile: Dockerfile
     image: mcp-gateway:dev
-    container_name: mcp-gateway
+    container_name: mcp-gateway-app
     restart: unless-stopped
     env_file:
       - ../.env
@@ -177,7 +179,7 @@ services:
       # Override: HOST_PORT_GATEWAY=18080
       - "${HOST_PORT_GATEWAY:-8080}:8080"
     networks:
-      - mcp-net
+      - mcp-gateway-net
     depends_on:
       qdrant:
         condition: service_healthy
