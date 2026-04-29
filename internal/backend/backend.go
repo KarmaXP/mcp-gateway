@@ -6,12 +6,9 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
 
-type Caller interface {
-	Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error)
-}
-
-type Backend interface {
+// Upstream is one configured MCP server the gateway multiplexes to (stdio or HTTP+SSE transport).
+type Upstream interface {
 	ID() string
 	Prefix() string
-	Caller
+	Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error)
 }

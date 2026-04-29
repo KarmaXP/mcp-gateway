@@ -12,14 +12,16 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type Config struct {
-	Backends []Backend `yaml:"backends"`
-	Router   Router    `yaml:"router"`
-	Qdrant   Qdrant    `yaml:"qdrant"`
-	Embed    Embed     `yaml:"embed"`
+// GatewayConfig is the root document loaded from YAML and environment (MCP_GATEWAY_*).
+type GatewayConfig struct {
+	Upstreams      []UpstreamDefinition     `yaml:"backends"`
+	SemanticRouter SemanticRouterSettings   `yaml:"router"`
+	Qdrant         QdrantSettings           `yaml:"qdrant"`
+	Embedding      EmbeddingServiceSettings `yaml:"embed"`
 }
 
-type Backend struct {
+// UpstreamDefinition describes one MCP server the gateway fans out to (HTTP+SSE or stdio).
+type UpstreamDefinition struct {
 	ID             string            `yaml:"id"`
 	Prefix         string            `yaml:"prefix"`
 	URL            string            `yaml:"url"`
@@ -30,34 +32,38 @@ type Backend struct {
 	AuthTokenEnv   string            `yaml:"auth_token_env"`
 }
 
-type Router struct {
-	Mode            string      `yaml:"mode"`
-	TopK            int         `yaml:"top_k"`
-	ScoreMin        float64     `yaml:"score_min"`
-	HybridAlpha     float64     `yaml:"hybrid_alpha"`
-	AllowAutoRename bool        `yaml:"allow_auto_rename"`
-	EmbedTimeout    string      `yaml:"embed_timeout"`
-	QueryTimeout    string      `yaml:"query_timeout"`
-	VectorDim       int         `yaml:"vector_dim"`
-	Rules           RouterRules `yaml:"rules"`
+// SemanticRouterSettings is the semantic tool-routing block from gateway.yaml (mode, thresholds, rules).
+type SemanticRouterSettings struct {
+	Mode            string                    `yaml:"mode"`
+	TopK            int                       `yaml:"top_k"`
+	ScoreMin        float64                   `yaml:"score_min"`
+	HybridAlpha     float64                   `yaml:"hybrid_alpha"`
+	AllowAutoRename bool                      `yaml:"allow_auto_rename"`
+	EmbedTimeout    string                    `yaml:"embed_timeout"`
+	QueryTimeout    string                    `yaml:"query_timeout"`
+	VectorDim       int                       `yaml:"vector_dim"`
+	Rules           DeterministicRoutingRules `yaml:"rules"`
 }
 
-type RouterRules struct {
+// DeterministicRoutingRules configures alias and silo narrowing before vector search.
+type DeterministicRoutingRules struct {
 	Aliases      map[string]string `yaml:"aliases"`
 	SiloKeywords map[string]string `yaml:"silo_keywords"`
 }
 
-type Qdrant struct {
+// QdrantSettings names the vector collection; base URL comes from QDRANT_URL.
+type QdrantSettings struct {
 	Collection string `yaml:"collection"`
 }
 
-type Embed struct {
+// EmbeddingServiceSettings is the embedding HTTP sidecar (URL may be overridden by EMBED_URL).
+type EmbeddingServiceSettings struct {
 	URL string `yaml:"url"`
 }
 
-var errNoBackends = errors.New("config: no backends defined")
+var errNoUpstreams = errors.New("config: no upstreams defined")
 
-func Load() (Config, error) {
+func Load() (GatewayConfig, error) {
 	path := strings.TrimSpace(os.Getenv("MCP_GATEWAY_CONFIG"))
 	if path == "" {
 		for _, p := range []string{"gateway.yaml", "config/gateway.yaml"} {
@@ -68,126 +74,126 @@ func Load() (Config, error) {
 		}
 	}
 
-	var cfg Config
+	var cfg GatewayConfig
 	if path != "" {
 		raw, err := os.ReadFile(path)
 		if err != nil {
-			return Config{}, fmt.Errorf("config: read %s: %w", path, err)
+			return GatewayConfig{}, fmt.Errorf("config: read %s: %w", path, err)
 		}
 		if err := yaml.Unmarshal(raw, &cfg); err != nil {
-			return Config{}, fmt.Errorf("config: yaml %s: %w", path, err)
+			return GatewayConfig{}, fmt.Errorf("config: yaml %s: %w", path, err)
 		}
 	}
 
 	if raw := strings.TrimSpace(os.Getenv("MCP_GATEWAY_BACKENDS")); raw != "" {
-		var extra []Backend
+		var extra []UpstreamDefinition
 		if err := json.Unmarshal([]byte(raw), &extra); err != nil {
-			return Config{}, fmt.Errorf("config: MCP_GATEWAY_BACKENDS: %w", err)
+			return GatewayConfig{}, fmt.Errorf("config: MCP_GATEWAY_BACKENDS: %w", err)
 		}
-		cfg.Backends = append(cfg.Backends, extra...)
+		cfg.Upstreams = append(cfg.Upstreams, extra...)
 	}
 
 	if err := cfg.Validate(); err != nil {
-		return Config{}, err
+		return GatewayConfig{}, err
 	}
 	cfg.ApplyEnvOverrides()
 	if err := cfg.Validate(); err != nil {
-		return Config{}, err
+		return GatewayConfig{}, err
 	}
 	return cfg, nil
 }
 
-func (c *Config) Validate() error {
-	if len(c.Backends) == 0 {
-		return errNoBackends
+func (c *GatewayConfig) Validate() error {
+	if len(c.Upstreams) == 0 {
+		return errNoUpstreams
 	}
-	seen := make(map[string]struct{}, len(c.Backends))
-	for _, b := range c.Backends {
-		if strings.TrimSpace(b.ID) == "" {
-			return fmt.Errorf("config: backend missing id")
+	seen := make(map[string]struct{}, len(c.Upstreams))
+	for _, u := range c.Upstreams {
+		if strings.TrimSpace(u.ID) == "" {
+			return fmt.Errorf("config: upstream missing id")
 		}
-		if strings.TrimSpace(b.Prefix) == "" {
-			return fmt.Errorf("config: backend %q missing prefix", b.ID)
+		if strings.TrimSpace(u.Prefix) == "" {
+			return fmt.Errorf("config: upstream %q missing prefix", u.ID)
 		}
-		u := strings.TrimSpace(b.URL)
-		if u != "" && len(b.Command) > 0 {
-			return fmt.Errorf("config: backend %q: set url or command, not both", b.ID)
+		urlStr := strings.TrimSpace(u.URL)
+		if urlStr != "" && len(u.Command) > 0 {
+			return fmt.Errorf("config: upstream %q: set url or command, not both", u.ID)
 		}
-		if u == "" && len(b.Command) == 0 {
-			return fmt.Errorf("config: backend %q: need url or command", b.ID)
+		if urlStr == "" && len(u.Command) == 0 {
+			return fmt.Errorf("config: upstream %q: need url or command", u.ID)
 		}
-		if _, dup := seen[b.Prefix]; dup {
-			return fmt.Errorf("config: duplicate backend prefix %q", b.Prefix)
+		if _, dup := seen[u.Prefix]; dup {
+			return fmt.Errorf("config: duplicate upstream prefix %q", u.Prefix)
 		}
-		seen[b.Prefix] = struct{}{}
+		seen[u.Prefix] = struct{}{}
 	}
-	if c.Router.Mode != "" {
-		switch strings.ToLower(strings.TrimSpace(c.Router.Mode)) {
+	if c.SemanticRouter.Mode != "" {
+		switch strings.ToLower(strings.TrimSpace(c.SemanticRouter.Mode)) {
 		case "off", "on", "assist_list":
 		default:
 			return fmt.Errorf("config: router.mode must be off, on, or assist_list")
 		}
 	}
-	if c.Router.HybridAlpha < 0 || c.Router.HybridAlpha > 1 {
+	if c.SemanticRouter.HybridAlpha < 0 || c.SemanticRouter.HybridAlpha > 1 {
 		return fmt.Errorf("config: router.hybrid_alpha must be between 0 and 1")
 	}
 	return nil
 }
 
-func (c *Config) ApplyEnvOverrides() {
+func (c *GatewayConfig) ApplyEnvOverrides() {
 	if v := strings.TrimSpace(os.Getenv("EMBED_URL")); v != "" {
-		c.Embed.URL = v
+		c.Embedding.URL = v
 	}
-	if c.Embed.URL == "" {
-		c.Embed.URL = "http://127.0.0.1:8001"
+	if c.Embedding.URL == "" {
+		c.Embedding.URL = "http://127.0.0.1:8001"
 	}
 
 	if v := strings.TrimSpace(os.Getenv("ROUTER_MODE")); v != "" {
-		c.Router.Mode = v
+		c.SemanticRouter.Mode = v
 	}
 	if v := os.Getenv("ROUTER_VECTOR_DIM"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			c.Router.VectorDim = n
+			c.SemanticRouter.VectorDim = n
 		}
 	}
 	if v := os.Getenv("ROUTER_TOP_K"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			c.Router.TopK = n
+			c.SemanticRouter.TopK = n
 		}
 	}
 	if v := os.Getenv("ROUTER_SCORE_MIN"); v != "" {
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
-			c.Router.ScoreMin = f
+			c.SemanticRouter.ScoreMin = f
 		}
 	}
 	if v := strings.TrimSpace(os.Getenv("ROUTER_HYBRID_ALPHA")); v != "" {
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
-			c.Router.HybridAlpha = f
+			c.SemanticRouter.HybridAlpha = f
 		}
 	}
 	if v := strings.ToLower(strings.TrimSpace(os.Getenv("ROUTER_ALLOW_AUTO_RENAME"))); v != "" {
-		c.Router.AllowAutoRename = v == "1" || v == "true" || v == "yes"
+		c.SemanticRouter.AllowAutoRename = v == "1" || v == "true" || v == "yes"
 	}
 	if v := strings.TrimSpace(os.Getenv("QDRANT_COLLECTION")); v != "" {
 		c.Qdrant.Collection = v
 	}
 }
 
-func (c *Config) RouterEmbedTimeout() time.Duration {
+func (c *GatewayConfig) RouterEmbedTimeout() time.Duration {
 	if c == nil {
 		return 10 * time.Second
 	}
-	if d, err := parseDurationString(c.Router.EmbedTimeout); err == nil && d > 0 {
+	if d, err := parseDurationString(c.SemanticRouter.EmbedTimeout); err == nil && d > 0 {
 		return d
 	}
 	return 10 * time.Second
 }
 
-func (c *Config) RouterQueryTimeout() time.Duration {
+func (c *GatewayConfig) RouterQueryTimeout() time.Duration {
 	if c == nil {
 		return 5 * time.Second
 	}
-	if d, err := parseDurationString(c.Router.QueryTimeout); err == nil && d > 0 {
+	if d, err := parseDurationString(c.SemanticRouter.QueryTimeout); err == nil && d > 0 {
 		return d
 	}
 	return 5 * time.Second
@@ -201,18 +207,18 @@ func parseDurationString(s string) (time.Duration, error) {
 	return time.ParseDuration(s)
 }
 
-func (c *Config) QdrantCollection() string {
+func (c *GatewayConfig) QdrantCollection() string {
 	if c == nil || strings.TrimSpace(c.Qdrant.Collection) == "" {
 		return "mcp_tool_catalog"
 	}
 	return strings.TrimSpace(c.Qdrant.Collection)
 }
 
-func (b *Backend) ResolveAuthToken() string {
-	if t := strings.TrimSpace(b.AuthToken); t != "" {
+func (u *UpstreamDefinition) ResolveAuthToken() string {
+	if t := strings.TrimSpace(u.AuthToken); t != "" {
 		return t
 	}
-	if name := strings.TrimSpace(b.AuthTokenEnv); name != "" {
+	if name := strings.TrimSpace(u.AuthTokenEnv); name != "" {
 		return strings.TrimSpace(os.Getenv(name))
 	}
 	return ""

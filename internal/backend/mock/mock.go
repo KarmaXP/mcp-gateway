@@ -11,7 +11,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
 
-type Backend struct {
+type MockUpstream struct {
 	id         string
 	prefix     string
 	toolNames  []string
@@ -25,20 +25,20 @@ type Backend struct {
 	mu sync.Mutex
 }
 
-func New(id, prefix string, toolNames []string) *Backend {
-	return &Backend{id: id, prefix: prefix, toolNames: append([]string(nil), toolNames...)}
+func NewMockUpstream(id, prefix string, toolNames []string) *MockUpstream {
+	return &MockUpstream{id: id, prefix: prefix, toolNames: append([]string(nil), toolNames...)}
 }
 
-func (b *Backend) ID() string     { return b.id }
-func (b *Backend) Prefix() string { return b.prefix }
+func (b *MockUpstream) ID() string     { return b.id }
+func (b *MockUpstream) Prefix() string { return b.prefix }
 
-func (b *Backend) LastNativeTool() string {
+func (b *MockUpstream) LastNativeTool() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.lastNative
 }
 
-func (b *Backend) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
+func (b *MockUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
 	switch req.Method {
 	case "initialize":
 		return b.initialize(ctx, req)
@@ -51,7 +51,7 @@ func (b *Backend) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, er
 	}
 }
 
-func (b *Backend) initialize(_ context.Context, req *rpc.Request) (*rpc.Response, error) {
+func (b *MockUpstream) initialize(_ context.Context, req *rpc.Request) (*rpc.Response, error) {
 	result := map[string]any{
 		"protocolVersion": "2024-11-05",
 		"capabilities": map[string]any{
@@ -68,7 +68,7 @@ func (b *Backend) initialize(_ context.Context, req *rpc.Request) (*rpc.Response
 	return rpc.NewResult(req.ID, raw), nil
 }
 
-func (b *Backend) toolsList(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
+func (b *MockUpstream) toolsList(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
 	_ = ctx
 	tools := make([]map[string]any, 0, len(b.toolNames))
 	for _, n := range b.toolNames {
@@ -96,7 +96,7 @@ func (b *Backend) toolsList(ctx context.Context, req *rpc.Request) (*rpc.Respons
 	return rpc.NewResult(req.ID, raw), nil
 }
 
-func (b *Backend) toolsCall(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
+func (b *MockUpstream) toolsCall(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
 	b.mu.Lock()
 	errCall := b.ToolsCallErr
 	delay := b.ToolsCallDelay
@@ -149,4 +149,4 @@ func (b *Backend) toolsCall(ctx context.Context, req *rpc.Request) (*rpc.Respons
 	return rpc.NewResult(req.ID, raw), nil
 }
 
-var _ backend.Backend = (*Backend)(nil)
+var _ backend.Upstream = (*MockUpstream)(nil)

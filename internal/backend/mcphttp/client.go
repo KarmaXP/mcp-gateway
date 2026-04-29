@@ -13,10 +13,11 @@ import (
 
 	"golang.org/x/sync/semaphore"
 
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
 
-type Client struct {
+type HTTPMCPUpstream struct {
 	id     string
 	prefix string
 	base   string
@@ -36,7 +37,7 @@ type Client struct {
 	pending map[string]chan *rpc.Response
 }
 
-func New(lifecycle context.Context, id, prefix, baseURL string, maxConcurrency int64, bearerToken string) (*Client, func(), error) {
+func NewHTTPMCPUpstream(lifecycle context.Context, id, prefix, baseURL string, maxConcurrency int64, bearerToken string) (*HTTPMCPUpstream, func(), error) {
 	if lifecycle == nil {
 		lifecycle = context.Background()
 	}
@@ -47,7 +48,7 @@ func New(lifecycle context.Context, id, prefix, baseURL string, maxConcurrency i
 	if baseURL == "" {
 		return nil, nil, fmt.Errorf("mcphttp: empty base url")
 	}
-	c := &Client{
+	c := &HTTPMCPUpstream{
 		id:        id,
 		prefix:    prefix,
 		base:      baseURL,
@@ -63,25 +64,25 @@ func New(lifecycle context.Context, id, prefix, baseURL string, maxConcurrency i
 	return c, cleanup, nil
 }
 
-func (c *Client) ID() string     { return c.id }
-func (c *Client) Prefix() string { return c.prefix }
+func (c *HTTPMCPUpstream) ID() string     { return c.id }
+func (c *HTTPMCPUpstream) Prefix() string { return c.prefix }
 
-func (c *Client) sseURL() string { return c.base + "/mcp/sse" }
-func (c *Client) rpcURL() string { return c.base + "/mcp/rpc" }
+func (c *HTTPMCPUpstream) sseURL() string { return c.base + mcpwire.PathMCPSSE }
+func (c *HTTPMCPUpstream) rpcURL() string { return c.base + mcpwire.PathMCPRPC }
 
-func (c *Client) setAuth(req *http.Request) {
+func (c *HTTPMCPUpstream) setAuth(req *http.Request) {
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
 }
 
-func (c *Client) ensureSession(callCtx context.Context) error {
+func (c *HTTPMCPUpstream) ensureSession(callCtx context.Context) error {
 	_ = callCtx
 	c.connOnce.Do(func() { c.connErr = c.connectLocked() })
 	return c.connErr
 }
 
-func (c *Client) connectLocked() error {
+func (c *HTTPMCPUpstream) connectLocked() error {
 	req, err := http.NewRequestWithContext(c.lifecycle, http.MethodGet, c.sseURL(), nil)
 	if err != nil {
 		return err
@@ -109,9 +110,9 @@ func (c *Client) connectLocked() error {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
 		return fmt.Errorf("mcphttp %s: GET sse: %s: %s", c.id, resp.Status, strings.TrimSpace(string(b)))
 	}
-	sid := strings.TrimSpace(resp.Header.Get("Mcp-Session-Id"))
+	sid := strings.TrimSpace(resp.Header.Get(mcpwire.HeaderMCPSessionID))
 	if sid == "" {
-		return fmt.Errorf("mcphttp %s: missing Mcp-Session-Id on sse response", c.id)
+		return fmt.Errorf("mcphttp %s: missing %s on sse response", c.id, mcpwire.HeaderMCPSessionID)
 	}
 	c.sessID = sid
 
@@ -128,7 +129,7 @@ func (c *Client) connectLocked() error {
 	return nil
 }
 
-func (c *Client) readSSE(body io.Reader, ctx context.Context) {
+func (c *HTTPMCPUpstream) readSSE(body io.Reader, ctx context.Context) {
 	br := bufio.NewReader(body)
 	var (
 		eventName string
@@ -183,7 +184,7 @@ func (c *Client) readSSE(body io.Reader, ctx context.Context) {
 	}
 }
 
-func (c *Client) dispatch(raw []byte) {
+func (c *HTTPMCPUpstream) dispatch(raw []byte) {
 	resp, err := rpc.ParseResponse(raw)
 	if err != nil {
 		return
@@ -212,7 +213,7 @@ func idKey(id json.RawMessage) string {
 	return string(id)
 }
 
-func (c *Client) postRPC(ctx context.Context, req *rpc.Request) error {
+func (c *HTTPMCPUpstream) postRPC(ctx context.Context, req *rpc.Request) error {
 	body, err := rpc.MarshalRequest(req)
 	if err != nil {
 		return err
@@ -222,7 +223,7 @@ func (c *Client) postRPC(ctx context.Context, req *rpc.Request) error {
 		return err
 	}
 	hreq.Header.Set("Content-Type", "application/json")
-	hreq.Header.Set("Mcp-Session-Id", c.sessID)
+	hreq.Header.Set(mcpwire.HeaderMCPSessionID, c.sessID)
 	c.setAuth(hreq)
 	resp, err := c.client.Do(hreq)
 	if err != nil {
@@ -236,7 +237,7 @@ func (c *Client) postRPC(ctx context.Context, req *rpc.Request) error {
 	return nil
 }
 
-func (c *Client) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
+func (c *HTTPMCPUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
 	if err := c.sem.Acquire(ctx, 1); err != nil {
 		return nil, err
 	}
@@ -281,7 +282,7 @@ func (c *Client) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, err
 	}
 }
 
-func (c *Client) close() {
+func (c *HTTPMCPUpstream) close() {
 	if c.readCancel != nil {
 		c.readCancel()
 	}

@@ -12,11 +12,11 @@ import (
 )
 
 func TestToolsCallErrPropagates(t *testing.T) {
-	b := New("b1", "p", []string{"echo"})
+	b := NewMockUpstream("b1", "p", []string{"echo"})
 	b.ToolsCallErr = errors.New("upstream")
 	params, _ := json.Marshal(map[string]any{"name": "echo"})
 	_, err := b.Call(context.Background(), &rpc.Request{
-		JSONRPC: rpc.Version,
+		JSONRPC: rpc.JSONRPCVersion,
 		Method:  "tools/call",
 		ID:      json.RawMessage(`1`),
 		Params:  params,
@@ -25,10 +25,10 @@ func TestToolsCallErrPropagates(t *testing.T) {
 }
 
 func TestToolsCallUnknownTool(t *testing.T) {
-	b := New("b1", "p", []string{"echo"})
+	b := NewMockUpstream("b1", "p", []string{"echo"})
 	params, _ := json.Marshal(map[string]any{"name": "nope"})
 	resp, err := b.Call(context.Background(), &rpc.Request{
-		JSONRPC: rpc.Version,
+		JSONRPC: rpc.JSONRPCVersion,
 		Method:  "tools/call",
 		ID:      json.RawMessage(`1`),
 		Params:  params,
@@ -38,9 +38,9 @@ func TestToolsCallUnknownTool(t *testing.T) {
 }
 
 func TestToolsCallInvalidParamsJSON(t *testing.T) {
-	b := New("b1", "p", []string{"echo"})
+	b := NewMockUpstream("b1", "p", []string{"echo"})
 	resp, err := b.Call(context.Background(), &rpc.Request{
-		JSONRPC: rpc.Version,
+		JSONRPC: rpc.JSONRPCVersion,
 		Method:  "tools/call",
 		ID:      json.RawMessage(`1`),
 		Params:  json.RawMessage(`not-json`),
@@ -50,9 +50,9 @@ func TestToolsCallInvalidParamsJSON(t *testing.T) {
 }
 
 func TestUnknownMethod(t *testing.T) {
-	b := New("b1", "p", []string{"echo"})
+	b := NewMockUpstream("b1", "p", []string{"echo"})
 	resp, err := b.Call(context.Background(), &rpc.Request{
-		JSONRPC: rpc.Version,
+		JSONRPC: rpc.JSONRPCVersion,
 		Method:  "custom/xyz",
 		ID:      json.RawMessage(`1`),
 	})
@@ -61,16 +61,16 @@ func TestUnknownMethod(t *testing.T) {
 }
 
 func TestInitializeAndToolsList(t *testing.T) {
-	b := New("b1", "p", []string{"echo", "list"})
+	b := NewMockUpstream("b1", "p", []string{"echo", "list"})
 	initResp, err := b.Call(context.Background(), &rpc.Request{
-		JSONRPC: rpc.Version,
+		JSONRPC: rpc.JSONRPCVersion,
 		Method:  "initialize",
 		ID:      json.RawMessage(`1`),
 	})
 	require.NoError(t, err)
 	require.Nil(t, initResp.Error)
 	listResp, err := b.Call(context.Background(), &rpc.Request{
-		JSONRPC: rpc.Version,
+		JSONRPC: rpc.JSONRPCVersion,
 		Method:  "tools/list",
 		ID:      json.RawMessage(`2`),
 	})

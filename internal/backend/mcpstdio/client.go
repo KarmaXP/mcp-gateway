@@ -17,7 +17,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
 
-type Client struct {
+type StdioMCPUpstream struct {
 	id      string
 	prefix  string
 	command []string
@@ -39,7 +39,7 @@ type Client struct {
 	readWG  sync.WaitGroup
 }
 
-func New(lifecycle context.Context, id, prefix string, command, extraEnv []string, maxConcurrency int64) (*Client, func(), error) {
+func NewStdioMCPUpstream(lifecycle context.Context, id, prefix string, command, extraEnv []string, maxConcurrency int64) (*StdioMCPUpstream, func(), error) {
 	if lifecycle == nil {
 		lifecycle = context.Background()
 	}
@@ -49,7 +49,7 @@ func New(lifecycle context.Context, id, prefix string, command, extraEnv []strin
 	if maxConcurrency <= 0 {
 		maxConcurrency = 8
 	}
-	c := &Client{
+	c := &StdioMCPUpstream{
 		id:        id,
 		prefix:    prefix,
 		command:   slices.Clone(command),
@@ -61,15 +61,15 @@ func New(lifecycle context.Context, id, prefix string, command, extraEnv []strin
 	return c, func() { c.close() }, nil
 }
 
-func (c *Client) ID() string     { return c.id }
-func (c *Client) Prefix() string { return c.prefix }
+func (c *StdioMCPUpstream) ID() string     { return c.id }
+func (c *StdioMCPUpstream) Prefix() string { return c.prefix }
 
-func (c *Client) ensure(ctx context.Context) error {
+func (c *StdioMCPUpstream) ensure(ctx context.Context) error {
 	c.startOnce.Do(func() { c.startErr = c.startLocked() })
 	return c.startErr
 }
 
-func (c *Client) startLocked() error {
+func (c *StdioMCPUpstream) startLocked() error {
 	cmd := exec.CommandContext(c.lifecycle, c.command[0], c.command[1:]...)
 	base := slices.Clone(os.Environ())
 	cmd.Env = append(base, c.env...)
@@ -98,7 +98,7 @@ func (c *Client) startLocked() error {
 	return nil
 }
 
-func (c *Client) readLoop() {
+func (c *StdioMCPUpstream) readLoop() {
 	for {
 		line, err := c.br.ReadBytes('\n')
 		if err != nil {
@@ -137,7 +137,7 @@ func idKey(id json.RawMessage) string {
 	return string(id)
 }
 
-func (c *Client) writeLineLocked(payload []byte) error {
+func (c *StdioMCPUpstream) writeLineLocked(payload []byte) error {
 	if _, err := c.stdin.Write(payload); err != nil {
 		return err
 	}
@@ -145,7 +145,7 @@ func (c *Client) writeLineLocked(payload []byte) error {
 	return err
 }
 
-func (c *Client) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
+func (c *StdioMCPUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
 	if err := c.sem.Acquire(ctx, 1); err != nil {
 		return nil, err
 	}
@@ -201,7 +201,7 @@ func (c *Client) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, err
 	}
 }
 
-func (c *Client) close() {
+func (c *StdioMCPUpstream) close() {
 	if c.stdin != nil {
 		_ = c.stdin.Close()
 	}

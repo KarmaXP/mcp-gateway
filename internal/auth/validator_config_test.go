@@ -7,20 +7,20 @@ import (
 )
 
 func TestNewValidatorUnknownMode(t *testing.T) {
-	_, err := NewValidator(Config{Mode: "oauth"})
+	_, err := NewValidator(JWTAuthConfig{Mode: "oauth"})
 	require.Error(t, err)
 }
 
 func TestNewValidatorInvalidPEM(t *testing.T) {
-	_, err := NewValidator(Config{Mode: "jwt", PublicKeyPEM: "not pem"})
+	_, err := NewValidator(JWTAuthConfig{Mode: "jwt", PublicKeyPEM: "not pem"})
 	require.Error(t, err)
 }
 
 func TestNewValidatorNoneReturnsNil(t *testing.T) {
-	v, err := NewValidator(Config{Mode: "none"})
+	v, err := NewValidator(JWTAuthConfig{Mode: "none"})
 	require.NoError(t, err)
 	require.Nil(t, v)
-	v2, err := NewValidator(Config{Mode: ""})
+	v2, err := NewValidator(JWTAuthConfig{Mode: ""})
 	require.NoError(t, err)
 	require.Nil(t, v2)
 }

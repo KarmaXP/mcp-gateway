@@ -12,7 +12,7 @@ import (
 )
 
 func TestBackendToolsCallRespectsContextCancelWithDelay(t *testing.T) {
-	b := New("b1", "p", []string{"echo"})
+	b := NewMockUpstream("b1", "p", []string{"echo"})
 	b.ToolsCallDelay = 500 * time.Millisecond
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -23,7 +23,7 @@ func TestBackendToolsCallRespectsContextCancelWithDelay(t *testing.T) {
 
 	params, _ := json.Marshal(map[string]any{"name": "echo", "arguments": map[string]any{}})
 	req := &rpc.Request{
-		JSONRPC: rpc.Version,
+		JSONRPC: rpc.JSONRPCVersion,
 		Method:  "tools/call",
 		ID:      json.RawMessage(`1`),
 		Params:  params,

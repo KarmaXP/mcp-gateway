@@ -13,7 +13,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/gateway/ingress"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
 )
 
 func rsaPublicPEM(t *testing.T, pub *rsa.PublicKey) string {
@@ -27,7 +28,7 @@ func rsaPublicPEM(t *testing.T, pub *rsa.PublicKey) string {
 func TestHTTPMiddlewareInjectsAllowedToolsFromJWT(t *testing.T) {
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	cfg := Config{Mode: "jwt", Issuer: "iss", Audience: "aud", PublicKeyPEM: rsaPublicPEM(t, &priv.PublicKey)}
+	cfg := JWTAuthConfig{Mode: "jwt", Issuer: "iss", Audience: "aud", PublicKeyPEM: rsaPublicPEM(t, &priv.PublicKey)}
 	v, err := NewValidator(cfg)
 	require.NoError(t, err)
 
@@ -46,7 +47,7 @@ func TestHTTPMiddlewareInjectsAllowedToolsFromJWT(t *testing.T) {
 
 	var got []string
 	h := HTTPMiddleware(cfg, v)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		got = ingress.AllowedToolsFromContext(r.Context())
+		got = hostctx.AllowedToolNamesFromContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	}))
 	ts := httptest.NewServer(h)
@@ -65,7 +66,7 @@ func TestHTTPMiddlewareJWTAcceptsValidToken(t *testing.T) {
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
-	cfg := Config{Mode: "jwt", Issuer: "iss", Audience: "aud", PublicKeyPEM: rsaPublicPEM(t, &priv.PublicKey)}
+	cfg := JWTAuthConfig{Mode: "jwt", Issuer: "iss", Audience: "aud", PublicKeyPEM: rsaPublicPEM(t, &priv.PublicKey)}
 	v, err := NewValidator(cfg)
 	require.NoError(t, err)
 
@@ -99,7 +100,7 @@ func TestHTTPMiddlewareJWTAcceptsValidToken(t *testing.T) {
 func TestHTTPMiddlewareRejectsMissingBearer(t *testing.T) {
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	cfg := Config{Mode: "jwt", PublicKeyPEM: rsaPublicPEM(t, &priv.PublicKey)}
+	cfg := JWTAuthConfig{Mode: "jwt", PublicKeyPEM: rsaPublicPEM(t, &priv.PublicKey)}
 	v, err := NewValidator(cfg)
 	require.NoError(t, err)
 
@@ -116,7 +117,7 @@ func TestHTTPMiddlewareRejectsMissingBearer(t *testing.T) {
 }
 
 func TestHTTPMiddlewareNoneModePassesThrough(t *testing.T) {
-	cfg := Config{Mode: "none"}
+	cfg := JWTAuthConfig{Mode: "none"}
 	h := HTTPMiddleware(cfg, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	}))
@@ -132,10 +133,10 @@ func TestHTTPMiddlewareNoneModePassesThrough(t *testing.T) {
 func TestHTTPMiddlewareSkipsConfiguredPrefixes(t *testing.T) {
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	cfg := Config{
+	cfg := JWTAuthConfig{
 		Mode:             "jwt",
 		PublicKeyPEM:     rsaPublicPEM(t, &priv.PublicKey),
-		SkipPathPrefixes: []string{"/healthz", "/metrics"},
+		SkipPathPrefixes: []string{mcpwire.PathHealthz, "/metrics"},
 	}
 	v, err := NewValidator(cfg)
 	require.NoError(t, err)
@@ -145,7 +146,7 @@ func TestHTTPMiddlewareSkipsConfiguredPrefixes(t *testing.T) {
 	ts := httptest.NewServer(h)
 	defer ts.Close()
 
-	res, err := ts.Client().Get(ts.URL + "/healthz/live")
+	res, err := ts.Client().Get(ts.URL + mcpwire.PathHealthz + "/live")
 	require.NoError(t, err)
 	require.Equal(t, http.StatusTeapot, res.StatusCode)
 	require.NoError(t, res.Body.Close())
@@ -154,7 +155,7 @@ func TestHTTPMiddlewareSkipsConfiguredPrefixes(t *testing.T) {
 func TestHTTPMiddlewareRejectsNonBearerScheme(t *testing.T) {
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	cfg := Config{Mode: "jwt", PublicKeyPEM: rsaPublicPEM(t, &priv.PublicKey)}
+	cfg := JWTAuthConfig{Mode: "jwt", PublicKeyPEM: rsaPublicPEM(t, &priv.PublicKey)}
 	v, err := NewValidator(cfg)
 	require.NoError(t, err)
 	h := HTTPMiddleware(cfg, v)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
@@ -174,7 +175,7 @@ func TestHTTPMiddlewareRejectsNonBearerScheme(t *testing.T) {
 func TestHTTPMiddlewareRejectsEmptyBearerToken(t *testing.T) {
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	cfg := Config{Mode: "jwt", PublicKeyPEM: rsaPublicPEM(t, &priv.PublicKey)}
+	cfg := JWTAuthConfig{Mode: "jwt", PublicKeyPEM: rsaPublicPEM(t, &priv.PublicKey)}
 	v, err := NewValidator(cfg)
 	require.NoError(t, err)
 	h := HTTPMiddleware(cfg, v)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
@@ -192,7 +193,7 @@ func TestHTTPMiddlewareRejectsEmptyBearerToken(t *testing.T) {
 }
 
 func TestHTTPMiddlewareRejectsNilValidatorInJWTMode(t *testing.T) {
-	cfg := Config{Mode: "jwt"}
+	cfg := JWTAuthConfig{Mode: "jwt"}
 	h := HTTPMiddleware(cfg, nil)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("handler reached")
 	}))

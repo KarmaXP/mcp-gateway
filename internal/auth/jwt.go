@@ -15,7 +15,7 @@ import (
 )
 
 type Validator struct {
-	cfg    Config
+	cfg    JWTAuthConfig
 	parser *jwt.Parser
 
 	mu          sync.RWMutex
@@ -24,7 +24,7 @@ type Validator struct {
 	jwksExpires time.Time
 }
 
-func NewValidator(cfg Config) (*Validator, error) {
+func NewValidator(cfg JWTAuthConfig) (*Validator, error) {
 	if cfg.Mode == "" || cfg.Mode == "none" {
 		return nil, nil
 	}

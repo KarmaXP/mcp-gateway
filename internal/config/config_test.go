@@ -22,30 +22,30 @@ backends:
 	require.NoError(t, err)
 
 	t.Setenv("MCP_GATEWAY_CONFIG", p)
-	t.Setenv("MCP_GATEWAY_BACKENDS", "") // clear JSON merge for this test
+	t.Setenv("MCP_GATEWAY_BACKENDS", "")
 	cfg, err := Load()
 	require.NoError(t, err)
-	require.Len(t, cfg.Backends, 1)
-	require.Equal(t, "one", cfg.Backends[0].ID)
-	require.Equal(t, "a", cfg.Backends[0].Prefix)
-	require.Equal(t, 2, cfg.Backends[0].MaxConcurrency)
+	require.Len(t, cfg.Upstreams, 1)
+	require.Equal(t, "one", cfg.Upstreams[0].ID)
+	require.Equal(t, "a", cfg.Upstreams[0].Prefix)
+	require.Equal(t, 2, cfg.Upstreams[0].MaxConcurrency)
 }
 
 func TestLoadBackendsJSONOnly(t *testing.T) {
-	t.Setenv("MCP_GATEWAY_CONFIG", "") // no file
+	t.Setenv("MCP_GATEWAY_CONFIG", "")
 	t.Chdir(t.TempDir())
-	raw, _ := json.Marshal([]Backend{
+	raw, _ := json.Marshal([]UpstreamDefinition{
 		{ID: "x", Prefix: "p", URL: "http://localhost:1"},
 	})
 	t.Setenv("MCP_GATEWAY_BACKENDS", string(raw))
 	cfg, err := Load()
 	require.NoError(t, err)
-	require.Len(t, cfg.Backends, 1)
-	require.Equal(t, "x", cfg.Backends[0].ID)
+	require.Len(t, cfg.Upstreams, 1)
+	require.Equal(t, "x", cfg.Upstreams[0].ID)
 }
 
 func TestValidateDuplicatePrefix(t *testing.T) {
-	cfg := Config{Backends: []Backend{
+	cfg := GatewayConfig{Upstreams: []UpstreamDefinition{
 		{ID: "a", Prefix: "p", URL: "http://a"},
 		{ID: "b", Prefix: "p", URL: "http://b"},
 	}}
@@ -53,7 +53,7 @@ func TestValidateDuplicatePrefix(t *testing.T) {
 }
 
 func TestQdrantCollectionDefault(t *testing.T) {
-	var c Config
+	var c GatewayConfig
 	require.Equal(t, "mcp_tool_catalog", c.QdrantCollection())
 	c.Qdrant.Collection = "custom"
 	require.Equal(t, "custom", c.QdrantCollection())

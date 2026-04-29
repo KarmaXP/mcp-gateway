@@ -25,7 +25,7 @@ func TestValidator_TableDriven(t *testing.T) {
 	require.NoError(t, err)
 	pubPEM := rsaPubPEM(t, &priv.PublicKey)
 
-	baseCfg := Config{
+	baseCfg := JWTAuthConfig{
 		Mode:         "jwt",
 		Issuer:       "https://issuer.example",
 		Audience:     "mcp-aud",
@@ -115,7 +115,7 @@ func TestValidator_ValidateWithAllowedTools(t *testing.T) {
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	pubPEM := rsaPubPEM(t, &priv.PublicKey)
-	cfg := Config{
+	cfg := JWTAuthConfig{
 		Mode:         "jwt",
 		Issuer:       "https://issuer.example",
 		Audience:     "mcp-aud",

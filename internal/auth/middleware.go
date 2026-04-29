@@ -4,10 +4,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/KarmaXP/mcp-gateway/internal/gateway/ingress"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 )
 
-func HTTPMiddleware(cfg Config, v *Validator) func(http.Handler) http.Handler {
+func HTTPMiddleware(cfg JWTAuthConfig, v *Validator) func(http.Handler) http.Handler {
 	if cfg.Mode == "" || cfg.Mode == "none" {
 		return func(next http.Handler) http.Handler { return next }
 	}
@@ -38,7 +38,7 @@ func HTTPMiddleware(cfg Config, v *Validator) func(http.Handler) http.Handler {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
-			ctx := ingress.WithAllowedTools(r.Context(), tools)
+			ctx := hostctx.WithAllowedToolNames(r.Context(), tools)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

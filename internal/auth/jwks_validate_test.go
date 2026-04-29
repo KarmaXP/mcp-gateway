@@ -34,7 +34,7 @@ func TestValidator_JWKSRS256(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cfg := Config{
+	cfg := JWTAuthConfig{
 		Mode:     "jwt",
 		Issuer:   "https://issuer.example",
 		Audience: "mcp-aud",
@@ -73,7 +73,7 @@ func TestValidator_JWKSMissingKid(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cfg := Config{Mode: "jwt", Issuer: "iss", Audience: "aud", JWKSURL: srv.URL}
+	cfg := JWTAuthConfig{Mode: "jwt", Issuer: "iss", Audience: "aud", JWKSURL: srv.URL}
 	v, err := NewValidator(cfg)
 	require.NoError(t, err)
 
