@@ -6,45 +6,46 @@ import (
 	"sync"
 )
 
-type Memory struct {
+// InMemoryVectorStore is a cosine-similarity vector index for tests and small deployments.
+type InMemoryVectorStore struct {
 	dim int
 
-	mu     sync.RWMutex
-	points []Point
+	mu      sync.RWMutex
+	records []ToolVectorRecord
 }
 
-func NewMemory(dim int) *Memory {
-	return &Memory{dim: dim}
+func NewInMemoryVectorStore(dim int) *InMemoryVectorStore {
+	return &InMemoryVectorStore{dim: dim}
 }
 
-func (m *Memory) Upsert(ctx context.Context, points []Point) error {
+func (m *InMemoryVectorStore) Upsert(ctx context.Context, records []ToolVectorRecord) error {
 	_ = ctx
-	for _, p := range points {
+	for _, p := range records {
 		if len(p.Vector) != m.dim {
 			return ErrDimensionMismatch
 		}
 	}
 	m.mu.Lock()
-	m.points = append([]Point(nil), points...)
+	m.records = append([]ToolVectorRecord(nil), records...)
 	m.mu.Unlock()
 	return nil
 }
 
-func (m *Memory) DeleteCatalogVersion(ctx context.Context, version string) error {
+func (m *InMemoryVectorStore) DeleteCatalogVersion(ctx context.Context, version string) error {
 	_ = ctx
 	m.mu.Lock()
-	keep := m.points[:0]
-	for _, p := range m.points {
-		if p.Version != version {
+	keep := m.records[:0]
+	for _, p := range m.records {
+		if p.CatalogVersion != version {
 			keep = append(keep, p)
 		}
 	}
-	m.points = keep
+	m.records = keep
 	m.mu.Unlock()
 	return nil
 }
 
-func (m *Memory) Query(ctx context.Context, vector []float32, topK int, filter Filter) ([]Result, error) {
+func (m *InMemoryVectorStore) Query(ctx context.Context, vector []float32, topK int, filter VectorSearchFilter) ([]VectorSearchHit, error) {
 	_ = ctx
 	if len(vector) != m.dim {
 		return nil, ErrDimensionMismatch
@@ -53,8 +54,8 @@ func (m *Memory) Query(ctx context.Context, vector []float32, topK int, filter F
 		topK = 8
 	}
 	allow := map[string]struct{}{}
-	useAllow := len(filter.AllowedTools) > 0
-	for _, n := range filter.AllowedTools {
+	useAllow := len(filter.AllowedToolNames) > 0
+	for _, n := range filter.AllowedToolNames {
 		allow[n] = struct{}{}
 	}
 
@@ -62,12 +63,12 @@ func (m *Memory) Query(ctx context.Context, vector []float32, topK int, filter F
 	defer m.mu.RUnlock()
 
 	type scored struct {
-		res   Result
+		res   VectorSearchHit
 		score float64
 	}
 	var cand []scored
-	for _, p := range m.points {
-		if filter.CatalogVersion != "" && p.Version != filter.CatalogVersion {
+	for _, p := range m.records {
+		if filter.CatalogVersion != "" && p.CatalogVersion != filter.CatalogVersion {
 			continue
 		}
 		if useAllow {
@@ -77,10 +78,10 @@ func (m *Memory) Query(ctx context.Context, vector []float32, topK int, filter F
 		}
 		s := cosineSim(vector, p.Vector)
 		cand = append(cand, scored{
-			res: Result{
-				ToolName: p.ToolName,
-				Backend:  p.Backend,
-				Score:    s,
+			res: VectorSearchHit{
+				ToolName:   p.ToolName,
+				UpstreamID: p.UpstreamID,
+				Score:      s,
 			},
 			score: s,
 		})
@@ -95,7 +96,7 @@ func (m *Memory) Query(ctx context.Context, vector []float32, topK int, filter F
 	if len(cand) > topK {
 		cand = cand[:topK]
 	}
-	out := make([]Result, len(cand))
+	out := make([]VectorSearchHit, len(cand))
 	for i := range cand {
 		out[i] = cand[i].res
 	}

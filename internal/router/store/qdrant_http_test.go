@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestQdrantUpsertQueryDeleteAgainstMockAPI(t *testing.T) {
+func TestQdrantVectorStoreUpsertQueryDeleteAgainstMockAPI(t *testing.T) {
 	ctx := context.Background()
 	var searchBody string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -38,32 +38,32 @@ func TestQdrantUpsertQueryDeleteAgainstMockAPI(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	q, err := NewQdrant(srv.URL, "tcol", 2)
+	q, err := NewQdrantVectorStore(srv.URL, "tcol", 2)
 	require.NoError(t, err)
 
-	require.NoError(t, q.Upsert(ctx, []Point{
-		{ID: "v1::a__x", Vector: []float32{1, 0}, ToolName: "a__x", Backend: "b1", Version: "v1"},
+	require.NoError(t, q.Upsert(ctx, []ToolVectorRecord{
+		{ID: "v1::a__x", Vector: []float32{1, 0}, ToolName: "a__x", UpstreamID: "b1", CatalogVersion: "v1"},
 	}))
 
-	res, err := q.Query(ctx, []float32{1, 0}, 4, Filter{CatalogVersion: "v1"})
+	res, err := q.Query(ctx, []float32{1, 0}, 4, VectorSearchFilter{CatalogVersion: "v1"})
 	require.NoError(t, err)
 	require.Contains(t, searchBody, "v1")
 	require.Len(t, res, 1)
 	require.Equal(t, "a__x", res[0].ToolName)
-	require.Equal(t, "b1", res[0].Backend)
+	require.Equal(t, "b1", res[0].UpstreamID)
 	require.InDelta(t, 0.91, res[0].Score, 1e-6)
 
 	require.NoError(t, q.DeleteCatalogVersion(ctx, "v1"))
 }
 
-func TestQdrantQueryDimensionMismatch(t *testing.T) {
+func TestQdrantVectorStoreQueryDimensionMismatch(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	}))
 	defer srv.Close()
-	q, err := NewQdrant(srv.URL, "c", 3)
+	q, err := NewQdrantVectorStore(srv.URL, "c", 3)
 	require.NoError(t, err)
-	_, err = q.Query(context.Background(), []float32{1, 1}, 2, Filter{})
+	_, err = q.Query(context.Background(), []float32{1, 1}, 2, VectorSearchFilter{})
 	require.ErrorIs(t, err, ErrDimensionMismatch)
 }
 

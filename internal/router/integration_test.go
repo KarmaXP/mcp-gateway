@@ -26,22 +26,20 @@ func TestSemanticVectorRoutingWithQdrantAndMiniLM(t *testing.T) {
 	}
 	embURL := strings.TrimSpace(os.Getenv("EMBED_URL"))
 	if embURL == "" {
-		embURL = "http://127.0.0.1:18001"
+		embURL = "http://127.0.0.1:8001"
 	}
 
-	if ok := probeURL(ctx, qURL+"/collections"); !ok {
-		t.Skip("Qdrant not reachable at ", qURL, " — start compose (qdrant service)")
-	}
-	if ok := probeURL(ctx, embURL+"/healthz"); !ok {
-		t.Skip("embed service not reachable at ", embURL)
-	}
+	skipUnlessIntegrationDeps(t, probeURL(ctx, qURL+"/collections"),
+		"Qdrant not reachable at %s — start compose (qdrant service)", qURL)
+	skipUnlessIntegrationDeps(t, probeURL(ctx, embURL+"/healthz"),
+		"embed service not reachable at %s (compose maps embed to host port 8001 by default)", embURL)
 
 	coll := "mcp_router_itest_" + strings.ReplaceAll(uuid.NewString(), "-", "_")
-	st, err := store.NewQdrant(qURL, coll, 384)
+	st, err := store.NewQdrantVectorStore(qURL, coll, 384)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = httpDelete(ctx, qURL+"/collections/"+coll) })
 
-	cfg := DefaultConfig()
+	cfg := DefaultSemanticRouterRuntimeConfig()
 	cfg.Mode = ModeAssistList
 	cfg.ScoreMin = 0.22
 	cfg.TopK = 8
@@ -49,13 +47,13 @@ func TestSemanticVectorRoutingWithQdrantAndMiniLM(t *testing.T) {
 	cfg.EmbedTimeout = 60 * time.Second
 	cfg.QueryTimeout = 30 * time.Second
 
-	eng := NewEngine(cfg, embed.NewClient(embURL), st, 384)
+	sr := NewSemanticRouter(cfg, embed.NewClient(embURL), st, 384)
 
 	listJSON := []byte(`{"tools":[
 		{"name":"alpha__echo","description":"mock tool echo","inputSchema":{"type":"object","properties":{}}},
 		{"name":"beta__ping","description":"mock tool ping","inputSchema":{"type":"object","properties":{}}}
 	]}`)
-	entries, err := BuildCatalogEntries(listJSON, func(prefix string) (string, error) {
+	indexed, err := BuildIndexedTools(listJSON, func(prefix string) (string, error) {
 		switch prefix {
 		case "alpha":
 			return "backend-alpha", nil
@@ -68,16 +66,16 @@ func TestSemanticVectorRoutingWithQdrantAndMiniLM(t *testing.T) {
 	require.NoError(t, err)
 
 	ver := "itest-" + uuid.NewString()
-	require.NoError(t, eng.Reindex(ctx, ver, entries))
+	require.NoError(t, sr.Reindex(ctx, ver, indexed))
 
-	tool, dec, err := eng.ResolveToolsCall(ctx, RoutingSignal{
+	tool, dec, err := sr.ResolveToolsCall(ctx, RoutingSignal{
 		ToolName:   "repeat user text back to them",
 		IntentText: "the user wants an echo style response",
 	})
 	require.NoError(t, err)
 	require.Equal(t, "alpha__echo", tool)
 	require.Equal(t, OutcomeVectorHit, dec.Outcome)
-	require.Equal(t, "backend-alpha", dec.BackendID)
+	require.Equal(t, "backend-alpha", dec.UpstreamID)
 }
 
 func probeURL(ctx context.Context, u string) bool {
@@ -93,6 +91,18 @@ func probeURL(ctx context.Context, u string) bool {
 	}
 	_ = res.Body.Close()
 	return res.StatusCode < 500
+}
+
+func skipUnlessIntegrationDeps(t *testing.T, ok bool, format string, args ...any) {
+	t.Helper()
+	if ok {
+		return
+	}
+	msg := fmt.Sprintf(format, args...)
+	if os.Getenv("CI") != "" {
+		t.Fatal(msg)
+	}
+	t.Skip(msg)
 }
 
 func httpDelete(ctx context.Context, u string) error {

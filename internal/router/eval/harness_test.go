@@ -20,18 +20,18 @@ func TestPhase2SyntheticCatalogSize(t *testing.T) {
 func TestPhase2VectorRecallLexical(t *testing.T) {
 	ctx := context.Background()
 	dim := 384
-	st := store.NewMemory(dim)
+	st := store.NewInMemoryVectorStore(dim)
 	emb := LexicalEmbedder{Dim: dim}
-	cfg := router.DefaultConfig()
+	cfg := router.DefaultSemanticRouterRuntimeConfig()
 	cfg.Mode = router.ModeAssistList
 	cfg.TopK = 16
 	cfg.ScoreMin = 0.08
 	cfg.AllowAutoRename = true
-	eng := router.NewEngine(cfg, emb, st, dim)
+	sr := router.NewSemanticRouter(cfg, emb, st, dim)
 
 	cat := SyntheticCatalog()
-	require.NoError(t, eng.Reindex(ctx, "eval-v1", cat))
-	ver := eng.CatalogVersion()
+	require.NoError(t, sr.Reindex(ctx, "eval-v1", cat))
+	ver := sr.CatalogVersion()
 	require.Equal(t, "eval-v1", ver)
 
 	cases := GoldenCases()
@@ -43,7 +43,7 @@ func TestPhase2VectorRecallLexical(t *testing.T) {
 			CatalogVersion: ver,
 			AllowedTools:   tc.Allowed,
 		}
-		got, dec, err := eng.ResolveToolsCall(ctx, sig)
+		got, dec, err := sr.ResolveToolsCall(ctx, sig)
 		require.NoError(t, err, "case %s", tc.WantTool)
 		require.Equal(t, router.OutcomeVectorHit, dec.Outcome)
 		if got == tc.WantTool {
@@ -60,16 +60,16 @@ func TestPhase2VectorRecallLexical(t *testing.T) {
 func TestPhase2EmbedAndQueryP95(t *testing.T) {
 	ctx := context.Background()
 	dim := 384
-	st := store.NewMemory(dim)
+	st := store.NewInMemoryVectorStore(dim)
 	emb := LexicalEmbedder{Dim: dim}
-	cfg := router.DefaultConfig()
+	cfg := router.DefaultSemanticRouterRuntimeConfig()
 	cfg.Mode = router.ModeAssistList
 	cfg.TopK = 16
 	cfg.ScoreMin = 0.08
 	cfg.AllowAutoRename = true
-	eng := router.NewEngine(cfg, emb, st, dim)
-	require.NoError(t, eng.Reindex(ctx, "eval-v1", SyntheticCatalog()))
-	ver := eng.CatalogVersion()
+	sr := router.NewSemanticRouter(cfg, emb, st, dim)
+	require.NoError(t, sr.Reindex(ctx, "eval-v1", SyntheticCatalog()))
+	ver := sr.CatalogVersion()
 
 	cases := GoldenCases()
 	const rounds = 30
@@ -77,7 +77,7 @@ func TestPhase2EmbedAndQueryP95(t *testing.T) {
 	for r := 0; r < rounds; r++ {
 		for _, tc := range cases {
 			start := time.Now()
-			_, _, err := eng.ResolveToolsCall(ctx, router.RoutingSignal{
+			_, _, err := sr.ResolveToolsCall(ctx, router.RoutingSignal{
 				ToolName:       "wrong__tool_name",
 				IntentText:     tc.Intent,
 				CatalogVersion: ver,
@@ -95,17 +95,17 @@ func TestPhase2EmbedAndQueryP95(t *testing.T) {
 func TestPhase2SiloNarrowingRespectsAllowedTools(t *testing.T) {
 	ctx := context.Background()
 	dim := 384
-	st := store.NewMemory(dim)
+	st := store.NewInMemoryVectorStore(dim)
 	emb := LexicalEmbedder{Dim: dim}
-	cfg := router.DefaultConfig()
+	cfg := router.DefaultSemanticRouterRuntimeConfig()
 	cfg.Mode = router.ModeAssistList
 	cfg.TopK = 16
 	cfg.ScoreMin = 0.08
 	cfg.AllowAutoRename = true
-	eng := router.NewEngine(cfg, emb, st, dim)
-	eng.SetRules(rules.New(nil, map[string]string{"kubernetes": "k8s"}))
-	require.NoError(t, eng.Reindex(ctx, "eval-v2", SyntheticCatalog()))
-	ver := eng.CatalogVersion()
+	sr := router.NewSemanticRouter(cfg, emb, st, dim)
+	sr.SetRules(rules.New(nil, map[string]string{"kubernetes": "k8s"}))
+	require.NoError(t, sr.Reindex(ctx, "eval-v2", SyntheticCatalog()))
+	ver := sr.CatalogVersion()
 
 	sig := router.RoutingSignal{
 		ToolName:       "wrong__tool",
@@ -113,7 +113,7 @@ func TestPhase2SiloNarrowingRespectsAllowedTools(t *testing.T) {
 		CatalogVersion: ver,
 		AllowedTools:   []string{"k8s__get_logs", "aws__list_buckets"},
 	}
-	got, dec, err := eng.ResolveToolsCall(ctx, sig)
+	got, dec, err := sr.ResolveToolsCall(ctx, sig)
 	require.NoError(t, err)
 	require.Equal(t, "k8s__get_logs", got)
 	require.Equal(t, router.OutcomeVectorHit, dec.Outcome)

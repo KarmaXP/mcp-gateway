@@ -13,17 +13,17 @@ import (
 
 	"go.opentelemetry.io/otel/codes"
 
-	"github.com/KarmaXP/mcp-gateway/internal/gateway/aggregate"
-	"github.com/KarmaXP/mcp-gateway/internal/gateway/ingress"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/session"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
 )
 
 type Server struct {
-	manager *session.Manager
-	mux     *http.ServeMux
-	mws     []func(http.Handler) http.Handler
+	sessions   *session.SessionManager
+	mux        *http.ServeMux
+	middleware []func(http.Handler) http.Handler
 
 	shutdownCtx context.Context
 
@@ -34,9 +34,9 @@ type Server struct {
 
 type Option func(*Server)
 
-func WithHandlerMiddleware(mw func(http.Handler) http.Handler) Option {
+func WithHTTPMiddleware(mw func(http.Handler) http.Handler) Option {
 	return func(s *Server) {
-		s.mws = append(s.mws, mw)
+		s.middleware = append(s.middleware, mw)
 	}
 }
 
@@ -46,19 +46,19 @@ func WithShutdownContext(ctx context.Context) Option {
 	}
 }
 
-func New(agg *aggregate.Aggregator, addr string, opts ...Option) *Server {
+func New(mpx *multiplex.Multiplexer, addr string, opts ...Option) *Server {
 	s := &Server{
-		manager: session.NewManager(agg),
-		mux:     http.NewServeMux(),
-		addr:    addr,
+		sessions: session.NewSessionManager(mpx),
+		mux:      http.NewServeMux(),
+		addr:     addr,
 	}
 	for _, o := range opts {
 		o(s)
 	}
 	s.routes()
 	h := http.Handler(s.mux)
-	for i := len(s.mws) - 1; i >= 0; i-- {
-		h = s.mws[i](h)
+	for i := len(s.middleware) - 1; i >= 0; i-- {
+		h = s.middleware[i](h)
 	}
 	s.handler = h
 	s.srv = &http.Server{
@@ -73,10 +73,10 @@ func New(agg *aggregate.Aggregator, addr string, opts ...Option) *Server {
 }
 
 func (s *Server) routes() {
-	s.mux.HandleFunc("GET /healthz", s.handleHealthz)
-	s.mux.HandleFunc("GET /readyz", s.handleReadyz)
-	s.mux.HandleFunc("GET /mcp/sse", s.handleSSE)
-	s.mux.HandleFunc("POST /mcp/rpc", s.handleRPC)
+	s.mux.HandleFunc(http.MethodGet+" "+PathHealthz, s.handleHealthz)
+	s.mux.HandleFunc(http.MethodGet+" "+PathReadyz, s.handleReadyz)
+	s.mux.HandleFunc(http.MethodGet+" "+PathMCPSSE, s.handleMCPSSE)
+	s.mux.HandleFunc(http.MethodPost+" "+PathMCPRPC, s.handleMCPRPC)
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
@@ -89,7 +89,7 @@ func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("ok"))
 }
 
-func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleMCPSSE(w http.ResponseWriter, r *http.Request) {
 	fl, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
@@ -103,11 +103,11 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	connCtx, stopConn := mergeWithShutdown(r.Context(), s.shutdownCtx)
 	defer stopConn()
 
-	sess := s.manager.Create(connCtx)
+	sess := s.sessions.Create(connCtx)
 	telemetry.ActiveSessions.Add(1)
 	defer telemetry.ActiveSessions.Add(-1)
 
-	w.Header().Set("Mcp-Session-Id", sess.ID())
+	w.Header().Set(HeaderMCPSessionID, sess.ID())
 	w.WriteHeader(http.StatusOK)
 	fl.Flush()
 
@@ -134,7 +134,7 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 
 	<-connCtx.Done()
 	sess.Close()
-	s.manager.Remove(sess.ID())
+	s.sessions.Remove(sess.ID())
 	wg.Wait()
 }
 
@@ -150,9 +150,9 @@ func mergeWithShutdown(reqCtx, shutdownCtx context.Context) (context.Context, co
 	}
 }
 
-func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleMCPRPC(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	rctx, span := telemetry.StartSpan(r.Context(), "mcp.host.request")
+	rctx, span := telemetry.StartSpan(r.Context(), telemetry.SpanMCPHostRequest)
 	defer span.End()
 
 	httpErr := func(msg string, code int) {
@@ -160,12 +160,12 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, msg, code)
 	}
 
-	sid := strings.TrimSpace(r.Header.Get("Mcp-Session-Id"))
+	sid := strings.TrimSpace(r.Header.Get(HeaderMCPSessionID))
 	if sid == "" {
-		httpErr("missing Mcp-Session-Id header", http.StatusBadRequest)
+		httpErr(fmt.Sprintf("missing %s header", HeaderMCPSessionID), http.StatusBadRequest)
 		return
 	}
-	sess, err := s.manager.Get(sid)
+	sess, err := s.sessions.Get(sid)
 	if err != nil {
 		httpErr("unknown session", http.StatusNotFound)
 		return
@@ -181,7 +181,7 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 		httpErr(err.Error(), http.StatusBadRequest)
 		return
 	}
-	ctx := ingress.WithMCPIntent(rctx, r.Header.Get(ingress.HeaderMCPIntent))
+	ctx := hostctx.WithClientIntent(rctx, r.Header.Get(hostctx.HeaderMCPIntent))
 	if err := sess.Dispatch(ctx, req); err != nil {
 		slog.WarnContext(r.Context(), "dispatch", "err", err)
 		span.RecordError(err)

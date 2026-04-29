@@ -86,7 +86,7 @@ func TestParseResponseInvalid(t *testing.T) {
 
 func TestMarshalRequest(t *testing.T) {
 	b, err := MarshalRequest(&Request{
-		JSONRPC: Version,
+		JSONRPC: JSONRPCVersion,
 		Method:  "tools/list",
 		ID:      json.RawMessage(`"g1"`),
 	})

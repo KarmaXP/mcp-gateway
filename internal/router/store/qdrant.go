@@ -12,14 +12,15 @@ import (
 	"time"
 )
 
-type Qdrant struct {
+// QdrantVectorStore talks to a Qdrant HTTP API for production-scale semantic index storage.
+type QdrantVectorStore struct {
 	baseURL    string
 	collection string
 	dim        int
 	client     *http.Client
 }
 
-func NewQdrant(baseURL, collection string, vectorDim int) (*Qdrant, error) {
+func NewQdrantVectorStore(baseURL, collection string, vectorDim int) (*QdrantVectorStore, error) {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" || collection == "" {
 		return nil, fmt.Errorf("router/store/qdrant: baseURL and collection required")
@@ -27,7 +28,7 @@ func NewQdrant(baseURL, collection string, vectorDim int) (*Qdrant, error) {
 	if vectorDim <= 0 {
 		return nil, fmt.Errorf("router/store/qdrant: vectorDim must be positive")
 	}
-	return &Qdrant{
+	return &QdrantVectorStore{
 		baseURL:    baseURL,
 		collection: collection,
 		dim:        vectorDim,
@@ -41,7 +42,7 @@ func pointID(key string) uint64 {
 	return h.Sum64()
 }
 
-func (q *Qdrant) doJSON(ctx context.Context, method, path string, body any, out any) (int, error) {
+func (q *QdrantVectorStore) doJSON(ctx context.Context, method, path string, body any, out any) (int, error) {
 	var rdr io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -78,11 +79,11 @@ func (q *Qdrant) doJSON(ctx context.Context, method, path string, body any, out 
 	return res.StatusCode, nil
 }
 
-func (q *Qdrant) Upsert(ctx context.Context, points []Point) error {
-	if len(points) == 0 {
+func (q *QdrantVectorStore) Upsert(ctx context.Context, records []ToolVectorRecord) error {
+	if len(records) == 0 {
 		return nil
 	}
-	for _, p := range points {
+	for _, p := range records {
 		if len(p.Vector) != q.dim {
 			return ErrDimensionMismatch
 		}
@@ -107,12 +108,12 @@ func (q *Qdrant) Upsert(ctx context.Context, points []Point) error {
 	}
 
 	const batch = 64
-	for i := 0; i < len(points); i += batch {
+	for i := 0; i < len(records); i += batch {
 		j := i + batch
-		if j > len(points) {
-			j = len(points)
+		if j > len(records) {
+			j = len(records)
 		}
-		chunk := points[i:j]
+		chunk := records[i:j]
 		payloadPoints := make([]map[string]any, 0, len(chunk))
 		for _, p := range chunk {
 			payloadPoints = append(payloadPoints, map[string]any{
@@ -120,8 +121,8 @@ func (q *Qdrant) Upsert(ctx context.Context, points []Point) error {
 				"vector": p.Vector,
 				"payload": map[string]string{
 					"tool_name": p.ToolName,
-					"backend":   p.Backend,
-					"version":   p.Version,
+					"backend":   p.UpstreamID,
+					"version":   p.CatalogVersion,
 				},
 			})
 		}
@@ -138,7 +139,7 @@ func (q *Qdrant) Upsert(ctx context.Context, points []Point) error {
 	return nil
 }
 
-func (q *Qdrant) DeleteCatalogVersion(ctx context.Context, version string) error {
+func (q *QdrantVectorStore) DeleteCatalogVersion(ctx context.Context, version string) error {
 	if version == "" {
 		return nil
 	}
@@ -159,7 +160,7 @@ func (q *Qdrant) DeleteCatalogVersion(ctx context.Context, version string) error
 	return nil
 }
 
-func (q *Qdrant) Query(ctx context.Context, vector []float32, topK int, filter Filter) ([]Result, error) {
+func (q *QdrantVectorStore) Query(ctx context.Context, vector []float32, topK int, filter VectorSearchFilter) ([]VectorSearchHit, error) {
 	if len(vector) != q.dim {
 		return nil, ErrDimensionMismatch
 	}
@@ -173,9 +174,9 @@ func (q *Qdrant) Query(ctx context.Context, vector []float32, topK int, filter F
 			"key": "version", "match": map[string]any{"value": filter.CatalogVersion},
 		})
 	}
-	if len(filter.AllowedTools) > 0 {
+	if len(filter.AllowedToolNames) > 0 {
 		must = append(must, map[string]any{
-			"key": "tool_name", "match": map[string]any{"any": filter.AllowedTools},
+			"key": "tool_name", "match": map[string]any{"any": filter.AllowedToolNames},
 		})
 	}
 
@@ -203,14 +204,14 @@ func (q *Qdrant) Query(ctx context.Context, vector []float32, topK int, filter F
 		return nil, fmt.Errorf("router/store/qdrant: search: status %d", st)
 	}
 
-	out := make([]Result, 0, len(resp.Result))
+	out := make([]VectorSearchHit, 0, len(resp.Result))
 	for _, hit := range resp.Result {
 		var meta map[string]any
 		_ = json.Unmarshal(hit.Payload, &meta)
-		out = append(out, Result{
-			ToolName: payloadString(meta["tool_name"]),
-			Backend:  payloadString(meta["backend"]),
-			Score:    hit.Score,
+		out = append(out, VectorSearchHit{
+			ToolName:   payloadString(meta["tool_name"]),
+			UpstreamID: payloadString(meta["backend"]),
+			Score:      hit.Score,
 		})
 	}
 	return out, nil

@@ -77,7 +77,7 @@ test-integration:
 	@echo "🧪 Integration tests (docker: qdrant, embed, otel-collector recommended)..."
 	@go vet ./...
 	@QDRANT_URL=$${QDRANT_URL:-http://127.0.0.1:6333} \
-	 EMBED_URL=$${EMBED_URL:-http://127.0.0.1:18001} \
+	 EMBED_URL=$${EMBED_URL:-http://127.0.0.1:8001} \
 	 OTEL_EXPORTER_OTLP_ENDPOINT=$${OTEL_EXPORTER_OTLP_ENDPOINT:-http://127.0.0.1:4318} \
 	 go test -tags=integration -race -count=1 \
 		./internal/router/... \

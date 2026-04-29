@@ -2,7 +2,8 @@ package router
 
 import "time"
 
-type Config struct {
+// SemanticRouterRuntimeConfig holds in-process tuning for vector routing (timeouts, thresholds).
+type SemanticRouterRuntimeConfig struct {
 	Mode Mode
 
 	TopK     int
@@ -16,8 +17,8 @@ type Config struct {
 	QueryTimeout time.Duration
 }
 
-func DefaultConfig() Config {
-	return Config{
+func DefaultSemanticRouterRuntimeConfig() SemanticRouterRuntimeConfig {
+	return SemanticRouterRuntimeConfig{
 		Mode:            ModeOff,
 		TopK:            8,
 		ScoreMin:        0.35,

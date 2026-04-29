@@ -1,4 +1,4 @@
-package aggregate
+package multiplex
 
 import (
 	"encoding/json"
@@ -45,7 +45,7 @@ func compileToolValidator(namespacedName string, schemaJSON json.RawMessage) (*j
 	return c.Compile(loc)
 }
 
-func (a *Aggregator) replaceToolSchemasFromMerged(merged []map[string]any) {
+func (a *Multiplexer) replaceToolSchemasFromMerged(merged []map[string]any) {
 	out := make(map[string]*jsonschema.Schema)
 	for _, t := range merged {
 		name, _ := t["name"].(string)
@@ -72,7 +72,7 @@ func (a *Aggregator) replaceToolSchemasFromMerged(merged []map[string]any) {
 	a.schemaMu.Unlock()
 }
 
-func (a *Aggregator) refreshToolSchemasFromListJSON(raw json.RawMessage) {
+func (a *Multiplexer) refreshToolSchemasFromListJSON(raw json.RawMessage) {
 	tools, err := parseToolsArrayFromListJSON(raw)
 	if err != nil {
 		return
@@ -109,7 +109,7 @@ func enforceToolPolicy(allowed []string, namespacedTool string) error {
 	return nil
 }
 
-func (a *Aggregator) validateToolArgs(namespacedTool string, argsJSON json.RawMessage) error {
+func (a *Multiplexer) validateToolArgs(namespacedTool string, argsJSON json.RawMessage) error {
 	a.schemaMu.RLock()
 	sch := a.toolValidators[namespacedTool]
 	a.schemaMu.RUnlock()

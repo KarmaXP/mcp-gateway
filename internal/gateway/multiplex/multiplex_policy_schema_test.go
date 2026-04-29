@@ -1,4 +1,4 @@
-package aggregate
+package multiplex
 
 import (
 	"context"
@@ -10,16 +10,16 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
-	"github.com/KarmaXP/mcp-gateway/internal/gateway/ingress"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 )
 
 func TestToolsListFilteredByJWTAllowList(t *testing.T) {
-	b1 := mock.New("b1", "alpha", []string{"echo", "list"})
-	a, err := New([]backend.Backend{b1}, WithListTTL(0))
+	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo", "list"})
+	a, err := New([]backend.Upstream{b1}, WithListTTL(0))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 
-	ctx := ingress.WithAllowedTools(context.Background(), []string{"alpha__echo"})
+	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{"alpha__echo"})
 	resp, err := a.ToolsList(ctx, json.RawMessage(`2`))
 	require.NoError(t, err)
 	require.Nil(t, resp.Error)
@@ -34,13 +34,13 @@ func TestToolsListFilteredByJWTAllowList(t *testing.T) {
 }
 
 func TestToolsCallRejectedWhenNotInAllowList(t *testing.T) {
-	b1 := mock.New("b1", "alpha", []string{"echo", "list"})
-	a, err := New([]backend.Backend{b1}, WithListTTL(0))
+	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo", "list"})
+	a, err := New([]backend.Upstream{b1}, WithListTTL(0))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 	_, _ = a.ToolsList(context.Background(), json.RawMessage(`2`))
 
-	ctx := ingress.WithAllowedTools(context.Background(), []string{"alpha__echo"})
+	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{"alpha__echo"})
 	params, _ := json.Marshal(map[string]any{"name": "alpha__list", "arguments": map[string]any{}})
 	resp, err := a.ToolsCall(ctx, json.RawMessage(`3`), params)
 	require.NoError(t, err)
@@ -49,7 +49,7 @@ func TestToolsCallRejectedWhenNotInAllowList(t *testing.T) {
 }
 
 func TestToolsCallValidatesArgumentsAgainstSchema(t *testing.T) {
-	b1 := mock.New("b1", "alpha", []string{"echo"})
+	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b1.InputSchemaByTool = map[string]map[string]any{
 		"echo": {
 			"type":                 "object",
@@ -60,7 +60,7 @@ func TestToolsCallValidatesArgumentsAgainstSchema(t *testing.T) {
 			"required": []any{"msg"},
 		},
 	}
-	a, err := New([]backend.Backend{b1}, WithListTTL(0))
+	a, err := New([]backend.Upstream{b1}, WithListTTL(0))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 	_, _ = a.ToolsList(context.Background(), json.RawMessage(`2`))

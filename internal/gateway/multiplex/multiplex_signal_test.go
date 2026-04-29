@@ -1,4 +1,4 @@
-package aggregate
+package multiplex
 
 import (
 	"context"
@@ -9,19 +9,19 @@ import (
 
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
-	"github.com/KarmaXP/mcp-gateway/internal/gateway/ingress"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 )
 
 func TestSemanticRoutingSignalIncludesIntentAndCatalogVersion(t *testing.T) {
-	b1 := mock.New("b1", "p", []string{"echo"})
-	a, err := New([]backend.Backend{b1})
+	b1 := mock.NewMockUpstream("b1", "p", []string{"echo"})
+	a, err := New([]backend.Upstream{b1})
 	require.NoError(t, err)
 	a.catMu.Lock()
 	a.catVer = "catalog-ver-xyz"
 	a.catMu.Unlock()
 
-	ctx := ingress.WithMCPIntent(context.Background(), "operator wants pod logs")
-	ctx = ingress.WithAllowedTools(ctx, []string{"p__echo", "other__tool"})
+	ctx := hostctx.WithClientIntent(context.Background(), "operator wants pod logs")
+	ctx = hostctx.WithAllowedToolNames(ctx, []string{"p__echo", "other__tool"})
 	sig := a.semanticRoutingSignal(ctx, "p__echo", json.RawMessage(`{"x":1}`))
 	require.Equal(t, "tools/call", sig.Method)
 	require.Equal(t, "p__echo", sig.ToolName)

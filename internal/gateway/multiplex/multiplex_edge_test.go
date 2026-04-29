@@ -1,4 +1,4 @@
-package aggregate
+package multiplex
 
 import (
 	"context"
@@ -17,15 +17,15 @@ import (
 )
 
 type flakyBackend struct {
-	*mock.Backend
+	*mock.MockUpstream
 	mu         sync.Mutex
 	listCalls  int
 	failFirstN int
 	listErr    error
 }
 
-func newFlakyBackend(inner *mock.Backend, failFirst int, err error) *flakyBackend {
-	return &flakyBackend{Backend: inner, failFirstN: failFirst, listErr: err}
+func newFlakyBackend(inner *mock.MockUpstream, failFirst int, err error) *flakyBackend {
+	return &flakyBackend{MockUpstream: inner, failFirstN: failFirst, listErr: err}
 }
 
 func (f *flakyBackend) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
@@ -40,19 +40,19 @@ func (f *flakyBackend) Call(ctx context.Context, req *rpc.Request) (*rpc.Respons
 			return nil, err
 		}
 	}
-	return f.Backend.Call(ctx, req)
+	return f.MockUpstream.Call(ctx, req)
 }
 
-func (f *flakyBackend) ID() string     { return f.Backend.ID() }
-func (f *flakyBackend) Prefix() string { return f.Backend.Prefix() }
+func (f *flakyBackend) ID() string     { return f.MockUpstream.ID() }
+func (f *flakyBackend) Prefix() string { return f.MockUpstream.Prefix() }
 
-var _ backend.Backend = (*flakyBackend)(nil)
+var _ backend.Upstream = (*flakyBackend)(nil)
 
 func TestToolsListPartialBackendFailureOmitsTools(t *testing.T) {
-	ok := mock.New("ok", "alpha", []string{"echo"})
-	bad := newFlakyBackend(mock.New("bad", "beta", []string{"ping"}), 1, errors.New("upstream down"))
+	ok := mock.NewMockUpstream("ok", "alpha", []string{"echo"})
+	bad := newFlakyBackend(mock.NewMockUpstream("bad", "beta", []string{"ping"}), 1, errors.New("upstream down"))
 
-	a, err := New([]backend.Backend{ok, bad}, WithListTTL(0))
+	a, err := New([]backend.Upstream{ok, bad}, WithListTTL(0))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`0`))
 
@@ -64,10 +64,10 @@ func TestToolsListPartialBackendFailureOmitsTools(t *testing.T) {
 }
 
 func TestToolsCallTimeoutWhenBackendSlow(t *testing.T) {
-	slow := mock.New("s", "alpha", []string{"echo"})
+	slow := mock.NewMockUpstream("s", "alpha", []string{"echo"})
 	slow.ToolsCallDelay = 500 * time.Millisecond
 
-	a, err := New([]backend.Backend{slow}, WithListTTL(0), WithCallTimeout(50*time.Millisecond))
+	a, err := New([]backend.Upstream{slow}, WithListTTL(0), WithCallTimeout(50*time.Millisecond))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`0`))
 
@@ -79,10 +79,10 @@ func TestToolsCallTimeoutWhenBackendSlow(t *testing.T) {
 }
 
 func TestToolsCallBackendTransportError(t *testing.T) {
-	b := mock.New("s", "alpha", []string{"echo"})
+	b := mock.NewMockUpstream("s", "alpha", []string{"echo"})
 	b.ToolsCallErr = errors.New("connection reset")
 
-	a, err := New([]backend.Backend{b}, WithListTTL(0))
+	a, err := New([]backend.Upstream{b}, WithListTTL(0))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`0`))
 

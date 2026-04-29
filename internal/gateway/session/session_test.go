@@ -10,19 +10,19 @@ import (
 
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
-	"github.com/KarmaXP/mcp-gateway/internal/gateway/aggregate"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
 
 func TestSessionToolsListBeforeHandshake(t *testing.T) {
-	b1 := mock.New("b1", "alpha", []string{"echo"})
-	agg, err := aggregate.New([]backend.Backend{b1}, aggregate.WithListTTL(0))
+	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
+	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
-	s := New(context.Background(), "test-session", agg, nil)
+	s := NewSession(context.Background(), "test-session", agg, nil)
 	req := &rpc.Request{
-		JSONRPC: rpc.Version,
+		JSONRPC: rpc.JSONRPCVersion,
 		Method:  "tools/list",
 		ID:      json.RawMessage(`1`),
 	}
@@ -40,15 +40,15 @@ func TestSessionToolsListBeforeHandshake(t *testing.T) {
 }
 
 func TestSessionInitializedNotificationWithoutInitializeDoesNotOpenTools(t *testing.T) {
-	b1 := mock.New("b1", "alpha", []string{"echo"})
-	agg, err := aggregate.New([]backend.Backend{b1}, aggregate.WithListTTL(0))
+	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
+	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
-	s := New(context.Background(), "test-session", agg, nil)
-	require.NoError(t, s.Dispatch(context.Background(), &rpc.Request{JSONRPC: rpc.Version, Method: "notifications/initialized"}))
+	s := NewSession(context.Background(), "test-session", agg, nil)
+	require.NoError(t, s.Dispatch(context.Background(), &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: "notifications/initialized"}))
 
 	require.NoError(t, s.Dispatch(context.Background(), &rpc.Request{
-		JSONRPC: rpc.Version,
+		JSONRPC: rpc.JSONRPCVersion,
 		Method:  "tools/list",
 		ID:      json.RawMessage(`2`),
 	}))
@@ -64,8 +64,8 @@ func TestSessionInitializedNotificationWithoutInitializeDoesNotOpenTools(t *test
 }
 
 func TestSessionMiddlewareRejectsWithRequestRejected(t *testing.T) {
-	b1 := mock.New("b1", "alpha", []string{"echo"})
-	agg, err := aggregate.New([]backend.Backend{b1}, aggregate.WithListTTL(0))
+	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
+	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
 	mw := Middleware(func(ctx context.Context, req *rpc.Request) error {
@@ -74,13 +74,13 @@ func TestSessionMiddlewareRejectsWithRequestRejected(t *testing.T) {
 		}
 		return nil
 	})
-	s := New(context.Background(), "test-session", agg, []Middleware{mw})
+	s := NewSession(context.Background(), "test-session", agg, []Middleware{mw})
 
-	require.NoError(t, s.Dispatch(context.Background(), &rpc.Request{JSONRPC: rpc.Version, Method: "initialize", ID: json.RawMessage(`0`), Params: json.RawMessage(`{}`)}))
+	require.NoError(t, s.Dispatch(context.Background(), &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: "initialize", ID: json.RawMessage(`0`), Params: json.RawMessage(`{}`)}))
 	<-s.Out()
 
-	require.NoError(t, s.Dispatch(context.Background(), &rpc.Request{JSONRPC: rpc.Version, Method: "notifications/initialized"}))
-	require.NoError(t, s.Dispatch(context.Background(), &rpc.Request{JSONRPC: rpc.Version, Method: "tools/list", ID: json.RawMessage(`3`)}))
+	require.NoError(t, s.Dispatch(context.Background(), &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: "notifications/initialized"}))
+	require.NoError(t, s.Dispatch(context.Background(), &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: "tools/list", ID: json.RawMessage(`3`)}))
 
 	raw := <-s.Out()
 	var resp rpc.Response
@@ -90,14 +90,14 @@ func TestSessionMiddlewareRejectsWithRequestRejected(t *testing.T) {
 }
 
 func TestSessionFullHandshakeAndToolsList(t *testing.T) {
-	b1 := mock.New("b1", "alpha", []string{"echo"})
-	agg, err := aggregate.New([]backend.Backend{b1}, aggregate.WithListTTL(0))
+	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
+	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
-	s := New(context.Background(), "test-session", agg, nil)
+	s := NewSession(context.Background(), "test-session", agg, nil)
 
 	require.NoError(t, s.Dispatch(context.Background(), &rpc.Request{
-		JSONRPC: rpc.Version,
+		JSONRPC: rpc.JSONRPCVersion,
 		Method:  "initialize",
 		ID:      json.RawMessage(`1`),
 		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"0"}}`),
@@ -107,8 +107,8 @@ func TestSessionFullHandshakeAndToolsList(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw, &initResp))
 	require.Nil(t, initResp.Error)
 
-	require.NoError(t, s.Dispatch(context.Background(), &rpc.Request{JSONRPC: rpc.Version, Method: "notifications/initialized"}))
-	require.NoError(t, s.Dispatch(context.Background(), &rpc.Request{JSONRPC: rpc.Version, Method: "tools/list", ID: json.RawMessage(`2`)}))
+	require.NoError(t, s.Dispatch(context.Background(), &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: "notifications/initialized"}))
+	require.NoError(t, s.Dispatch(context.Background(), &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: "tools/list", ID: json.RawMessage(`2`)}))
 
 	raw = <-s.Out()
 	var listResp rpc.Response

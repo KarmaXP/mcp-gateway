@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/KarmaXP/mcp-gateway/internal/gateway/aggregate"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
 
@@ -19,44 +19,45 @@ var ErrUnknownSession = errors.New("session: unknown id")
 
 type Middleware func(ctx context.Context, req *rpc.Request) error
 
-type Manager struct {
+// SessionManager owns SSE sessions and dispatches RPC to the multiplexer.
+type SessionManager struct {
 	mu          sync.RWMutex
 	sessions    map[string]*Session
-	agg         *aggregate.Aggregator
+	multiplexer *multiplex.Multiplexer
 	middlewares []Middleware
 }
 
-func NewManager(agg *aggregate.Aggregator, mws ...Middleware) *Manager {
-	return &Manager{
+func NewSessionManager(mpx *multiplex.Multiplexer, mws ...Middleware) *SessionManager {
+	return &SessionManager{
 		sessions:    make(map[string]*Session),
-		agg:         agg,
+		multiplexer: mpx,
 		middlewares: append([]Middleware(nil), mws...),
 	}
 }
 
-func (m *Manager) Create(ctx context.Context) *Session {
+func (sm *SessionManager) Create(ctx context.Context) *Session {
 	id := uuid.NewString()
-	s := New(ctx, id, m.agg, m.middlewares)
-	m.mu.Lock()
-	m.sessions[id] = s
-	m.mu.Unlock()
+	s := NewSession(ctx, id, sm.multiplexer, sm.middlewares)
+	sm.mu.Lock()
+	sm.sessions[id] = s
+	sm.mu.Unlock()
 	return s
 }
 
-func (m *Manager) Get(id string) (*Session, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	s, ok := m.sessions[id]
+func (sm *SessionManager) Get(id string) (*Session, error) {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	s, ok := sm.sessions[id]
 	if !ok {
 		return nil, fmt.Errorf("%w", ErrUnknownSession)
 	}
 	return s, nil
 }
 
-func (m *Manager) Remove(id string) {
-	m.mu.Lock()
-	delete(m.sessions, id)
-	m.mu.Unlock()
+func (sm *SessionManager) Remove(id string) {
+	sm.mu.Lock()
+	delete(sm.sessions, id)
+	sm.mu.Unlock()
 }
 
 type Session struct {
@@ -64,7 +65,7 @@ type Session struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	agg *aggregate.Aggregator
+	multiplexer *multiplex.Multiplexer
 
 	middlewares []Middleware
 
@@ -75,13 +76,13 @@ type Session struct {
 	out chan []byte
 }
 
-func New(parent context.Context, id string, agg *aggregate.Aggregator, mws []Middleware) *Session {
+func NewSession(parent context.Context, id string, mpx *multiplex.Multiplexer, mws []Middleware) *Session {
 	ctx, cancel := context.WithCancel(parent)
 	return &Session{
 		id:          id,
 		ctx:         ctx,
 		cancel:      cancel,
-		agg:         agg,
+		multiplexer: mpx,
 		middlewares: append([]Middleware(nil), mws...),
 		out:         make(chan []byte, 64),
 	}
@@ -168,7 +169,7 @@ func (s *Session) handleNotification(ctx context.Context, req *rpc.Request) erro
 }
 
 func (s *Session) handleInitialize(ctx context.Context, req *rpc.Request) error {
-	resp, err := s.agg.Initialize(ctx, req.ID)
+	resp, err := s.multiplexer.Initialize(ctx, req.ID)
 	if err != nil {
 		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.GatewayInternal, "initialize failed", nil))
 	}
@@ -193,7 +194,7 @@ func (s *Session) handleToolsList(ctx context.Context, req *rpc.Request) error {
 	if err := s.requireReady(); err != nil {
 		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.HandshakeIncomplete, err.Error(), nil))
 	}
-	resp, err := s.agg.ToolsList(ctx, req.ID)
+	resp, err := s.multiplexer.ToolsList(ctx, req.ID)
 	if err != nil {
 		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.GatewayInternal, "tools/list failed", nil))
 	}
@@ -204,7 +205,7 @@ func (s *Session) handleToolsCall(ctx context.Context, req *rpc.Request) error {
 	if err := s.requireReady(); err != nil {
 		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.HandshakeIncomplete, err.Error(), nil))
 	}
-	resp, err := s.agg.ToolsCall(ctx, req.ID, req.Params)
+	resp, err := s.multiplexer.ToolsCall(ctx, req.ID, req.Params)
 	if err != nil {
 		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.GatewayInternal, "tools/call failed", nil))
 	}

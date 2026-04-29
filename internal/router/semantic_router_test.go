@@ -34,22 +34,22 @@ func (m *mapEmbed) Embed(ctx context.Context, texts []string) ([][]float32, erro
 	return out, nil
 }
 
-func TestEngineExactShortcutNoVector(t *testing.T) {
+func TestSemanticRouterExactShortcutNoVector(t *testing.T) {
 	dim := 4
-	st := store.NewMemory(dim)
+	st := store.NewInMemoryVectorStore(dim)
 	emb := &mapEmbed{vecs: map[string][]float32{}, dim: dim}
-	cfg := DefaultConfig()
+	cfg := DefaultSemanticRouterRuntimeConfig()
 	cfg.Mode = ModeAssistList
 	cfg.TopK = 4
 	cfg.ScoreMin = 0.9
-	e := NewEngine(cfg, emb, st, dim)
+	e := NewSemanticRouter(cfg, emb, st, dim)
 
 	row := index.ToolRow{Name: "pre__tool", Description: "d", ParamKeys: nil}
 	doc := index.FormatDocument(row)
 	emb.vecs[doc] = []float32{1, 0, 0, 0}
 
-	require.NoError(t, e.Reindex(context.Background(), "v1", []CatalogEntry{
-		{ToolRow: row, BackendID: "be1"},
+	require.NoError(t, e.Reindex(context.Background(), "v1", []IndexedTool{
+		{ToolRow: row, UpstreamID: "be1"},
 	}))
 
 	name, dec, err := e.ResolveToolsCall(context.Background(), RoutingSignal{ToolName: "pre__tool"})
@@ -59,9 +59,9 @@ func TestEngineExactShortcutNoVector(t *testing.T) {
 	require.Equal(t, OutcomeExact, dec.Outcome)
 }
 
-func TestEngineVectorResolvesWhenNameWrong(t *testing.T) {
+func TestSemanticRouterVectorResolvesWhenNameWrong(t *testing.T) {
 	dim := 4
-	st := store.NewMemory(dim)
+	st := store.NewInMemoryVectorStore(dim)
 	emb := &mapEmbed{vecs: make(map[string][]float32), dim: dim}
 
 	t1 := index.ToolRow{Name: "a__one", Description: "first", ParamKeys: []string{"x"}}
@@ -71,16 +71,16 @@ func TestEngineVectorResolvesWhenNameWrong(t *testing.T) {
 	emb.vecs[d1] = []float32{1, 0, 0, 0}
 	emb.vecs[d2] = []float32{0, 1, 0, 0}
 
-	cfg := DefaultConfig()
+	cfg := DefaultSemanticRouterRuntimeConfig()
 	cfg.Mode = ModeAssistList
 	cfg.TopK = 4
 	cfg.ScoreMin = 0.99
 	cfg.AllowAutoRename = true
-	e := NewEngine(cfg, emb, st, dim)
+	e := NewSemanticRouter(cfg, emb, st, dim)
 
-	require.NoError(t, e.Reindex(context.Background(), "v1", []CatalogEntry{
-		{ToolRow: t1, BackendID: "b1"},
-		{ToolRow: t2, BackendID: "b1"},
+	require.NoError(t, e.Reindex(context.Background(), "v1", []IndexedTool{
+		{ToolRow: t1, UpstreamID: "b1"},
+		{ToolRow: t2, UpstreamID: "b1"},
 	}))
 
 	q := index.FormatQuery("wrong", "", nil)
@@ -93,30 +93,30 @@ func TestEngineVectorResolvesWhenNameWrong(t *testing.T) {
 	require.Equal(t, OutcomeVectorHit, dec.Outcome)
 }
 
-func TestEngineRejectRenameWhenDisabled(t *testing.T) {
+func TestSemanticRouterRejectRenameWhenDisabled(t *testing.T) {
 	dim := 4
-	st := store.NewMemory(dim)
+	st := store.NewInMemoryVectorStore(dim)
 	emb := &mapEmbed{vecs: make(map[string][]float32), dim: dim}
 	t1 := index.ToolRow{Name: "a__one", Description: "first", ParamKeys: nil}
 	emb.vecs[index.FormatDocument(t1)] = []float32{1, 0, 0, 0}
 	q := index.FormatQuery("typo", "", nil)
 	emb.vecs[q] = []float32{1, 0, 0, 0}
 
-	cfg := DefaultConfig()
+	cfg := DefaultSemanticRouterRuntimeConfig()
 	cfg.Mode = ModeAssistList
 	cfg.TopK = 4
 	cfg.ScoreMin = 0.99
 	cfg.AllowAutoRename = false
-	e := NewEngine(cfg, emb, st, dim)
-	require.NoError(t, e.Reindex(context.Background(), "v1", []CatalogEntry{{ToolRow: t1, BackendID: "b1"}}))
+	e := NewSemanticRouter(cfg, emb, st, dim)
+	require.NoError(t, e.Reindex(context.Background(), "v1", []IndexedTool{{ToolRow: t1, UpstreamID: "b1"}}))
 
 	_, _, err := e.ResolveToolsCall(context.Background(), RoutingSignal{ToolName: "typo"})
 	require.Error(t, err)
 }
 
-func TestEngineAllowedToolsFilter(t *testing.T) {
+func TestSemanticRouterAllowedToolsFilter(t *testing.T) {
 	dim := 4
-	st := store.NewMemory(dim)
+	st := store.NewInMemoryVectorStore(dim)
 	emb := &mapEmbed{vecs: make(map[string][]float32), dim: dim}
 	t1 := index.ToolRow{Name: "a__one", Description: "first", ParamKeys: nil}
 	t2 := index.ToolRow{Name: "a__two", Description: "second", ParamKeys: nil}
@@ -125,15 +125,15 @@ func TestEngineAllowedToolsFilter(t *testing.T) {
 	q := index.FormatQuery("x", "", nil)
 	emb.vecs[q] = []float32{1, 0, 0, 0}
 
-	cfg := DefaultConfig()
+	cfg := DefaultSemanticRouterRuntimeConfig()
 	cfg.Mode = ModeAssistList
 	cfg.TopK = 4
 	cfg.ScoreMin = 0.5
 	cfg.AllowAutoRename = true
-	e := NewEngine(cfg, emb, st, dim)
-	require.NoError(t, e.Reindex(context.Background(), "v1", []CatalogEntry{
-		{ToolRow: t1, BackendID: "b1"},
-		{ToolRow: t2, BackendID: "b1"},
+	e := NewSemanticRouter(cfg, emb, st, dim)
+	require.NoError(t, e.Reindex(context.Background(), "v1", []IndexedTool{
+		{ToolRow: t1, UpstreamID: "b1"},
+		{ToolRow: t2, UpstreamID: "b1"},
 	}))
 
 	name, _, err := e.ResolveToolsCall(context.Background(), RoutingSignal{
@@ -144,16 +144,16 @@ func TestEngineAllowedToolsFilter(t *testing.T) {
 	require.Equal(t, "a__one", name)
 }
 
-func TestEngineRulesAliasExact(t *testing.T) {
+func TestSemanticRouterRulesAliasExact(t *testing.T) {
 	dim := 4
-	st := store.NewMemory(dim)
+	st := store.NewInMemoryVectorStore(dim)
 	emb := &mapEmbed{vecs: map[string][]float32{}, dim: dim}
-	cfg := DefaultConfig()
+	cfg := DefaultSemanticRouterRuntimeConfig()
 	cfg.Mode = ModeAssistList
-	e := NewEngine(cfg, emb, st, dim)
+	e := NewSemanticRouter(cfg, emb, st, dim)
 	e.SetRules(rules.New(map[string]string{"legacy__logs": "pre__tool"}, nil))
 	row := index.ToolRow{Name: "pre__tool", Description: "d", ParamKeys: nil}
-	require.NoError(t, e.Reindex(context.Background(), "v1", []CatalogEntry{{ToolRow: row, BackendID: "be1"}}))
+	require.NoError(t, e.Reindex(context.Background(), "v1", []IndexedTool{{ToolRow: row, UpstreamID: "be1"}}))
 
 	name, dec, err := e.ResolveToolsCall(context.Background(), RoutingSignal{ToolName: "legacy__logs"})
 	require.NoError(t, err)
@@ -162,8 +162,8 @@ func TestEngineRulesAliasExact(t *testing.T) {
 	require.Equal(t, OutcomeRulesAlias, dec.Outcome)
 }
 
-func TestEngineModeOff(t *testing.T) {
-	e := NewEngine(DefaultConfig(), nil, nil, 4)
+func TestSemanticRouterModeOff(t *testing.T) {
+	e := NewSemanticRouter(DefaultSemanticRouterRuntimeConfig(), nil, nil, 4)
 	name, dec, err := e.ResolveToolsCall(context.Background(), RoutingSignal{ToolName: "any"})
 	require.NoError(t, err)
 	require.Equal(t, "any", name)
@@ -171,8 +171,8 @@ func TestEngineModeOff(t *testing.T) {
 	require.Equal(t, OutcomeNone, dec.Outcome)
 }
 
-func TestNilEngineSurface(t *testing.T) {
-	var e *Engine
+func TestNilSemanticRouterSurface(t *testing.T) {
+	var e *SemanticRouter
 	require.False(t, e.Enabled())
 	require.NoError(t, e.Reindex(context.Background(), "v", nil))
 	name, dec, err := e.ResolveToolsCall(context.Background(), RoutingSignal{ToolName: "x"})
@@ -181,46 +181,46 @@ func TestNilEngineSurface(t *testing.T) {
 	require.Equal(t, OutcomeNone, dec.Outcome)
 }
 
-func TestDefaultConfigEmbedTimeout(t *testing.T) {
-	c := DefaultConfig()
+func TestDefaultSemanticRouterRuntimeEmbedTimeout(t *testing.T) {
+	c := DefaultSemanticRouterRuntimeConfig()
 	require.NotZero(t, c.EmbedTimeout)
 	require.Equal(t, ModeOff, c.Mode)
 }
 
-func TestEngineReindexRequiresEmbed(t *testing.T) {
-	cfg := DefaultConfig()
+func TestSemanticRouterReindexRequiresEmbed(t *testing.T) {
+	cfg := DefaultSemanticRouterRuntimeConfig()
 	cfg.Mode = ModeAssistList
-	e := NewEngine(cfg, nil, store.NewMemory(4), 4)
-	err := e.Reindex(context.Background(), "v1", []CatalogEntry{{ToolRow: index.ToolRow{Name: "a__b"}, BackendID: "x"}})
+	e := NewSemanticRouter(cfg, nil, store.NewInMemoryVectorStore(4), 4)
+	err := e.Reindex(context.Background(), "v1", []IndexedTool{{ToolRow: index.ToolRow{Name: "a__b"}, UpstreamID: "x"}})
 	require.Error(t, err)
 }
 
 func TestReindexNoOpWhenRouterDisabled(t *testing.T) {
-	e := NewEngine(DefaultConfig(), nil, store.NewMemory(4), 4)
-	require.NoError(t, e.Reindex(context.Background(), "v1", []CatalogEntry{
-		{ToolRow: index.ToolRow{Name: "a__b"}, BackendID: "x"},
+	e := NewSemanticRouter(DefaultSemanticRouterRuntimeConfig(), nil, store.NewInMemoryVectorStore(4), 4)
+	require.NoError(t, e.Reindex(context.Background(), "v1", []IndexedTool{
+		{ToolRow: index.ToolRow{Name: "a__b"}, UpstreamID: "x"},
 	}))
 }
 
 func TestReindexRejectsEmptyCatalogVersion(t *testing.T) {
-	cfg := DefaultConfig()
+	cfg := DefaultSemanticRouterRuntimeConfig()
 	cfg.Mode = ModeAssistList
-	e := NewEngine(cfg, &mapEmbed{dim: 4}, store.NewMemory(4), 4)
-	err := e.Reindex(context.Background(), "", []CatalogEntry{
-		{ToolRow: index.ToolRow{Name: "a__b"}, BackendID: "x"},
+	e := NewSemanticRouter(cfg, &mapEmbed{dim: 4}, store.NewInMemoryVectorStore(4), 4)
+	err := e.Reindex(context.Background(), "", []IndexedTool{
+		{ToolRow: index.ToolRow{Name: "a__b"}, UpstreamID: "x"},
 	})
 	require.Error(t, err)
 }
 
-func TestEngineRejectsStaleClientCatalogPin(t *testing.T) {
+func TestSemanticRouterRejectsStaleClientCatalogPin(t *testing.T) {
 	dim := 4
-	st := store.NewMemory(dim)
+	st := store.NewInMemoryVectorStore(dim)
 	emb := &mapEmbed{vecs: map[string][]float32{}, dim: dim}
-	cfg := DefaultConfig()
+	cfg := DefaultSemanticRouterRuntimeConfig()
 	cfg.Mode = ModeAssistList
-	e := NewEngine(cfg, emb, st, dim)
+	e := NewSemanticRouter(cfg, emb, st, dim)
 	row := index.ToolRow{Name: "pre__tool", Description: "d", ParamKeys: nil}
-	require.NoError(t, e.Reindex(context.Background(), "v2", []CatalogEntry{{ToolRow: row, BackendID: "be1"}}))
+	require.NoError(t, e.Reindex(context.Background(), "v2", []IndexedTool{{ToolRow: row, UpstreamID: "be1"}}))
 
 	_, dec, err := e.ResolveToolsCall(context.Background(), RoutingSignal{
 		ToolName:       "pre__tool",
@@ -230,30 +230,30 @@ func TestEngineRejectsStaleClientCatalogPin(t *testing.T) {
 	require.Equal(t, OutcomeMissStaleCatalog, dec.Outcome)
 }
 
-func TestBuildCatalogEntriesBackendLookupError(t *testing.T) {
+func TestBuildIndexedToolsUpstreamLookupError(t *testing.T) {
 	raw := []byte(`{"tools":[{"name":"p__t","description":"","inputSchema":{"type":"object"}}]}`)
-	_, err := BuildCatalogEntries(raw, func(string) (string, error) {
+	_, err := BuildIndexedTools(raw, func(string) (string, error) {
 		return "", fmt.Errorf("no backend")
 	})
 	require.Error(t, err)
 }
 
-func TestEngineVectorQueryUsesArgumentKeysFromPayload(t *testing.T) {
+func TestSemanticRouterVectorQueryUsesArgumentKeysFromPayload(t *testing.T) {
 	dim := 4
-	st := store.NewMemory(dim)
+	st := store.NewInMemoryVectorStore(dim)
 	emb := &mapEmbed{vecs: make(map[string][]float32), dim: dim}
 	t1 := index.ToolRow{Name: "a__one", Description: "first", ParamKeys: nil}
 	emb.vecs[index.FormatDocument(t1)] = []float32{1, 0, 0, 0}
 	q := index.FormatQuery("typo", "", []string{"k"})
 	emb.vecs[q] = []float32{1, 0, 0, 0}
 
-	cfg := DefaultConfig()
+	cfg := DefaultSemanticRouterRuntimeConfig()
 	cfg.Mode = ModeAssistList
 	cfg.TopK = 4
 	cfg.ScoreMin = 0.99
 	cfg.AllowAutoRename = true
-	e := NewEngine(cfg, emb, st, dim)
-	require.NoError(t, e.Reindex(context.Background(), "v1", []CatalogEntry{{ToolRow: t1, BackendID: "b1"}}))
+	e := NewSemanticRouter(cfg, emb, st, dim)
+	require.NoError(t, e.Reindex(context.Background(), "v1", []IndexedTool{{ToolRow: t1, UpstreamID: "b1"}}))
 
 	name, _, err := e.ResolveToolsCall(context.Background(), RoutingSignal{
 		ToolName:      "typo",

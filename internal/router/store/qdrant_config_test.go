@@ -6,14 +6,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewQdrantValidation(t *testing.T) {
-	_, err := NewQdrant("", "c", 384)
+func TestNewQdrantVectorStoreValidation(t *testing.T) {
+	_, err := NewQdrantVectorStore("", "c", 384)
 	require.Error(t, err)
-	_, err = NewQdrant("http://localhost:6333", "", 384)
+	_, err = NewQdrantVectorStore("http://localhost:6333", "", 384)
 	require.Error(t, err)
-	_, err = NewQdrant("http://localhost:6333", "x", 0)
+	_, err = NewQdrantVectorStore("http://localhost:6333", "x", 0)
 	require.Error(t, err)
-	q, err := NewQdrant("http://localhost:6333", "x", 384)
+	q, err := NewQdrantVectorStore("http://localhost:6333", "x", 384)
 	require.NoError(t, err)
 	require.NotNil(t, q)
 }

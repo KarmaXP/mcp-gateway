@@ -1,4 +1,4 @@
-package aggregate
+package multiplex
 
 import (
 	"context"
@@ -49,26 +49,26 @@ func (e *embedCtxDone) Embed(ctx context.Context, texts []string) ([][]float32, 
 	return e.inner.Embed(ctx, texts)
 }
 
-func routerTestEngine(t *testing.T, emb embed.Embedder, scoreMin float64, autoRename bool) (*router.Engine, *store.Memory) {
+func routerTestSemanticRouter(t *testing.T, emb embed.Embedder, scoreMin float64, autoRename bool) (*router.SemanticRouter, *store.InMemoryVectorStore) {
 	t.Helper()
-	st := store.NewMemory(4)
-	cfg := router.DefaultConfig()
+	st := store.NewInMemoryVectorStore(4)
+	cfg := router.DefaultSemanticRouterRuntimeConfig()
 	cfg.Mode = router.ModeAssistList
 	cfg.TopK = 8
 	cfg.ScoreMin = scoreMin
 	cfg.AllowAutoRename = autoRename
 	cfg.EmbedTimeout = 5 * time.Second
 	cfg.QueryTimeout = 5 * time.Second
-	return router.NewEngine(cfg, emb, st, 4), st
+	return router.NewSemanticRouter(cfg, emb, st, 4), st
 }
 
 func TestToolsListReindexAfterErrgroupDoesNotUseCanceledContext(t *testing.T) {
-	b1 := mock.New("b1", "p", []string{"echo"})
+	b1 := mock.NewMockUpstream("b1", "p", []string{"echo"})
 	base := &mapEmbed{dim: 4, vecs: map[string][]float32{}}
 	emb := &embedCtxDone{inner: base}
-	eng, _ := routerTestEngine(t, emb, 0.99, true)
+	sr, _ := routerTestSemanticRouter(t, emb, 0.99, true)
 
-	a, err := New([]backend.Backend{b1}, WithListTTL(0), WithSemanticRouter(eng))
+	a, err := New([]backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 	_, err = a.ToolsList(context.Background(), json.RawMessage(`2`))
@@ -82,11 +82,11 @@ func TestToolsListReindexAfterErrgroupDoesNotUseCanceledContext(t *testing.T) {
 }
 
 func TestAggregateSemanticRouterExactMatch(t *testing.T) {
-	b1 := mock.New("b1", "p", []string{"echo"})
+	b1 := mock.NewMockUpstream("b1", "p", []string{"echo"})
 	emb := &mapEmbed{dim: 4, vecs: map[string][]float32{}}
-	eng, _ := routerTestEngine(t, emb, 0.99, true)
+	sr, _ := routerTestSemanticRouter(t, emb, 0.99, true)
 
-	a, err := New([]backend.Backend{b1}, WithListTTL(0), WithSemanticRouter(eng))
+	a, err := New([]backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 	_, err = a.ToolsList(context.Background(), json.RawMessage(`2`))
@@ -100,11 +100,11 @@ func TestAggregateSemanticRouterExactMatch(t *testing.T) {
 }
 
 func TestAggregateSemanticRouterAmbiguousReturnsCode(t *testing.T) {
-	b1 := mock.New("b1", "p", []string{"echo", "list"})
+	b1 := mock.NewMockUpstream("b1", "p", []string{"echo", "list"})
 	emb := &mapEmbed{dim: 4, vecs: map[string][]float32{}}
-	eng, _ := routerTestEngine(t, emb, 0.5, true)
+	sr, _ := routerTestSemanticRouter(t, emb, 0.5, true)
 
-	a, err := New([]backend.Backend{b1}, WithListTTL(0), WithSemanticRouter(eng))
+	a, err := New([]backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 	_, err = a.ToolsList(context.Background(), json.RawMessage(`2`))

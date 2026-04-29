@@ -14,8 +14,8 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/auth"
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/config"
-	"github.com/KarmaXP/mcp-gateway/internal/gateway/aggregate"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/httpserver"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/orchestrator"
 	"github.com/KarmaXP/mcp-gateway/internal/router"
 	"github.com/KarmaXP/mcp-gateway/internal/router/embed"
@@ -24,12 +24,12 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
 )
 
-func routerModeActive(cfg config.Config) bool {
-	mode := strings.ToLower(strings.TrimSpace(cfg.Router.Mode))
+func routerModeActive(cfg config.GatewayConfig) bool {
+	mode := strings.ToLower(strings.TrimSpace(cfg.SemanticRouter.Mode))
 	return mode == "on" || mode == "assist_list"
 }
 
-func preflightQdrant(cfg config.Config) {
+func preflightQdrant(cfg config.GatewayConfig) {
 	if !routerModeActive(cfg) {
 		return
 	}
@@ -49,9 +49,9 @@ func preflightQdrant(cfg config.Config) {
 	slog.Info("qdrant preflight ok", "url", qURL)
 }
 
-func aggregatorOptions(cfg config.Config) ([]aggregate.Option, error) {
-	opts := []aggregate.Option{aggregate.WithListTTL(0)}
-	mode := strings.ToLower(strings.TrimSpace(cfg.Router.Mode))
+func multiplexerOptions(cfg config.GatewayConfig) ([]multiplex.Option, error) {
+	opts := []multiplex.Option{multiplex.WithListTTL(0)}
+	mode := strings.ToLower(strings.TrimSpace(cfg.SemanticRouter.Mode))
 	if mode == "" {
 		mode = "off"
 	}
@@ -59,27 +59,27 @@ func aggregatorOptions(cfg config.Config) ([]aggregate.Option, error) {
 		return opts, nil
 	}
 
-	embedURL := strings.TrimSpace(cfg.Embed.URL)
+	embedURL := strings.TrimSpace(cfg.Embedding.URL)
 	if embedURL == "" {
 		embedURL = "http://127.0.0.1:8001"
 	}
-	dim := cfg.Router.VectorDim
+	dim := cfg.SemanticRouter.VectorDim
 	if dim <= 0 {
 		dim = 384
 	}
 
-	rcfg := router.DefaultConfig()
+	rcfg := router.DefaultSemanticRouterRuntimeConfig()
 	rcfg.Mode = router.ModeAssistList
-	if cfg.Router.TopK > 0 {
-		rcfg.TopK = cfg.Router.TopK
+	if cfg.SemanticRouter.TopK > 0 {
+		rcfg.TopK = cfg.SemanticRouter.TopK
 	}
-	if cfg.Router.ScoreMin > 0 {
-		rcfg.ScoreMin = cfg.Router.ScoreMin
+	if cfg.SemanticRouter.ScoreMin > 0 {
+		rcfg.ScoreMin = cfg.SemanticRouter.ScoreMin
 	}
-	if cfg.Router.HybridAlpha > 0 {
-		rcfg.HybridAlpha = cfg.Router.HybridAlpha
+	if cfg.SemanticRouter.HybridAlpha > 0 {
+		rcfg.HybridAlpha = cfg.SemanticRouter.HybridAlpha
 	}
-	if cfg.Router.AllowAutoRename {
+	if cfg.SemanticRouter.AllowAutoRename {
 		rcfg.AllowAutoRename = true
 	}
 	rcfg.EmbedTimeout = cfg.RouterEmbedTimeout()
@@ -89,16 +89,16 @@ func aggregatorOptions(cfg config.Config) ([]aggregate.Option, error) {
 	if qURL == "" {
 		return nil, fmt.Errorf("QDRANT_URL is required when router mode is on or assist_list")
 	}
-	st, err := store.NewQdrant(qURL, cfg.QdrantCollection(), dim)
+	st, err := store.NewQdrantVectorStore(qURL, cfg.QdrantCollection(), dim)
 	if err != nil {
 		return nil, err
 	}
 
-	e := router.NewEngine(rcfg, embed.NewClient(embedURL), st, dim)
-	if len(cfg.Router.Rules.Aliases) > 0 || len(cfg.Router.Rules.SiloKeywords) > 0 {
-		e.SetRules(rules.New(cfg.Router.Rules.Aliases, cfg.Router.Rules.SiloKeywords))
+	sr := router.NewSemanticRouter(rcfg, embed.NewClient(embedURL), st, dim)
+	if len(cfg.SemanticRouter.Rules.Aliases) > 0 || len(cfg.SemanticRouter.Rules.SiloKeywords) > 0 {
+		sr.SetRules(rules.New(cfg.SemanticRouter.Rules.Aliases, cfg.SemanticRouter.Rules.SiloKeywords))
 	}
-	opts = append(opts, aggregate.WithSemanticRouter(e))
+	opts = append(opts, multiplex.WithSemanticRouter(sr))
 	slog.Info("semantic router enabled",
 		"embed_url", embedURL,
 		"vector_dim", dim,
@@ -146,7 +146,7 @@ func main() {
 	}
 	addr := ":" + port
 
-	authCfg := auth.ConfigFromEnv()
+	authCfg := auth.JWTAuthFromEnvironment()
 	validator, err := auth.NewValidator(authCfg)
 	if err != nil {
 		slog.Error("auth config", "err", err)
@@ -156,27 +156,27 @@ func main() {
 	rootCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	backs, cleanupBackends, err := backend.BuildUpstreams(rootCtx, cfg.Backends)
+	upstreams, cleanupUpstreams, err := backend.ConnectUpstreams(rootCtx, cfg.Upstreams)
 	if err != nil {
-		slog.Error("backends", "err", err)
+		slog.Error("connect upstreams", "err", err)
 		os.Exit(1)
 	}
-	defer cleanupBackends()
+	defer cleanupUpstreams()
 
-	aggOpts, err := aggregatorOptions(cfg)
+	mpxOpts, err := multiplexerOptions(cfg)
 	if err != nil {
-		slog.Error("aggregator", "err", err)
+		slog.Error("multiplexer options", "err", err)
 		os.Exit(1)
 	}
-	agg, err := aggregate.New(backs, aggOpts...)
+	mpx, err := multiplex.New(upstreams, mpxOpts...)
 	if err != nil {
-		slog.Error("aggregate", "err", err)
+		slog.Error("multiplexer", "err", err)
 		os.Exit(1)
 	}
 
-	httpOpts := orchestrator.HTTPMiddlewareOptions("mcp-gateway", authCfg, validator)
+	httpOpts := orchestrator.HTTPServerOptions("mcp-gateway", authCfg, validator)
 	httpOpts = append(httpOpts, httpserver.WithShutdownContext(rootCtx))
-	srv := httpserver.New(agg, addr, httpOpts...)
+	srv := httpserver.New(mpx, addr, httpOpts...)
 
 	go func() {
 		slog.Info("mcp-gateway listening", "addr", addr)

@@ -5,7 +5,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/router/index"
 )
 
-func SyntheticCatalog() []router.CatalogEntry {
+func SyntheticCatalog() []router.IndexedTool {
 	rows := []struct {
 		prefix, native, desc string
 		keys                 []string
@@ -35,16 +35,16 @@ func SyntheticCatalog() []router.CatalogEntry {
 		{"tls", "check_cert", "Inspect TLS certificate expiry for a hostname and port combination", []string{"host", "port"}},
 		{"run", "shell_command", "Run an audited shell command on a bastion with allow-listed binaries", []string{"command", "timeout"}},
 	}
-	out := make([]router.CatalogEntry, 0, len(rows))
+	out := make([]router.IndexedTool, 0, len(rows))
 	for _, r := range rows {
 		full := r.prefix + "__" + r.native
-		out = append(out, router.CatalogEntry{
+		out = append(out, router.IndexedTool{
 			ToolRow: index.ToolRow{
 				Name:        full,
 				Description: r.desc,
 				ParamKeys:   r.keys,
 			},
-			BackendID: "b_" + r.prefix,
+			UpstreamID: "b_" + r.prefix,
 		})
 	}
 	return out

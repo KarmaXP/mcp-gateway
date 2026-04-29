@@ -7,7 +7,7 @@ import (
 	"fmt"
 )
 
-const Version = "2.0"
+const JSONRPCVersion = "2.0"
 
 var (
 	ErrInvalidRequest = errors.New("rpc: invalid JSON-RPC request")
@@ -37,8 +37,8 @@ func ParseRequest(raw []byte) (*Request, error) {
 	if err := json.Unmarshal(raw, &req); err != nil {
 		return nil, fmt.Errorf("rpc: decode: %w", err)
 	}
-	if req.JSONRPC != Version {
-		return nil, fmt.Errorf("%w: jsonrpc must be %q", ErrInvalidRequest, Version)
+	if req.JSONRPC != JSONRPCVersion {
+		return nil, fmt.Errorf("%w: jsonrpc must be %q", ErrInvalidRequest, JSONRPCVersion)
 	}
 	if req.Method == "" {
 		return nil, fmt.Errorf("%w: method required", ErrInvalidRequest)
@@ -64,7 +64,7 @@ type Response struct {
 
 func NewResult(id json.RawMessage, result json.RawMessage) *Response {
 	return &Response{
-		JSONRPC: Version,
+		JSONRPC: JSONRPCVersion,
 		ID:      id,
 		Result:  result,
 	}
@@ -72,7 +72,7 @@ func NewResult(id json.RawMessage, result json.RawMessage) *Response {
 
 func NewError(id json.RawMessage, code int, message string, data json.RawMessage) *Response {
 	return &Response{
-		JSONRPC: Version,
+		JSONRPC: JSONRPCVersion,
 		ID:      id,
 		Error: &ErrorObject{
 			Code:    code,
@@ -98,8 +98,8 @@ func ParseResponse(raw []byte) (*Response, error) {
 	if err := json.Unmarshal(raw, &resp); err != nil {
 		return nil, fmt.Errorf("rpc: decode response: %w", err)
 	}
-	if resp.JSONRPC != Version {
-		return nil, fmt.Errorf("%w: jsonrpc must be %q", ErrInvalidRequest, Version)
+	if resp.JSONRPC != JSONRPCVersion {
+		return nil, fmt.Errorf("%w: jsonrpc must be %q", ErrInvalidRequest, JSONRPCVersion)
 	}
 	if resp.Error == nil && resp.Result == nil {
 		return nil, fmt.Errorf("%w: response must include result or error", ErrInvalidRequest)
@@ -110,7 +110,7 @@ func ParseResponse(raw []byte) (*Response, error) {
 func MarshalRequest(req *Request) ([]byte, error) {
 	ver := req.JSONRPC
 	if ver == "" {
-		ver = Version
+		ver = JSONRPCVersion
 	}
 	type wire struct {
 		JSONRPC string          `json:"jsonrpc"`

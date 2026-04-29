@@ -1,4 +1,6 @@
-package aggregate
+// Package multiplex fans out host JSON-RPC to MCP upstreams: merged initialize/tools/list,
+// optional semantic routing and schema validation, and tools/call forwarding with namespacing.
+package multiplex
 
 import (
 	"context"
@@ -16,7 +18,7 @@ import (
 
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
-	"github.com/KarmaXP/mcp-gateway/internal/gateway/ingress"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/namespace"
 	"github.com/KarmaXP/mcp-gateway/internal/router"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
@@ -24,11 +26,11 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-var errNoBackends = errors.New("aggregate: no backends responded to initialize")
+var errNoUpstreamsResponded = errors.New("multiplex: no upstreams responded to initialize")
 
-type Aggregator struct {
-	backends []backend.Backend
-	byPrefix map[string]backend.Backend
+type Multiplexer struct {
+	upstreams []backend.Upstream
+	byPrefix  map[string]backend.Upstream
 
 	initTimeout time.Duration
 	listTimeout time.Duration
@@ -39,7 +41,7 @@ type Aggregator struct {
 	cachedAt   time.Time
 	listTTL    time.Duration
 
-	semantic *router.Engine
+	semantic *router.SemanticRouter
 
 	catMu  sync.RWMutex
 	catVer string
@@ -48,42 +50,42 @@ type Aggregator struct {
 	toolValidators map[string]*jsonschema.Schema
 }
 
-type Option func(*Aggregator)
+type Option func(*Multiplexer)
 
 func WithInitTimeout(d time.Duration) Option {
-	return func(a *Aggregator) { a.initTimeout = d }
+	return func(a *Multiplexer) { a.initTimeout = d }
 }
 
 func WithListTimeout(d time.Duration) Option {
-	return func(a *Aggregator) { a.listTimeout = d }
+	return func(a *Multiplexer) { a.listTimeout = d }
 }
 
 func WithCallTimeout(d time.Duration) Option {
-	return func(a *Aggregator) { a.callTimeout = d }
+	return func(a *Multiplexer) { a.callTimeout = d }
 }
 
 func WithListTTL(d time.Duration) Option {
-	return func(a *Aggregator) { a.listTTL = d }
+	return func(a *Multiplexer) { a.listTTL = d }
 }
 
-func WithSemanticRouter(e *router.Engine) Option {
-	return func(a *Aggregator) { a.semantic = e }
+func WithSemanticRouter(sr *router.SemanticRouter) Option {
+	return func(a *Multiplexer) { a.semantic = sr }
 }
 
-func New(backends []backend.Backend, opts ...Option) (*Aggregator, error) {
-	byPrefix := make(map[string]backend.Backend, len(backends))
-	for _, b := range backends {
+func New(upstreams []backend.Upstream, opts ...Option) (*Multiplexer, error) {
+	byPrefix := make(map[string]backend.Upstream, len(upstreams))
+	for _, b := range upstreams {
 		p := b.Prefix()
 		if err := namespace.ValidatePrefix(p); err != nil {
-			return nil, fmt.Errorf("aggregate: validate prefix: %w", err)
+			return nil, fmt.Errorf("multiplex: validate prefix: %w", err)
 		}
 		if _, dup := byPrefix[p]; dup {
-			return nil, fmt.Errorf("aggregate: duplicate prefix %q", p)
+			return nil, fmt.Errorf("multiplex: duplicate prefix %q", p)
 		}
 		byPrefix[p] = b
 	}
-	a := &Aggregator{
-		backends:    append([]backend.Backend(nil), backends...),
+	a := &Multiplexer{
+		upstreams:   append([]backend.Upstream(nil), upstreams...),
 		byPrefix:    byPrefix,
 		initTimeout: 5 * time.Second,
 		listTimeout: 10 * time.Second,
@@ -96,29 +98,29 @@ func New(backends []backend.Backend, opts ...Option) (*Aggregator, error) {
 	return a, nil
 }
 
-func (a *Aggregator) PrefixToBackendID() map[string]string {
-	m := make(map[string]string, len(a.backends))
-	for _, b := range a.backends {
+func (a *Multiplexer) PrefixToUpstreamID() map[string]string {
+	m := make(map[string]string, len(a.upstreams))
+	for _, b := range a.upstreams {
 		m[b.Prefix()] = b.ID()
 	}
 	return m
 }
 
-func (a *Aggregator) Initialize(ctx context.Context, hostID json.RawMessage) (*rpc.Response, error) {
-	tctx, span := telemetry.StartSpan(ctx, "mcp.aggregate.initialize")
+func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*rpc.Response, error) {
+	tctx, span := telemetry.StartSpan(ctx, telemetry.SpanMultiplexInit)
 	defer span.End()
 
-	results := make([]json.RawMessage, len(a.backends))
+	results := make([]json.RawMessage, len(a.upstreams))
 	var mu sync.Mutex
 
 	g, ctx := errgroup.WithContext(tctx)
-	for i, b := range a.backends {
+	for i, b := range a.upstreams {
 		i, b := i, b
 		g.Go(func() error {
 			callCtx, cancel := context.WithTimeout(ctx, a.initTimeout)
 			defer cancel()
 			subID := json.RawMessage(fmt.Sprintf(`"gw-init-%s"`, b.ID()))
-			req := &rpc.Request{JSONRPC: rpc.Version, Method: "initialize", ID: subID, Params: hostParams()}
+			req := &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: "initialize", ID: subID, Params: hostParams()}
 			resp, err := b.Call(callCtx, req)
 			if err != nil {
 				slog.Warn("initialize backend failed", "backend_id", b.ID(), "err", err)
@@ -135,16 +137,16 @@ func (a *Aggregator) Initialize(ctx context.Context, hostID json.RawMessage) (*r
 		})
 	}
 	if err := g.Wait(); err != nil {
-		return nil, fmt.Errorf("aggregate: initialize backends: %w", err)
+		return nil, fmt.Errorf("multiplex: initialize upstreams: %w", err)
 	}
 
-	merged, err := mergeInitializeResults(results, a.backends)
+	merged, err := mergeInitializeResults(results, a.upstreams)
 	if err != nil {
-		return rpc.NewError(hostID, errcodes.GatewayInternal, "gateway: all backends failed initialize", nil), nil
+		return rpc.NewError(hostID, errcodes.GatewayInternal, "gateway: all upstreams failed initialize", nil), nil
 	}
 	raw, err := json.Marshal(merged)
 	if err != nil {
-		return nil, fmt.Errorf("aggregate: marshal initialize result: %w", err)
+		return nil, fmt.Errorf("multiplex: marshal initialize result: %w", err)
 	}
 	a.invalidateToolCache()
 	return rpc.NewResult(hostID, raw), nil
@@ -163,7 +165,7 @@ func hostParams() json.RawMessage {
 	return b
 }
 
-func mergeInitializeResults(results []json.RawMessage, backends []backend.Backend) (map[string]any, error) {
+func mergeInitializeResults(results []json.RawMessage, upstreams []backend.Upstream) (map[string]any, error) {
 	merged := map[string]any{
 		"protocolVersion": "2024-11-05",
 		"capabilities":    map[string]any{},
@@ -179,7 +181,7 @@ func mergeInitializeResults(results []json.RawMessage, backends []backend.Backen
 	backendsList := merged["serverInfo"].(map[string]any)["extras"].(map[string]any)["backends"].([]string)
 
 	anyOK := false
-	for i, b := range backends {
+	for i, b := range upstreams {
 		if len(results[i]) == 0 {
 			continue
 		}
@@ -196,7 +198,7 @@ func mergeInitializeResults(results []json.RawMessage, backends []backend.Backen
 		backendsList = append(backendsList, b.ID())
 	}
 	if !anyOK {
-		return nil, errNoBackends
+		return nil, errNoUpstreamsResponded
 	}
 	merged["serverInfo"].(map[string]any)["extras"].(map[string]any)["backends"] = backendsList
 	return merged, nil
@@ -220,11 +222,11 @@ func shallowMerge(dst map[string]any, src any) {
 	}
 }
 
-func (a *Aggregator) ToolsList(ctx context.Context, hostID json.RawMessage) (*rpc.Response, error) {
-	tctx, span := telemetry.StartSpan(ctx, "mcp.aggregate.tools_list")
+func (a *Multiplexer) ToolsList(ctx context.Context, hostID json.RawMessage) (*rpc.Response, error) {
+	tctx, span := telemetry.StartSpan(ctx, telemetry.SpanMultiplexToolsList)
 	defer span.End()
 
-	allowed := ingress.AllowedToolsFromContext(tctx)
+	allowed := hostctx.AllowedToolNamesFromContext(tctx)
 
 	if a.listTTL > 0 && len(allowed) == 0 {
 		a.mu.RLock()
@@ -240,17 +242,17 @@ func (a *Aggregator) ToolsList(ctx context.Context, hostID json.RawMessage) (*rp
 	type listResult struct {
 		tools []map[string]any
 	}
-	results := make([]listResult, len(a.backends))
+	results := make([]listResult, len(a.upstreams))
 	g, gctx := errgroup.WithContext(tctx)
 	var mu sync.Mutex
 
-	for i, b := range a.backends {
+	for i, b := range a.upstreams {
 		i, b := i, b
 		g.Go(func() error {
 			callCtx, cancel := context.WithTimeout(gctx, a.listTimeout)
 			defer cancel()
 			subID := json.RawMessage(fmt.Sprintf(`"gw-list-%s"`, b.ID()))
-			req := &rpc.Request{JSONRPC: rpc.Version, Method: "tools/list", ID: subID, Params: nil}
+			req := &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: "tools/list", ID: subID, Params: nil}
 			resp, err := b.Call(callCtx, req)
 			if err != nil {
 				slog.Warn("tools/list backend failed", "backend_id", b.ID(), "err", err)
@@ -274,11 +276,11 @@ func (a *Aggregator) ToolsList(ctx context.Context, hostID json.RawMessage) (*rp
 		})
 	}
 	if err := g.Wait(); err != nil {
-		return nil, fmt.Errorf("aggregate: tools/list backends: %w", err)
+		return nil, fmt.Errorf("multiplex: tools/list upstreams: %w", err)
 	}
 
 	var merged []map[string]any
-	for i, b := range a.backends {
+	for i, b := range a.upstreams {
 		prefix := b.Prefix()
 		tools := append([]map[string]any(nil), results[i].tools...)
 		sort.Slice(tools, func(i, j int) bool {
@@ -303,7 +305,7 @@ func (a *Aggregator) ToolsList(ctx context.Context, hostID json.RawMessage) (*rp
 
 	outFull, err := json.Marshal(map[string]any{"tools": merged})
 	if err != nil {
-		return nil, fmt.Errorf("aggregate: marshal tools/list: %w", err)
+		return nil, fmt.Errorf("multiplex: marshal tools/list: %w", err)
 	}
 	if a.listTTL > 0 && len(allowed) == 0 {
 		a.mu.Lock()
@@ -314,7 +316,7 @@ func (a *Aggregator) ToolsList(ctx context.Context, hostID json.RawMessage) (*rp
 
 	if a.semantic != nil && a.semantic.Enabled() {
 		ver := fmt.Sprintf("%x", sha256.Sum256(outFull))
-		entries, err := router.BuildCatalogEntries(outFull, func(prefix string) (string, error) {
+		indexed, err := router.BuildIndexedTools(outFull, func(prefix string) (string, error) {
 			b, ok := a.byPrefix[prefix]
 			if !ok {
 				return "", fmt.Errorf("unknown prefix %q", prefix)
@@ -323,13 +325,13 @@ func (a *Aggregator) ToolsList(ctx context.Context, hostID json.RawMessage) (*rp
 		})
 		if err != nil {
 			slog.Warn("router catalog build skipped", "err", err)
-		} else if err := a.semantic.Reindex(tctx, ver, entries); err != nil {
+		} else if err := a.semantic.Reindex(tctx, ver, indexed); err != nil {
 			slog.Warn("router reindex failed", "err", err)
 		} else {
 			a.catMu.Lock()
 			a.catVer = ver
 			a.catMu.Unlock()
-			telemetry.SetIndexedCatalogToolCount(int64(len(entries)))
+			telemetry.SetIndexedCatalogToolCount(int64(len(indexed)))
 		}
 	}
 
@@ -338,7 +340,7 @@ func (a *Aggregator) ToolsList(ctx context.Context, hostID json.RawMessage) (*rp
 		filtered := filterToolsForPolicy(merged, allowed)
 		filteredRaw, err := json.Marshal(map[string]any{"tools": filtered})
 		if err != nil {
-			return nil, fmt.Errorf("aggregate: marshal filtered tools/list: %w", err)
+			return nil, fmt.Errorf("multiplex: marshal filtered tools/list: %w", err)
 		}
 		toReturn = filteredRaw
 	}
@@ -354,7 +356,7 @@ func cloneMap(m map[string]any) map[string]any {
 	return out
 }
 
-func (a *Aggregator) invalidateToolCache() {
+func (a *Multiplexer) invalidateToolCache() {
 	a.mu.Lock()
 	a.cachedList = nil
 	a.mu.Unlock()
@@ -363,7 +365,7 @@ func (a *Aggregator) invalidateToolCache() {
 	a.schemaMu.Unlock()
 }
 
-func (a *Aggregator) ToolsCall(ctx context.Context, hostID json.RawMessage, params json.RawMessage) (*rpc.Response, error) {
+func (a *Multiplexer) ToolsCall(ctx context.Context, hostID json.RawMessage, params json.RawMessage) (*rpc.Response, error) {
 	var p struct {
 		Name      string          `json:"name"`
 		Arguments json.RawMessage `json:"arguments"`
@@ -373,7 +375,7 @@ func (a *Aggregator) ToolsCall(ctx context.Context, hostID json.RawMessage, para
 	}
 
 	if a.semantic != nil && a.semantic.Enabled() {
-		rctx, span := telemetry.StartSpan(ctx, "mcp.router.semantic")
+		rctx, span := telemetry.StartSpan(ctx, telemetry.SpanSemanticRouter)
 		sig := a.semanticRoutingSignal(ctx, p.Name, p.Arguments)
 		resolved, dec, err := a.semantic.ResolveToolsCall(rctx, sig)
 		telemetry.RecordSemanticRouting(rctx, dec, err)
@@ -386,7 +388,7 @@ func (a *Aggregator) ToolsCall(ctx context.Context, hostID json.RawMessage, para
 		p.Name = resolved
 	}
 
-	allowed := ingress.AllowedToolsFromContext(ctx)
+	allowed := hostctx.AllowedToolNamesFromContext(ctx)
 	if err := enforceToolPolicy(allowed, p.Name); err != nil {
 		return rpc.NewError(hostID, errcodes.RequestRejected, err.Error(), nil), nil
 	}
@@ -410,15 +412,15 @@ func (a *Aggregator) ToolsCall(ctx context.Context, hostID json.RawMessage, para
 		"arguments": argsForForward,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("aggregate: marshal tools/call forward params: %w", err)
+		return nil, fmt.Errorf("multiplex: marshal tools/call forward params: %w", err)
 	}
 	callCtx, cancel := context.WithTimeout(ctx, a.callTimeout)
 	defer cancel()
-	bctx, bspan := telemetry.StartSpan(callCtx, "mcp.backend.call")
+	bctx, bspan := telemetry.StartSpan(callCtx, telemetry.SpanBackendCall)
 	defer bspan.End()
 	bspan.SetAttributes(attribute.String("backend_id", b.ID()))
 	req := &rpc.Request{
-		JSONRPC: rpc.Version,
+		JSONRPC: rpc.JSONRPCVersion,
 		Method:  "tools/call",
 		ID:      hostID,
 		Params:  forwardParams,
@@ -438,16 +440,16 @@ func coalesceArgs(a json.RawMessage) json.RawMessage {
 	return a
 }
 
-func (a *Aggregator) semanticRoutingSignal(ctx context.Context, toolName string, args json.RawMessage) router.RoutingSignal {
+func (a *Multiplexer) semanticRoutingSignal(ctx context.Context, toolName string, args json.RawMessage) router.RoutingSignal {
 	a.catMu.RLock()
 	ver := a.catVer
 	a.catMu.RUnlock()
-	allowedList := ingress.AllowedToolsFromContext(ctx)
+	allowedList := hostctx.AllowedToolNamesFromContext(ctx)
 	return router.RoutingSignal{
 		Method:         "tools/call",
 		ToolName:       toolName,
 		ArgumentsJSON:  args,
-		IntentText:     ingress.MCPIntentFromContext(ctx),
+		IntentText:     hostctx.ClientIntentFromContext(ctx),
 		AllowedTools:   allowedList,
 		CatalogVersion: ver,
 	}

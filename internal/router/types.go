@@ -39,7 +39,7 @@ type RoutingSignal struct {
 
 type RoutingDecision struct {
 	Outcome            RoutingOutcome
-	BackendID          string
+	UpstreamID         string
 	ToolNameNamespaced string
 	Confidence         float64
 	Candidates         []ScoredTool

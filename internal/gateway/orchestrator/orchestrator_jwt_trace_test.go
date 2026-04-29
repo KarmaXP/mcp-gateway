@@ -25,12 +25,12 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/auth"
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
-	"github.com/KarmaXP/mcp-gateway/internal/gateway/aggregate"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/httpserver"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
 
-func TestJWTAuthAndOTelHTTPMiddlewareProduceSpans(t *testing.T) {
+func TestHTTPServerOptionsJWTAndOTelProduceSpans(t *testing.T) {
 	rec := tracetest.NewSpanRecorder()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(rec))
 	otel.SetTracerProvider(tp)
@@ -45,16 +45,16 @@ func TestJWTAuthAndOTelHTTPMiddlewareProduceSpans(t *testing.T) {
 	der, err := x509.MarshalPKIXPublicKey(&priv.PublicKey)
 	require.NoError(t, err)
 	pubPEM := string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}))
-	cfg := auth.Config{Mode: "jwt", Issuer: "iss", Audience: "aud", PublicKeyPEM: pubPEM}
+	cfg := auth.JWTAuthConfig{Mode: "jwt", Issuer: "iss", Audience: "aud", PublicKeyPEM: pubPEM}
 	v, err := auth.NewValidator(cfg)
 	require.NoError(t, err)
 
-	b1 := mock.New("b1", "alpha", []string{"echo"})
-	b2 := mock.New("b2", "beta", []string{"ping"})
-	agg, err := aggregate.New([]backend.Backend{b1, b2}, aggregate.WithListTTL(0))
+	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
+	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
+	agg, err := multiplex.New([]backend.Upstream{b1, b2}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
-	opts := HTTPMiddlewareOptions("mcp-gateway-test", cfg, v)
+	opts := HTTPServerOptions("mcp-gateway-test", cfg, v)
 	srv := httpserver.New(agg, "", opts...)
 	ts := httptest.NewServer(srv)
 	defer ts.Close()
@@ -73,11 +73,11 @@ func TestJWTAuthAndOTelHTTPMiddlewareProduceSpans(t *testing.T) {
 	ctx, cancelSSE := context.WithCancel(context.Background())
 	defer cancelSSE()
 	client := ts.Client()
-	sseReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+"/mcp/sse", nil)
+	sseReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+httpserver.PathMCPSSE, nil)
 	sseReq.Header.Set("Authorization", authz)
 	sseResp, err := client.Do(sseReq)
 	require.NoError(t, err)
-	sid := sseResp.Header.Get("Mcp-Session-Id")
+	sid := sseResp.Header.Get(httpserver.HeaderMCPSessionID)
 	require.NotEmpty(t, sid)
 
 	dataCh := make(chan string, 16)
@@ -99,8 +99,8 @@ func TestJWTAuthAndOTelHTTPMiddlewareProduceSpans(t *testing.T) {
 	}()
 
 	post := func(jsonBody string) {
-		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp/rpc", strings.NewReader(jsonBody))
-		req.Header.Set("Mcp-Session-Id", sid)
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+httpserver.PathMCPRPC, strings.NewReader(jsonBody))
+		req.Header.Set(httpserver.HeaderMCPSessionID, sid)
 		req.Header.Set("Authorization", authz)
 		req.Header.Set("Content-Type", "application/json")
 		pr, err := client.Do(req)
