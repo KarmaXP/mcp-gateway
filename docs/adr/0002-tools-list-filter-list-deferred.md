@@ -11,7 +11,7 @@ The architecture plan describes two router-adjacent `tools/list` behaviors:
 - **`assist_list` (implemented):** the host receives the full aggregated catalog; semantic routing applies on `tools/call` only.
 - **`filter_list` (Tier 2):** `tools/list` would return a subset of tools filtered by session intent (similarity, policy, or session state).
 
-Tier 1 hardening prioritizes **multiplexer correctness**, **MCP spec parity** (e.g. `ping`, transport), **intent ingress** for `tools/call`, and **observable router layers**. `filter_list` requires additional contracts: stable session intent before list, catalog consistency when the filtered view diverges from the vector index, and host UX when the list changes mid-session.
+Tier 1 hardening prioritizes **multiplexer correctness**, **MCP spec parity** (e.g. `ping`, transport), **request-scoped intent** (`X-MCP-Intent` via `hostctx`) for `tools/call`, and **observable router layers**. `filter_list` requires additional contracts: stable session intent before list, catalog consistency when the filtered view diverges from the vector index, and host UX when the list changes mid-session.
 
 ## Decision
 
@@ -25,5 +25,5 @@ Tier 1 hardening prioritizes **multiplexer correctness**, **MCP spec parity** (e
 ## References
 
 - `docs/architecture/mcp_gateway.plan.md` — `tools/list` modes and `IntentText`
-- `internal/gateway/aggregate` — aggregated `tools/list`
+- `internal/gateway/multiplex` — merged `tools/list`
 - `internal/router` — semantic routing on `tools/call`

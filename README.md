@@ -12,10 +12,10 @@ flowchart LR
   subgraph Gateway["mcp-gateway (Go)"]
     HTTP[HTTPServer\nSSE + POST /mcp/rpc]
     Sess[Session Manager]
-    Agg[Aggregator]
+    Mpx[Multiplexer]
     R[Semantic Router]
-    HTTP --> Sess --> Agg
-    Agg --> R
+    HTTP --> Sess --> Mpx
+    Mpx --> R
   end
   subgraph Backends
     B1[MCP Backend A]
@@ -27,8 +27,8 @@ flowchart LR
   end
   OTel[OTLP\nTempo · Prometheus · Grafana]
   H <-- text/event-stream + JSON-RPC --> HTTP
-  Agg --> B1
-  Agg --> B2
+  Mpx --> B1
+  Mpx --> B2
   R --> E
   R --> Q
   Gateway -. traces / metrics .-> OTel
@@ -36,7 +36,7 @@ flowchart LR
 
 - **Ingress:** `GET /mcp/sse` opens the session; JSON-RPC **responses** (for requests with `id`) are pushed as **SSE named events** `event: jsonrpc` with a single-line JSON-RPC object in `data:` (see OpenAPI). `POST /mcp/rpc` accepts one request per call (`202` when accepted).
 - **Intent for routing:** Optional header **`X-MCP-Intent`** on `POST /mcp/rpc` is forwarded into the semantic router as `RoutingSignal.IntentText` for **`tools/call`** (improves recall when the tool name is vague). Omitted header means empty intent.
-- **Core:** `internal/gateway/aggregate` merges `initialize` and `tools/list`; `tools/call` is forwarded with stable namespacing (`prefix__tool`).
+- **Core:** `internal/gateway/multiplex` (`Multiplexer`) merges `initialize` and `tools/list`; `tools/call` is forwarded with stable namespacing (`prefix__tool`).
 - **Router:** `internal/router` optionally rewrites ambiguous tool names using embeddings + vector search (see [ADR 0001](docs/adr/0001-architecture-decisions.md)). **`filter_list`** (intent-filtered `tools/list`) is explicitly **deferred** to Phase 3 — [ADR 0002](docs/adr/0002-tools-list-filter-list-deferred.md).
 
 ## Why this stack

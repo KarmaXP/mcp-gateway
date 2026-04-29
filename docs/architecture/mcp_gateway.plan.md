@@ -115,7 +115,7 @@ Expanded implementation specification. This component is the **gateway core**: a
 
 - Accept connections from the **MCP host** (gateway client) according to the chosen remote MCP transport (in this design: HTTP + **Server-Sent Events** for the message session).
 - Maintain the host **session lifecycle**: from the first `initialize` until stream close or administrative timeout.
-- Translate each incoming host **JSON-RPC 2.0** message into one or more backend operations: forward, aggregate, or controlled fan-out per MCP method.
+- Translate each incoming host **JSON-RPC 2.0** message into one or more backend operations: forward, merge (via the multiplexer), or controlled fan-out per MCP method.
 - Apply **stable namespacing** on tool names (and, when the design extends to resources/prompts) so the host never sees collisions between two distinct servers.
 - Correlate **JSON-RPC identifiers** (request/response `id` and, if applicable, internal sub-ids) end-to-end host ↔ gateway ↔ backend so notifications and responses do not mix across clients or backends.
 - Manage **concurrency** with goroutines and `context.Context`: cascade cancellation when the host closes the connection or when a backend fails in a way that should abort the in-flight request (policy configurable per method).
@@ -165,7 +165,7 @@ Expanded implementation specification. This component is the **gateway core**: a
 
 **`tools/list`:**
 
-- The gateway may cache the aggregated catalog with TTL or invalidate on backend reconnect.
+- The gateway may cache the merged tool catalog with TTL or invalidate on backend reconnect.
 - Flow: for each connected backend, obtain native `tools/list`, **prefix** each `name`, merge lists, dedupe by fully prefixed name; full-name conflicts after prefix are impossible if configured prefixes are unique (golden rule).
 
 **`tools/call`:**
@@ -226,9 +226,8 @@ flowchart TB
 
 | Package                      | Intended contents                                                |
 | ---------------------------- | ---------------------------------------------------------------- |
-| `internal/gateway/session`   | Host sessions, `id` map registry, serialized SSE writes          |
-| `internal/gateway/dispatch`  | Route by `method` to handlers                                    |
-| `internal/gateway/aggregate` | `initialize` / `tools/list` merge, cache invalidation            |
+| `internal/gateway/session`   | Host sessions, `id` map registry, serialized SSE writes, method dispatch |
+| `internal/gateway/multiplex` | `initialize` / `tools/list` merge, cache invalidation            |
 | `internal/gateway/namespace` | Prefix/strip, character validation and uniqueness                |
 | `internal/backend`           | `Backend`, `Connect` interfaces, timeouts, health                |
 | `internal/rpc`               | JSON-RPC 2.0 parse/validate (mandatory unit tests §6)            |
@@ -236,7 +235,7 @@ flowchart TB
 
 #### A.7 Orchestrator-specific acceptance criteria (Phase 1)
 
-- Complete `initialize` handshake to the host with at least **two** mock backends and a namespaced aggregated catalog.
+- Complete `initialize` handshake to the host with at least **two** mock backends and a namespaced merged catalog.
 - `tools/list` returns a stable ordered union (convention: order by configured prefix, then native name).
 - `tools/call` for tool `pref__tool` hits only the correct backend and the mock receives name `tool`.
 - Unit tests for **prefix/strip mapping** and **preserved `id`** in responses.
@@ -244,7 +243,7 @@ flowchart TB
 
 ### B. Semantic router — P1 (high)
 
-The **semantic router** reduces **context noise** for the agent when the aggregated tool catalog is large (multiple silos × dozens of tools). It does not replace the orchestrator: it **filters, disambiguates, and chooses destination** before the multiplexer performs prefix `strip` and backend forward per §3.A. It runs **inside** the gateway; the MCP host still has a single endpoint and a single aggregated `tools/list`, except optional modes documented below.
+The **semantic router** reduces **context noise** for the agent when the merged tool catalog is large (multiple silos × dozens of tools). It does not replace the orchestrator: it **filters, disambiguates, and chooses destination** before the multiplexer performs prefix `strip` and backend forward per §3.A. It runs **inside** the gateway; the MCP host still has a single endpoint and a single merged `tools/list`, except optional modes documented below.
 
 #### B.1 Responsibility
 
@@ -275,11 +274,11 @@ type RoutingSignal struct {
   ArgumentsJSON   json.RawMessage   // MCP arguments
   IntentText      string            // optional: free text or last user message if host forwards it
   AllowedTools    []string          // optional: subset imposed by §3.C
-  CatalogVersion  string            // hash of aggregated tools/list to invalidate index cache
+  CatalogVersion  string            // hash of merged tools/list to invalidate index cache
 }
 
 type RoutingDecision struct {
-  BackendID           string
+  UpstreamID          string
   ToolNameNamespaced  string
   Confidence          float64       // 0..1 or normalized score
   Candidates          []ScoredTool  // top-K for logs / explainability
@@ -329,7 +328,7 @@ type ScoredTool struct {
 
 **Phase 1 — Catalog ingestion (trigger: change in §3.A aggregation):**
 
-1. When a new aggregated `tools/list` completes (or on a refresh interval), **CatalogIndexer** serializes each tool into a normalized **text document** (fixed template: name, description, parameters, silo).
+1. When a new merged `tools/list` completes (or on a refresh interval), **CatalogIndexer** serializes each tool into a normalized **text document** (fixed template: name, description, parameters, silo).
 2. Compute **embedding** per document (batch) and write to the Vector DB with metadata: `tool_name_namespaced`, `backend_id`, `catalog_version`.
 3. Invalidate L1 in-memory cache queries tied to the previous `catalog_version`.
 
@@ -438,7 +437,7 @@ The security layer implements **authentication**, **per-tool authorization**, an
 
 - **Authentication (AuthN)** of the gateway client: validate credential presentation on the HTTP transport carrying MCP (e.g. `Authorization: Bearer <JWT>` header or client mTLS in corporate deployments). Resolve **subject identity** (`sub`), **issuer** (`iss`), **audience** (`aud`), validity, and if applicable **tenancy** (org, cluster) via agreed claims.
 - **Authorization (AuthZ)** at **namespaced MCP tool** level (`prom__query_range`, `k8s__get_logs`, …): decide whether the subject may **invoke** that specific tool, not only whether they can “talk to the gateway”.
-- **Granular consent** modeled with **Rich Authorization Requests (RAR)** or another documented equivalent: the token or authorization session must reflect **which tools** (or logical tool groups) were accepted by the user or corporate policy, avoiding one broad scope enabling the whole aggregated catalog.
+- **Granular consent** modeled with **Rich Authorization Requests (RAR)** or another documented equivalent: the token or authorization session must reflect **which tools** (or logical tool groups) were accepted by the user or corporate policy, avoiding one broad scope enabling the whole merged catalog.
 - **Argument validation** for `tools/call` against per-tool **JSON Schema** **before** forwarding to the backend (golden rule reinforced in C.4): types, ranges, patterns, `required`, `additionalProperties: false` where appropriate.
 - **Security audit**: structured logging of denials, requested tool, policy version, `sub` (hashed or truncated for privacy), without dumping sensitive arguments in clear except explicit debug policy.
 - **Supply to §3.B** the `AllowedTools` subset derived from effective policy after AuthZ so vector search **never** promotes forbidden tools.
@@ -506,8 +505,8 @@ Parsed JSON-RPC → C.AuthN → C.AuthZ per method/tool → C.JSONSchema(args) �
 
 | Method         | Security actions                                                                                                                                                   |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `initialize`   | Client AuthN; optionally restrict `clientInfo` or versions; do not expose sensitive backend capabilities in the aggregated result if policy forbids.                 |
-| `tools/list`   | Filter the aggregated list **before** sending to the host: only tools ∈ `AllowedTools` (reduces surface metadata leakage).                                          |
+| `initialize`   | Client AuthN; optionally restrict `clientInfo` or versions; do not expose sensitive backend capabilities in the merged result if policy forbids.                 |
+| `tools/list`   | Filter the merged list **before** sending to the host: only tools ∈ `AllowedTools` (reduces surface metadata leakage).                                          |
 | `tools/call`   | AuthZ by tool name; JSON Schema validation; optionally `arguments` size limits (bytes and JSON depth) before schema.                                              |
 | Notifications  | Define whether they require the same Bearer; default **yes** on the same HTTP/SSE session.                                                                         |
 
@@ -520,7 +519,7 @@ Parsed JSON-RPC → C.AuthN → C.AuthZ per method/tool → C.JSONSchema(args) �
 
 **JSON Schema flow:**
 
-1. During **catalog ingestion** (with §3.A / aggregated `tools/list`), attach an optional per-tool **input schema**: from static config, backend metadata if exposed, or default “free object” only in dev (must be explicit).
+1. During **catalog ingestion** (with §3.A / merged `tools/list`), attach an optional per-tool **input schema**: from static config, backend metadata if exposed, or default “free object” only in dev (must be explicit).
 2. On `tools/call`, after AuthZ, run a validator for the chosen **JSON Schema draft** (e.g. 2020-12); reject on failure.
 3. **Performance:** cache compiled schemas by `tool_name` + `schema_version`.
 
@@ -589,7 +588,7 @@ Common Go ecosystem libraries (implementation reference, not prescriptive): `git
 
 - Invalid JWT (signature, `exp`) → stable JSON-RPC response without calling backends.
 - Tool not consented → `PERMISSION_DENIED` without forward; audit event emitted.
-- `tools/list` for a test subject returns **only** the authorized subset against a larger aggregated catalog.
+- `tools/list` for a test subject returns **only** the authorized subset against a larger merged catalog.
 - Unit cases: 3+ schemas (valid, wrong type, extra field with `additionalProperties: false`) for an example tool.
 - OpenAPI/Swagger or security README: required headers, expected claims, example RAR `authorization_details` for two tools.
 
@@ -636,7 +635,7 @@ The **observability engine** provides correlated **distributed traces**, **metri
 | `mcp.validate.json_schema`                              | Argument validation                                           | `mcp.host.request`                                                     |
 | `mcp.router.semantic`                                   | Signal–Decision pipeline §3.B                                 | `mcp.host.request`                                                     |
 | `mcp.backend.call`                                      | One invocation per participating backend                      | `mcp.host.request`                                                     |
-| `mcp.aggregate.initialize` / `mcp.aggregate.tools_list` | Multi-backend negotiation or aggregation                      | `mcp.host.request`                                                     |
+| `mcp.multiplex.initialize` / `mcp.multiplex.tools_list` | Multi-backend negotiation or merge                              | `mcp.host.request`                                                     |
 
 
 **Recommended standard attributes (OTel semantics + MCP domain):**
@@ -700,14 +699,14 @@ flowchart TB
   authz[mcp_security_authz]
   val[mcp_validate_json_schema]
   rtr[mcp_router_semantic]
-  agg[mcp_aggregate_optional]
+  mpx[mcp_multiplex_optional]
   be1[mcp_backend_call_B1]
   be2[mcp_backend_call_B2]
   root --> authn
   root --> authz
   root --> val
   root --> rtr
-  root --> agg
+  root --> mpx
   root --> be1
   root --> be2
 ```
@@ -811,7 +810,7 @@ This subsection records **stack choices already reflected in this repository** v
 - **Concrete HTTP surface of the gateway:** the plan states the pattern generically; **repo implements** `GET /mcp/sse`, `POST /mcp/rpc`, session header **`Mcp-Session-Id`** (document in OpenAPI when added).
 - **SSE format:** event names (`event:`), `data` field structure (raw JSON vs envelope), **heartbeats** and read/write timeouts.
 - **TLS:** termination at ingress vs TLS in the binary; certificate policy academic vs corporate.
-- **Limits:** max JSON-RPC body size, max time for an aggregated `tools/call`, stream **backpressure**.
+- **Limits:** max JSON-RPC body size, max time for a **multiplexed** `tools/call`, stream **backpressure**.
 - **Compatibility with test host** (Cursor, other MCP client): which host deployments use and any transport constraints.
 
 **Closure criteria:** reproducible PoC (`docker compose up` + documented client); capture of a full `initialize` trace in text or appendix.
@@ -896,7 +895,7 @@ This subsection records **stack choices already reflected in this repository** v
 
 - **`jsonrpc` `id` strategy:** **strict preservation** of host `id` on the forward path (notifications omit `id`; `id: null` rejected at parse).
 - **`initialize` with partially down backends:** **omit** failed backends from merge; **JSON-RPC error to host only if all fail** (R6).
-- **Aggregated `tools/list` cache:** TTL configurable (`aggregate.WithListTTL`); **invalidated after successful `initialize`**.
+- **Merged `tools/list` cache:** TTL configurable (`multiplex.WithListTTL`); **invalidated after successful `initialize`**.
 - **Namespacing separator:** **`__`** (double underscore); native names containing the separator are **rejected** (`internal/gateway/namespace`).
 - **Gateway application error codes:** stable constants in **`internal/gateway/errcodes`** (see package doc).
 
@@ -983,7 +982,7 @@ Items **5–7** remain **open** until design and implementation close the remain
 ## 5. Implementation guide — handshake (lifecycle)
 
 1. **Step 1:** Client sends `initialize` (relevant MCP fields, timeouts, retries).
-2. **Step 2:** Gateway runs **synthetic negotiation**: query backends (or cache), aggregate capabilities, apply namespacing and policies, build a single MCP-conformant response.
+2. **Step 2:** Gateway runs **synthetic negotiation**: query backends (or cache), merge capabilities (multiplexer), apply namespacing and policies, build a single MCP-conformant response.
 3. **Step 3:** Response to host and establishment of the **SSE channel**; JSON-RPC `id` correlation in events; close and errors.
 
 **Mermaid diagram:** sequence of the three steps. **Bibliography:** links to MCP spec and JSON-RPC 2.0.
@@ -1006,7 +1005,7 @@ Items **5–7** remain **open** until design and implementation close the remain
 | Phase                     | Scope                                                   | Exit criteria                                                                |
 | ------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | **1 (incl. 10 Apr milestone)** | Walking skeleton: core + handshake + Docker/Compose     | Stable `initialize`; JSON-RPC parser with tests; compose with gateway + mocks |
-| **2**                     | Semantic router + **Qdrant** (Compose / Go client)      | Measurable Signal–Decision; index populated from aggregated catalog §3.A      |
+| **2**                     | Semantic router + **Qdrant** (Compose / Go client)      | Measurable Signal–Decision; index populated from merged catalog §3.A      |
 | **3**                     | Security (OIDC, RAR, JSON Schema) + OTel                | Per-tool policies; hierarchical exportable spans                              |
 
 

@@ -37,7 +37,7 @@ info:
     | -32601 | `MethodNotFound` | Method not supported on this session. |
     | -32602 | `InvalidParams` | Malformed or invalid `params` (e.g. `tools/call`). |
     | -32603 | `InternalError` | Standard JSON-RPC server error (reserved by spec). |
-    | -32000 | `GatewayInternal` | Upstream/aggregate failure, transport error, or initialize/tools failure. |
+    | -32000 | `GatewayInternal` | Upstream/multiplex failure, transport error, or initialize/tools failure. |
     | -32001 | `HandshakeIncomplete` | `tools/*` before `initialize` + `notifications/initialized`. |
     | -32002 | `RequestRejected` | Middleware or policy rejected the request. |
     | -32004 | `ToolRoutingAmbiguous` | Semantic router could not pick a unique tool (threshold, ambiguity, rename policy). |
