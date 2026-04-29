@@ -29,7 +29,6 @@ func routerModeActive(cfg config.Config) bool {
 	return mode == "on" || mode == "assist_list"
 }
 
-// preflightQdrant logs reachability when the semantic router is enabled; does not exit on failure.
 func preflightQdrant(cfg config.Config) {
 	if !routerModeActive(cfg) {
 		return

@@ -83,7 +83,6 @@ func TestValidator_JWKSMissingKid(t *testing.T) {
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
 		IssuedAt:  jwt.NewNumericDate(time.Now().Add(-time.Minute)),
 	})
-	// kid omitted on purpose
 	signed, err := tok.SignedString(priv)
 	require.NoError(t, err)
 

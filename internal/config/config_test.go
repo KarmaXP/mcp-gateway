@@ -33,7 +33,6 @@ backends:
 
 func TestLoadBackendsJSONOnly(t *testing.T) {
 	t.Setenv("MCP_GATEWAY_CONFIG", "") // no file
-	// prevent picking up gateway.yaml from repo if present
 	t.Chdir(t.TempDir())
 	raw, _ := json.Marshal([]Backend{
 		{ID: "x", Prefix: "p", URL: "http://localhost:1"},

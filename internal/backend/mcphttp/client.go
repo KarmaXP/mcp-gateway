@@ -1,4 +1,3 @@
-// Package mcphttp implements backend.Backend over MCP HTTP+SSE (same contract as this gateway's /mcp/sse + /mcp/rpc).
 package mcphttp
 
 import (
@@ -17,7 +16,6 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
 
-// Client is a long-lived MCP HTTP+SSE upstream session with per-call concurrency limiting.
 type Client struct {
 	id     string
 	prefix string
@@ -28,7 +26,6 @@ type Client struct {
 	client    *http.Client
 	sem       *semaphore.Weighted
 
-	// sessID and read loop
 	sessID     string
 	readCancel context.CancelFunc
 	readWG     sync.WaitGroup
@@ -39,8 +36,6 @@ type Client struct {
 	pending map[string]chan *rpc.Response
 }
 
-// New constructs an upstream client. cleanup should be invoked on shutdown (cancels the SSE reader).
-// maxConcurrency defaults to 8 when <= 0.
 func New(lifecycle context.Context, id, prefix, baseURL string, maxConcurrency int64, bearerToken string) (*Client, func(), error) {
 	if lifecycle == nil {
 		lifecycle = context.Background()
@@ -58,7 +53,6 @@ func New(lifecycle context.Context, id, prefix, baseURL string, maxConcurrency i
 		base:      baseURL,
 		token:     strings.TrimSpace(bearerToken),
 		lifecycle: lifecycle,
-		// No client Timeout: SSE body is long-lived; per-request deadlines come from context.
 		client: &http.Client{
 			Transport: http.DefaultTransport,
 		},
@@ -82,14 +76,12 @@ func (c *Client) setAuth(req *http.Request) {
 }
 
 func (c *Client) ensureSession(callCtx context.Context) error {
-	_ = callCtx // POST/wait honor callCtx; SSE GET must stay alive on lifecycle only (see connectLocked).
+	_ = callCtx
 	c.connOnce.Do(func() { c.connErr = c.connectLocked() })
 	return c.connErr
 }
 
 func (c *Client) connectLocked() error {
-	// Long-lived stream: never tie the GET request to a single Call's deadline — cancelling that
-	// context after ensureSession returns would close the body and kill the SSE reader.
 	req, err := http.NewRequestWithContext(c.lifecycle, http.MethodGet, c.sseURL(), nil)
 	if err != nil {
 		return err
@@ -244,7 +236,6 @@ func (c *Client) postRPC(ctx context.Context, req *rpc.Request) error {
 	return nil
 }
 
-// Call performs one JSON-RPC round-trip via POST + matching SSE jsonrpc event.
 func (c *Client) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
 	if err := c.sem.Acquire(ctx, 1); err != nil {
 		return nil, err

@@ -11,7 +11,6 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 )
 
-// errStore delegates Upsert then fails Query (simulates Qdrant timeout / unavailable).
 type errStore struct {
 	inner *store.Memory
 	err   error

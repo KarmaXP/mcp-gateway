@@ -5,7 +5,6 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/router/index"
 )
 
-// SyntheticCatalog returns ≥20 tools with distinct descriptions for Phase-2 style benchmarks.
 func SyntheticCatalog() []router.CatalogEntry {
 	rows := []struct {
 		prefix, native, desc string
@@ -51,7 +50,6 @@ func SyntheticCatalog() []router.CatalogEntry {
 	return out
 }
 
-// GoldenCases returns intent phrases; WantTool is the namespaced tool id the router should select.
 func GoldenCases() []struct {
 	Intent   string
 	WantTool string
@@ -64,7 +62,6 @@ func GoldenCases() []struct {
 		Allowed  []string
 	}, 0, len(cat))
 	for _, e := range cat {
-		// Use description wording so lexical overlap with indexed document is high.
 		intent := e.ToolRow.Description
 		cases = append(cases, struct {
 			Intent   string

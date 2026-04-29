@@ -16,7 +16,6 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 )
 
-// mapEmbed returns a fixed vector for mapped keys; otherwise e1 = (1,0,0,…).
 type mapEmbed struct {
 	vecs map[string][]float32
 	dim  int
@@ -39,7 +38,6 @@ func (m *mapEmbed) Embed(ctx context.Context, texts []string) ([][]float32, erro
 	return out, nil
 }
 
-// embedCtxDone fails Embed if ctx is already canceled (mirrors real HTTP clients after errgroup.Wait).
 type embedCtxDone struct {
 	inner *mapEmbed
 }
@@ -102,7 +100,6 @@ func TestAggregateSemanticRouterExactMatch(t *testing.T) {
 }
 
 func TestAggregateSemanticRouterAmbiguousReturnsCode(t *testing.T) {
-	// Two tools receive identical vectors → tie after vector search.
 	b1 := mock.New("b1", "p", []string{"echo", "list"})
 	emb := &mapEmbed{dim: 4, vecs: map[string][]float32{}}
 	eng, _ := routerTestEngine(t, emb, 0.5, true)

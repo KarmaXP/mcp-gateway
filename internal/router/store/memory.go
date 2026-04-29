@@ -6,7 +6,6 @@ import (
 	"sync"
 )
 
-// Memory is a thread-safe in-memory Store for tests and dev without Qdrant (dimension must match embeddings).
 type Memory struct {
 	dim int
 
@@ -14,7 +13,6 @@ type Memory struct {
 	points []Point
 }
 
-// NewMemory creates an empty store. All vectors must have length dim.
 func NewMemory(dim int) *Memory {
 	return &Memory{dim: dim}
 }
@@ -32,7 +30,6 @@ func (m *Memory) Upsert(ctx context.Context, points []Point) error {
 	return nil
 }
 
-// DeleteCatalogVersion removes points for a version (full rebuild pattern).
 func (m *Memory) DeleteCatalogVersion(ctx context.Context, version string) error {
 	_ = ctx
 	m.mu.Lock()
@@ -47,7 +44,6 @@ func (m *Memory) DeleteCatalogVersion(ctx context.Context, version string) error
 	return nil
 }
 
-// Query applies Filter in the scan, then ranks by cosine similarity.
 func (m *Memory) Query(ctx context.Context, vector []float32, topK int, filter Filter) ([]Result, error) {
 	_ = ctx
 	if len(vector) != m.dim {
@@ -120,7 +116,6 @@ func cosineSim(a, b []float32) float64 {
 	return dot
 }
 
-// L2 normalises v in place; returns false if norm is zero.
 func L2Normalize(v []float32) bool {
 	var s float64
 	for _, x := range v {

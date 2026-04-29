@@ -31,7 +31,6 @@ func TestInitWithOTLPEndpointDoesNotFailWhenCollectorUnreachable(t *testing.T) {
 
 	ctx2, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	// Unreachable collector: shutdown may return export errors; process must not require a healthy collector at exit.
 	if err := shutdown(ctx2); err != nil {
 		require.Contains(t, err.Error(), "127.0.0.1:9")
 	}

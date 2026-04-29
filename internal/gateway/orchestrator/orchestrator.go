@@ -1,4 +1,3 @@
-// Package orchestrator wires the production HTTP pipeline: Auth → OpenTelemetry → gateway mux.
 package orchestrator
 
 import (
@@ -10,7 +9,6 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/httpserver"
 )
 
-// HTTPMiddlewareOptions returns middleware in outer→inner order: auth, then OTel HTTP tracing, then the gateway mux.
 func HTTPMiddlewareOptions(serviceName string, authCfg auth.Config, v *auth.Validator) []httpserver.Option {
 	if serviceName == "" {
 		serviceName = "mcp-gateway"

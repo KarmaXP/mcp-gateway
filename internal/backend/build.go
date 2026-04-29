@@ -15,8 +15,6 @@ var (
 	_ Backend = (*mcpstdio.Client)(nil)
 )
 
-// BuildUpstreams constructs configured MCP clients (HTTP+SSE or stdio) with per-backend concurrency limits.
-// cleanup releases subprocesses and SSE readers; invoke it during process shutdown.
 func BuildUpstreams(ctx context.Context, defs []config.Backend) ([]Backend, func(), error) {
 	var cleaners []func()
 	cleanup := func() {

@@ -51,7 +51,6 @@ func TestTraceHandlerWithAttrsAndGroupStillAddsTraceID(t *testing.T) {
 
 	var buf bytes.Buffer
 	inner := slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})
-	// WithGroup nests attributes; trace_id must still be injected at the record root.
 	th := TraceHandler(inner).WithAttrs([]slog.Attr{slog.String("svc", "u")})
 	log := slog.New(th)
 	log.InfoContext(ctx, "wrapped", "k", "v")

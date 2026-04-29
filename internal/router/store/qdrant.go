@@ -12,7 +12,6 @@ import (
 	"time"
 )
 
-// Qdrant is a minimal REST client for Qdrant vector search (Cosine, fixed dimension).
 type Qdrant struct {
 	baseURL    string
 	collection string
@@ -20,7 +19,6 @@ type Qdrant struct {
 	client     *http.Client
 }
 
-// NewQdrant builds a store targeting baseURL (e.g. http://127.0.0.1:6333) and collection name.
 func NewQdrant(baseURL, collection string, vectorDim int) (*Qdrant, error) {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" || collection == "" {
@@ -80,7 +78,6 @@ func (q *Qdrant) doJSON(ctx context.Context, method, path string, body any, out 
 	return res.StatusCode, nil
 }
 
-// Upsert replaces the collection contents (same semantics as Memory: one catalog snapshot).
 func (q *Qdrant) Upsert(ctx context.Context, points []Point) error {
 	if len(points) == 0 {
 		return nil
@@ -91,7 +88,6 @@ func (q *Qdrant) Upsert(ctx context.Context, points []Point) error {
 		}
 	}
 
-	// Drop and recreate collection so the snapshot matches in-memory replace semantics.
 	delStatus, _ := q.doJSON(ctx, http.MethodDelete, "/collections/"+q.collection, nil, nil)
 	if delStatus != http.StatusOK && delStatus != http.StatusNotFound {
 		return fmt.Errorf("router/store/qdrant: delete collection: status %d", delStatus)
@@ -142,7 +138,6 @@ func (q *Qdrant) Upsert(ctx context.Context, points []Point) error {
 	return nil
 }
 
-// DeleteCatalogVersion removes points tagged with the given catalog version in payload.version.
 func (q *Qdrant) DeleteCatalogVersion(ctx context.Context, version string) error {
 	if version == "" {
 		return nil
@@ -164,7 +159,6 @@ func (q *Qdrant) DeleteCatalogVersion(ctx context.Context, version string) error
 	return nil
 }
 
-// Query runs cosine similarity search with mandatory filters (catalog + optional allow-list).
 func (q *Qdrant) Query(ctx context.Context, vector []float32, topK int, filter Filter) ([]Result, error) {
 	if len(vector) != q.dim {
 		return nil, ErrDimensionMismatch
@@ -222,7 +216,6 @@ func (q *Qdrant) Query(ctx context.Context, vector []float32, topK int, filter F
 	return out, nil
 }
 
-// PingCollections checks that the Qdrant HTTP API is reachable (GET /collections).
 func PingCollections(ctx context.Context, baseURL string) error {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" {

@@ -7,7 +7,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// TraceHandler wraps inner so Handle attaches trace_id when ctx carries a valid SpanContext.
 func TraceHandler(inner slog.Handler) slog.Handler {
 	return traceHandler{inner: inner}
 }

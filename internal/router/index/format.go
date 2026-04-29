@@ -1,4 +1,3 @@
-// Package index builds deterministic embedding text from catalog rows (stable template).
 package index
 
 import (
@@ -10,14 +9,12 @@ import (
 
 const TemplateVersion = "v1"
 
-// ToolRow is one tool from an aggregated MCP tools/list JSON result.
 type ToolRow struct {
 	Name        string
 	Description string
 	ParamKeys   []string
 }
 
-// FormatDocument renders the canonical text stored per tool for indexing.
 func FormatDocument(t ToolRow) string {
 	sort.Strings(t.ParamKeys)
 	params := strings.Join(t.ParamKeys, ", ")
@@ -28,7 +25,6 @@ func FormatDocument(t ToolRow) string {
 		t.Name, t.Description, params, TemplateVersion)
 }
 
-// FormatQuery builds embedding text for a tools/call request.
 func FormatQuery(toolName string, intent string, argumentKeys []string) string {
 	sort.Strings(argumentKeys)
 	ak := strings.Join(argumentKeys, ", ")
@@ -42,7 +38,6 @@ func FormatQuery(toolName string, intent string, argumentKeys []string) string {
 	return fmt.Sprintf("Intent: %s\nToolName: %s\nArgumentKeys: %s", intent, toolName, ak)
 }
 
-// ParseToolsListJSON extracts tool rows from tools/list `result` JSON.
 func ParseToolsListJSON(raw []byte) ([]ToolRow, error) {
 	var wrap struct {
 		Tools []struct {

@@ -1,4 +1,3 @@
-// Package aggregate merges initialize and tools/list across backends and forwards tools/call.
 package aggregate
 
 import (
@@ -27,7 +26,6 @@ import (
 
 var errNoBackends = errors.New("aggregate: no backends responded to initialize")
 
-// Aggregator merges initialize and tools/list across backends in configured order (stable prefix order).
 type Aggregator struct {
 	backends []backend.Backend
 	byPrefix map[string]backend.Backend
@@ -41,44 +39,37 @@ type Aggregator struct {
 	cachedAt   time.Time
 	listTTL    time.Duration
 
-	semantic *router.Engine // optional semantic router
+	semantic *router.Engine
 
 	catMu  sync.RWMutex
-	catVer string // sha256 of last aggregated tools/list JSON (for optional client pinning)
+	catVer string
 
 	schemaMu       sync.RWMutex
-	toolValidators map[string]*jsonschema.Schema // namespaced tool -> compiled inputSchema
+	toolValidators map[string]*jsonschema.Schema
 }
 
-// Option configures the aggregator.
 type Option func(*Aggregator)
 
-// WithInitTimeout sets per-backend initialize deadline.
 func WithInitTimeout(d time.Duration) Option {
 	return func(a *Aggregator) { a.initTimeout = d }
 }
 
-// WithListTimeout sets per-backend tools/list deadline.
 func WithListTimeout(d time.Duration) Option {
 	return func(a *Aggregator) { a.listTimeout = d }
 }
 
-// WithCallTimeout sets per-backend tools/call deadline.
 func WithCallTimeout(d time.Duration) Option {
 	return func(a *Aggregator) { a.callTimeout = d }
 }
 
-// WithListTTL sets cache TTL for aggregated tools/list (0 disables cache).
 func WithListTTL(d time.Duration) Option {
 	return func(a *Aggregator) { a.listTTL = d }
 }
 
-// WithSemanticRouter attaches the router engine (nil-safe; ModeOff is a no-op).
 func WithSemanticRouter(e *router.Engine) Option {
 	return func(a *Aggregator) { a.semantic = e }
 }
 
-// New builds an aggregator. Backend prefixes must be unique.
 func New(backends []backend.Backend, opts ...Option) (*Aggregator, error) {
 	byPrefix := make(map[string]backend.Backend, len(backends))
 	for _, b := range backends {
@@ -105,7 +96,6 @@ func New(backends []backend.Backend, opts ...Option) (*Aggregator, error) {
 	return a, nil
 }
 
-// PrefixToBackendID returns the mapping used for tools/call resolution.
 func (a *Aggregator) PrefixToBackendID() map[string]string {
 	m := make(map[string]string, len(a.backends))
 	for _, b := range a.backends {
@@ -114,7 +104,6 @@ func (a *Aggregator) PrefixToBackendID() map[string]string {
 	return m
 }
 
-// Initialize fans out to all backends, omits per-backend failures, and errors only if every backend fails.
 func (a *Aggregator) Initialize(ctx context.Context, hostID json.RawMessage) (*rpc.Response, error) {
 	tctx, span := telemetry.StartSpan(ctx, "mcp.aggregate.initialize")
 	defer span.End()
@@ -231,9 +220,6 @@ func shallowMerge(dst map[string]any, src any) {
 	}
 }
 
-// ToolsList returns aggregated namespaced tools in stable order: backend order, then native name.
-// When the request context carries JWT claim mcp_tools (via ingress), the list is filtered to that allow-list
-// (full catalog is still cached and used for router reindex and schema compilation).
 func (a *Aggregator) ToolsList(ctx context.Context, hostID json.RawMessage) (*rpc.Response, error) {
 	tctx, span := telemetry.StartSpan(ctx, "mcp.aggregate.tools_list")
 	defer span.End()
@@ -377,7 +363,6 @@ func (a *Aggregator) invalidateToolCache() {
 	a.schemaMu.Unlock()
 }
 
-// ToolsCall resolves the namespaced tool to a backend, strips the prefix for upstream, and preserves the JSON-RPC id.
 func (a *Aggregator) ToolsCall(ctx context.Context, hostID json.RawMessage, params json.RawMessage) (*rpc.Response, error) {
 	var p struct {
 		Name      string          `json:"name"`

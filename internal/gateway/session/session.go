@@ -1,4 +1,4 @@
-// Package session manages per-host MCP sessions: handshake state, middleware, and SSE outbound queue.
+// Package session tracks MCP handshake and dispatches JSON-RPC for one SSE connection.
 package session
 
 import (
@@ -15,13 +15,10 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
 
-// ErrUnknownSession is returned by Manager.Get when the id is not registered.
 var ErrUnknownSession = errors.New("session: unknown id")
 
-// Middleware runs before dispatch; a non-nil error becomes errcodes.RequestRejected for calls (not notifications).
 type Middleware func(ctx context.Context, req *rpc.Request) error
 
-// Manager owns host sessions keyed by id.
 type Manager struct {
 	mu          sync.RWMutex
 	sessions    map[string]*Session
@@ -29,7 +26,6 @@ type Manager struct {
 	middlewares []Middleware
 }
 
-// NewManager constructs a session manager for the given aggregator and optional middleware chain.
 func NewManager(agg *aggregate.Aggregator, mws ...Middleware) *Manager {
 	return &Manager{
 		sessions:    make(map[string]*Session),
@@ -38,7 +34,6 @@ func NewManager(agg *aggregate.Aggregator, mws ...Middleware) *Manager {
 	}
 }
 
-// Create registers a new session bound to ctx (typically the merged SSE request + shutdown context).
 func (m *Manager) Create(ctx context.Context) *Session {
 	id := uuid.NewString()
 	s := New(ctx, id, m.agg, m.middlewares)
@@ -48,7 +43,6 @@ func (m *Manager) Create(ctx context.Context) *Session {
 	return s
 }
 
-// Get returns an existing session or ErrUnknownSession.
 func (m *Manager) Get(id string) (*Session, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -59,17 +53,15 @@ func (m *Manager) Get(id string) (*Session, error) {
 	return s, nil
 }
 
-// Remove deletes a session (for example when the SSE connection ends).
 func (m *Manager) Remove(id string) {
 	m.mu.Lock()
 	delete(m.sessions, id)
 	m.mu.Unlock()
 }
 
-// Session is one host MCP connection: handshake state + outbound SSE queue.
 type Session struct {
 	id     string
-	ctx    context.Context // cancelled when the SSE connection ends
+	ctx    context.Context
 	cancel context.CancelFunc
 
 	agg *aggregate.Aggregator
@@ -83,7 +75,6 @@ type Session struct {
 	out chan []byte
 }
 
-// New builds a session. Caller must start SSE pump separately.
 func New(parent context.Context, id string, agg *aggregate.Aggregator, mws []Middleware) *Session {
 	ctx, cancel := context.WithCancel(parent)
 	return &Session{
@@ -96,15 +87,12 @@ func New(parent context.Context, id string, agg *aggregate.Aggregator, mws []Mid
 	}
 }
 
-// ID returns the session UUID string (same value as the Mcp-Session-Id header).
 func (s *Session) ID() string { return s.id }
 
-// Close cancels the session context and stops background work.
 func (s *Session) Close() {
 	s.cancel()
 }
 
-// EnqueueResponse serializes a JSON-RPC response and sends it to the SSE writer (non-blocking if buffer full — still try).
 func (s *Session) EnqueueResponse(resp *rpc.Response) error {
 	b, err := resp.Marshal()
 	if err != nil {
@@ -118,9 +106,6 @@ func (s *Session) EnqueueResponse(resp *rpc.Response) error {
 	return nil
 }
 
-// Dispatch handles one JSON-RPC request from the host (POST body).
-// reqCtx should be the HTTP request context; it is merged with the SSE session context so
-// cancellation of either the long-lived SSE connection or the POST aborts downstream work.
 func (s *Session) Dispatch(reqCtx context.Context, req *rpc.Request) error {
 	if reqCtx == nil {
 		reqCtx = context.Background()
@@ -158,7 +143,6 @@ func (s *Session) Dispatch(reqCtx context.Context, req *rpc.Request) error {
 	}
 }
 
-// mergedCancel returns a context cancelled when either parent or reqCtx is done.
 func mergedCancel(parent, reqCtx context.Context) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(parent)
 	stop := context.AfterFunc(reqCtx, cancel)
@@ -197,7 +181,6 @@ func (s *Session) handleInitialize(ctx context.Context, req *rpc.Request) error 
 	return s.EnqueueResponse(resp)
 }
 
-// handlePing implements MCP ping: JSON-RPC success with an empty object result per spec.
 func (s *Session) handlePing(ctx context.Context, req *rpc.Request) error {
 	_ = ctx
 	if req.IsNotification() {
@@ -237,5 +220,4 @@ func (s *Session) requireReady() error {
 	return nil
 }
 
-// Out returns the channel of raw JSON payloads for SSE data lines.
 func (s *Session) Out() <-chan []byte { return s.out }

@@ -1,14 +1,4 @@
-// Package httpserver is the host-facing HTTP transport: GET /mcp/sse (session + outbound events)
-// and POST /mcp/rpc (one JSON-RPC request per call).
-//
-// SSE outbound scheme (W3C Server-Sent Events): each JSON-RPC response for a request that includes
-// an "id" is sent as a named event **jsonrpc** — two field lines per event, then a blank line:
-//
-//	event: jsonrpc
-//	data: {"jsonrpc":"2.0","id":...,"result":...}  // or "error" instead of "result"
-//
-// Clients MUST parse SSE frames (event name + data payload) and treat each data line as one
-// complete JSON-RPC 2.0 response object (single line, no embedded newlines).
+// Package httpserver serves MCP over HTTP (SSE session + JSON-RPC POST).
 package httpserver
 
 import (
@@ -30,14 +20,11 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
 )
 
-// Server is the gateway HTTP front door.
 type Server struct {
 	manager *session.Manager
 	mux     *http.ServeMux
 	mws     []func(http.Handler) http.Handler
 
-	// shutdownCtx is cancelled when the process begins graceful shutdown (e.g. SIGTERM).
-	// Merged into each SSE request context so long-lived streams unwind and http.Server.Shutdown can complete.
 	shutdownCtx context.Context
 
 	addr    string
@@ -45,26 +32,20 @@ type Server struct {
 	handler http.Handler
 }
 
-// Option configures the HTTP server.
 type Option func(*Server)
 
-// WithHandlerMiddleware wraps the inner mux. Options are applied so the first Option is the
-// outermost HTTP handler (runs first on the request path).
 func WithHandlerMiddleware(mw func(http.Handler) http.Handler) Option {
 	return func(s *Server) {
 		s.mws = append(s.mws, mw)
 	}
 }
 
-// WithShutdownContext merges ctx into every SSE connection lifetime. When ctx is cancelled
-// (e.g. signal.NotifyContext on SIGINT/SIGTERM), open /mcp/sse handlers return and sessions drain.
 func WithShutdownContext(ctx context.Context) Option {
 	return func(s *Server) {
 		s.shutdownCtx = ctx
 	}
 }
 
-// New constructs the HTTP server with routes registered.
 func New(agg *aggregate.Aggregator, addr string, opts ...Option) *Server {
 	s := &Server{
 		manager: session.NewManager(agg),
@@ -85,7 +66,7 @@ func New(agg *aggregate.Aggregator, addr string, opts ...Option) *Server {
 		Handler:           s.handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       60 * time.Second,
-		WriteTimeout:      0, // SSE long poll: a global write deadline would kill slow clients
+		WriteTimeout:      0, // SSE: avoid a global response write deadline
 		IdleTimeout:       120 * time.Second,
 	}
 	return s
@@ -104,7 +85,6 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
-	// Ready does not yet check backends or Qdrant; extend when those deps are required for traffic.
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("ok"))
 }
@@ -133,8 +113,6 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 
 	var wg sync.WaitGroup
 	wg.Add(1)
-	// Single writer goroutine: SSE frames must not interleave on the ResponseWriter.
-	// Frame format: W3C SSE named event "jsonrpc" + one data line (see package doc).
 	go func() {
 		defer wg.Done()
 		for {
@@ -160,7 +138,6 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	wg.Wait()
 }
 
-// mergeWithShutdown returns a context cancelled when either the request ends or shutdown begins.
 func mergeWithShutdown(reqCtx, shutdownCtx context.Context) (context.Context, context.CancelFunc) {
 	if shutdownCtx == nil {
 		return reqCtx, func() {}
@@ -215,23 +192,18 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 }
 
-// ListenAndServe starts the HTTP server.
 func (s *Server) ListenAndServe() error {
 	return s.srv.ListenAndServe()
 }
 
-// Shutdown gracefully stops the server.
 func (s *Server) Shutdown(ctx context.Context) error {
 	return s.srv.Shutdown(ctx)
 }
 
-// Addr returns the bind address.
 func (s *Server) Addr() string { return s.addr }
 
-// ServeHTTP allows mounting on a parent mux (tests).
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.handler.ServeHTTP(w, r)
 }
 
-// AsHandler returns the fully wrapped handler (includes OTel/auth when configured).
 func (s *Server) AsHandler() http.Handler { return s.handler }

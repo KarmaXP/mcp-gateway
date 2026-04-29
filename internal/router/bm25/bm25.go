@@ -1,4 +1,3 @@
-// Package bm25 provides a tiny Okapi BM25 scorer for hybrid reranking of vector neighbours.
 package bm25
 
 import (
@@ -34,7 +33,6 @@ func tokenize(s string) []string {
 	return out
 }
 
-// ScoreTermFrequency counts term occurrences in one document.
 func termFreq(doc string) map[string]int {
 	toks := tokenize(doc)
 	m := make(map[string]int, len(toks))
@@ -44,7 +42,6 @@ func termFreq(doc string) map[string]int {
 	return m
 }
 
-// Score computes BM25 for a single query–document pair given corpus statistics.
 func Score(query, doc string, avgDL float64, N int, df map[string]int) float64 {
 	q := tokenize(query)
 	if len(q) == 0 {
@@ -75,7 +72,6 @@ func Score(query, doc string, avgDL float64, N int, df map[string]int) float64 {
 	return sum
 }
 
-// CorpusStats builds document frequency and average document length for a set of documents.
 func CorpusStats(docs []string) (avgDL float64, N int, df map[string]int) {
 	N = len(docs)
 	if N == 0 {
@@ -98,7 +94,6 @@ func CorpusStats(docs []string) (avgDL float64, N int, df map[string]int) {
 	return totalLen / float64(N), N, df
 }
 
-// RerankWeights returns hybrid weights (1-α)*vector + α*normBM25 with per-batch BM25 normalization.
 func RerankWeights(query string, docTexts []string, vectorScores []float64, alpha float64) []float64 {
 	if alpha <= 0 {
 		return append([]float64(nil), vectorScores...)

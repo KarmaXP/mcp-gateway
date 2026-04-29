@@ -14,7 +14,6 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwk"
 )
 
-// Validator performs stateless JWT checks (signature + exp; optional iss/aud).
 type Validator struct {
 	cfg    Config
 	parser *jwt.Parser
@@ -25,7 +24,6 @@ type Validator struct {
 	jwksExpires time.Time
 }
 
-// NewValidator builds a validator. Mode "none" returns (nil, nil).
 func NewValidator(cfg Config) (*Validator, error) {
 	if cfg.Mode == "" || cfg.Mode == "none" {
 		return nil, nil
@@ -69,7 +67,6 @@ func parseRSAPublicKey(pemStr string) (*rsa.PublicKey, error) {
 
 type registeredWithTools struct {
 	jwt.RegisteredClaims
-	// McpTools lists namespaced tool ids the subject may invoke; forwarded to the semantic router allow-list (§3.C → §3.B).
 	McpTools []string `json:"mcp_tools,omitempty"`
 }
 
@@ -101,7 +98,6 @@ func (v *Validator) checkIssAud(c *jwt.RegisteredClaims) error {
 	return nil
 }
 
-// Validate parses and validates claims without logging the token or raw claims.
 func (v *Validator) Validate(ctx context.Context, token string) error {
 	var claims jwt.RegisteredClaims
 	_, err := v.parser.ParseWithClaims(token, &claims, v.keyFunc(ctx))
@@ -111,8 +107,6 @@ func (v *Validator) Validate(ctx context.Context, token string) error {
 	return v.checkIssAud(&claims)
 }
 
-// ValidateWithAllowedTools parses and validates the token and returns the optional mcp_tools claim for semantic routing.
-// An empty slice means no allow-list restriction (same as AUTH_MODE=none for tools).
 func (v *Validator) ValidateWithAllowedTools(ctx context.Context, token string) ([]string, error) {
 	var claims registeredWithTools
 	_, err := v.parser.ParseWithClaims(token, &claims, v.keyFunc(ctx))

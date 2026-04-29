@@ -13,7 +13,6 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 )
 
-// mapEmbed is a test double: returns a fixed vector per exact input string.
 type mapEmbed struct {
 	vecs map[string][]float32
 	dim  int

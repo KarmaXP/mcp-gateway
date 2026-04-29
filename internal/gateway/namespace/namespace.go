@@ -1,4 +1,3 @@
-// Package namespace implements tool namespacing as prefix__native.
 package namespace
 
 import (
@@ -7,21 +6,15 @@ import (
 	"strings"
 )
 
-// Separator joins backend prefix and native tool name in namespaced ids (prefix + Separator + native).
 const Separator = "__"
 
 var (
-	// ErrInvalidPrefix reports an empty prefix or one containing Separator.
-	ErrInvalidPrefix = errors.New("namespace: invalid prefix")
-	// ErrInvalidToolName reports a malformed full namespaced tool name.
-	ErrInvalidToolName = errors.New("namespace: invalid namespaced tool name")
-	// ErrAmbiguousPrefix is reserved for catalog consistency checks when a prefix is not unique.
-	ErrAmbiguousPrefix = errors.New("namespace: prefix is not unique in catalog")
-	// ErrNativeContainsSep reports a native segment that contains the separator token.
+	ErrInvalidPrefix     = errors.New("namespace: invalid prefix")
+	ErrInvalidToolName   = errors.New("namespace: invalid namespaced tool name")
+	ErrAmbiguousPrefix   = errors.New("namespace: prefix is not unique in catalog")
 	ErrNativeContainsSep = errors.New("namespace: native tool name must not contain separator")
 )
 
-// ValidatePrefix checks prefix is non-empty and does not contain the separator.
 func ValidatePrefix(prefix string) error {
 	if prefix == "" {
 		return fmt.Errorf("%w: empty", ErrInvalidPrefix)
@@ -32,7 +25,6 @@ func ValidatePrefix(prefix string) error {
 	return nil
 }
 
-// Join returns namespaced tool name: prefix__native.
 func Join(prefix, native string) (string, error) {
 	if err := ValidatePrefix(prefix); err != nil {
 		return "", err
@@ -46,7 +38,6 @@ func Join(prefix, native string) (string, error) {
 	return prefix + Separator + native, nil
 }
 
-// Split parses a namespaced tool name into prefix and native components.
 func Split(namespaced string) (prefix, native string, err error) {
 	if namespaced == "" {
 		return "", "", fmt.Errorf("%w: empty", ErrInvalidToolName)
@@ -69,8 +60,6 @@ func Split(namespaced string) (prefix, native string, err error) {
 	return prefix, native, nil
 }
 
-// ResolveBackend returns the backend id for a namespaced tool using an ordered prefix→backend map.
-// First matching prefix in iteration order wins; callers should pass map iteration in config order.
 func ResolveBackend(prefixToBackend map[string]string, namespaced string) (backendID, nativeName string, err error) {
 	prefix, native, err := Split(namespaced)
 	if err != nil {

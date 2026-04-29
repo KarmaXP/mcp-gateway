@@ -7,7 +7,6 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/ingress"
 )
 
-// HTTPMiddleware enforces bearer JWT on MCP routes (health paths skipped).
 func HTTPMiddleware(cfg Config, v *Validator) func(http.Handler) http.Handler {
 	if cfg.Mode == "" || cfg.Mode == "none" {
 		return func(next http.Handler) http.Handler { return next }

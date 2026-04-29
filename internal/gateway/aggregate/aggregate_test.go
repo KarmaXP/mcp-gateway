@@ -14,7 +14,6 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
 
-// initFailBackend fails initialize only; other methods delegate.
 type initFailBackend struct {
 	inner backend.Backend
 }
@@ -28,7 +27,6 @@ func (f *initFailBackend) Call(ctx context.Context, req *rpc.Request) (*rpc.Resp
 	return f.inner.Call(ctx, req)
 }
 
-// listFailBackend fails tools/list only; other methods delegate.
 type listFailBackend struct {
 	inner backend.Backend
 }
@@ -42,7 +40,6 @@ func (f *listFailBackend) Call(ctx context.Context, req *rpc.Request) (*rpc.Resp
 	return f.inner.Call(ctx, req)
 }
 
-// errReplyBackend returns a JSON-RPC error on tools/call while preserving the host request id.
 type errReplyBackend struct {
 	inner *mock.Backend
 }

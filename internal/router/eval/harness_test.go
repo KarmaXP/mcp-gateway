@@ -13,12 +13,10 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 )
 
-// TestPhase2SyntheticCatalogSize documents plan §B.8 minimum catalog scale.
 func TestPhase2SyntheticCatalogSize(t *testing.T) {
 	require.GreaterOrEqual(t, len(SyntheticCatalog()), 20, "Phase 2 acceptance expects ≥20 synthetic tools")
 }
 
-// TestPhase2VectorRecallLexical runs a reproducible recall@1 check using LexicalEmbedder (no live ONNX/Qdrant).
 func TestPhase2VectorRecallLexical(t *testing.T) {
 	ctx := context.Background()
 	dim := 384
@@ -59,7 +57,6 @@ func TestPhase2VectorRecallLexical(t *testing.T) {
 	require.GreaterOrEqual(t, recall, 0.95, "golden set should resolve with lexical embed for benchmark harness")
 }
 
-// TestPhase2EmbedAndQueryP95 measures end-to-end router latency for the vector path (embed + search).
 func TestPhase2EmbedAndQueryP95(t *testing.T) {
 	ctx := context.Background()
 	dim := 384
@@ -92,11 +89,9 @@ func TestPhase2EmbedAndQueryP95(t *testing.T) {
 	sort.Slice(lat, func(i, j int) bool { return lat[i] < lat[j] })
 	p95 := lat[len(lat)*95/100]
 	t.Logf("p95 router latency (embed+query, in-memory store, N=%d): %s", len(lat), p95)
-	// Budget is environment-specific; cap only absurd regressions on in-memory path.
 	require.Less(t, p95, 500*time.Millisecond)
 }
 
-// TestPhase2SiloNarrowingRespectsAllowedTools ensures silo keywords shrink the candidate set (plan §B.8).
 func TestPhase2SiloNarrowingRespectsAllowedTools(t *testing.T) {
 	ctx := context.Background()
 	dim := 384

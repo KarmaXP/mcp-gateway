@@ -1,4 +1,3 @@
-// Package mcpstdio implements backend.Backend over MCP stdio (newline-delimited JSON-RPC).
 package mcpstdio
 
 import (
@@ -18,7 +17,6 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
 
-// Client runs a subprocess MCP server and multiplexes JSON-RPC over stdin/stdout.
 type Client struct {
 	id      string
 	prefix  string
@@ -41,8 +39,6 @@ type Client struct {
 	readWG  sync.WaitGroup
 }
 
-// New starts no process until the first Call. cleanup kills the subprocess and waits for the reader.
-// maxConcurrency defaults to 8 when <= 0.
 func New(lifecycle context.Context, id, prefix string, command, extraEnv []string, maxConcurrency int64) (*Client, func(), error) {
 	if lifecycle == nil {
 		lifecycle = context.Background()
@@ -149,16 +145,11 @@ func (c *Client) writeLineLocked(payload []byte) error {
 	return err
 }
 
-// Call performs one JSON-RPC round-trip over stdio.
 func (c *Client) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
 	if err := c.sem.Acquire(ctx, 1); err != nil {
 		return nil, err
 	}
 	defer c.sem.Release(1)
-
-	if err := c.ensure(ctx); err != nil {
-		return nil, err
-	}
 
 	if err := c.ensure(ctx); err != nil {
 		return nil, err

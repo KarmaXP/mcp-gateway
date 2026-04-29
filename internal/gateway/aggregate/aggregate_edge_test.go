@@ -16,7 +16,6 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
 
-// flakyBackend fails tools/list once then succeeds (simulates transient error).
 type flakyBackend struct {
 	*mock.Backend
 	mu         sync.Mutex

@@ -1,5 +1,3 @@
-// Package rules implements the deterministic layer between exact match and vector search:
-// alias resolution and silo→prefix narrowing of AllowedTools (plan §3.B.6).
 package rules
 
 import (
@@ -8,16 +6,11 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/namespace"
 )
 
-// Rules holds optional alias and silo keyword maps (all case-insensitive for lookups).
 type Rules struct {
-	// Aliases maps a requested tool name (any case) to a canonical namespaced tool id.
-	Aliases map[string]string
-	// SiloKeywords maps a substring that may appear in intent text to a backend prefix
-	// (the segment before namespace.Separator in namespaced tools).
+	Aliases      map[string]string
 	SiloKeywords map[string]string
 }
 
-// New builds a Rules value, copying the provided maps.
 func New(aliases, siloKeywords map[string]string) *Rules {
 	cp := func(m map[string]string) map[string]string {
 		if len(m) == 0 {
@@ -39,7 +32,6 @@ func New(aliases, siloKeywords map[string]string) *Rules {
 	}
 }
 
-// CanonicalAlias returns the namespaced tool id for an alias key, or "" if none.
 func (r *Rules) CanonicalAlias(requested string) string {
 	if r == nil || len(r.Aliases) == 0 {
 		return ""
@@ -51,9 +43,6 @@ func (r *Rules) CanonicalAlias(requested string) string {
 	return r.Aliases[k]
 }
 
-// NarrowAllowed restricts the allow-list when intent text mentions a silo keyword.
-// If allowed is empty (no host policy), narrowing becomes “all catalog tools in matching silos”.
-// If allowed is non-empty, the result is the intersection with silo-matched tools.
 func (r *Rules) NarrowAllowed(intent string, allowed []string, catalog []string) []string {
 	if r == nil || len(r.SiloKeywords) == 0 {
 		return allowed

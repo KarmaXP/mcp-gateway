@@ -54,7 +54,6 @@ func TestSessionPingReturnsEmptyResult(t *testing.T) {
 	agg, err := aggregate.New([]backend.Backend{b1}, aggregate.WithListTTL(0))
 	require.NoError(t, err)
 	s := New(context.Background(), "ping-session", agg, nil)
-	// Ping is spec-first-class and does not require initialize / initialized.
 	require.NoError(t, s.Dispatch(context.Background(), &rpc.Request{
 		JSONRPC: rpc.Version,
 		Method:  "ping",
@@ -186,7 +185,6 @@ func TestSessionDispatchNilRequestContext(t *testing.T) {
 	agg, err := aggregate.New([]backend.Backend{b1}, aggregate.WithListTTL(0))
 	require.NoError(t, err)
 	s := New(context.Background(), "s6", agg, nil)
-	// Dispatch documents nil reqCtx as valid; exercise that path (SA1012: intentional).
 	require.NoError(t, s.Dispatch(nil, &rpc.Request{ //nolint:staticcheck // nil exercises mergedCancel fallback
 		JSONRPC: rpc.Version,
 		Method:  "initialize",

@@ -1,4 +1,3 @@
-// Package telemetry configures OpenTelemetry tracing and metrics.
 package telemetry
 
 import (
@@ -20,11 +19,8 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
-// ActiveSessions counts open host SSE connections; the OTLP metrics pipeline observes it periodically.
 var ActiveSessions atomic.Int64
 
-// Init installs the global TracerProvider and MeterProvider. When OTEL_EXPORTER_OTLP_ENDPOINT
-// is unset, SDKs use no remote exporters (still safe for tests); propagation is always configured.
 func Init(ctx context.Context, serviceName string) (shutdown func(context.Context) error, err error) {
 	if serviceName == "" {
 		serviceName = "mcp-gateway"
@@ -41,7 +37,6 @@ func Init(ctx context.Context, serviceName string) (shutdown func(context.Contex
 
 	ep := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
 	if ep != "" {
-		// Ensure a scheme so stdlib URL parsing (used by OTLP exporters and resource.FromEnv) succeeds.
 		ep = normalizeOTLP(ep)
 		_ = os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", ep)
 	}

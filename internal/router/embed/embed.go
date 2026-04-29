@@ -1,4 +1,3 @@
-// Package embed is an HTTP client for the ONNX embedding sidecar (POST /embed).
 package embed
 
 import (
@@ -13,18 +12,15 @@ import (
 	"time"
 )
 
-// Embedder produces L2-normalised 384-d vectors (all-MiniLM-L6-v2).
 type Embedder interface {
 	Embed(ctx context.Context, texts []string) ([][]float32, error)
 }
 
-// Client calls the FastAPI service in deployments/embed/server.py.
 type Client struct {
 	baseURL    string
 	httpClient *http.Client
 }
 
-// NewClient targets the embedding sidecar (e.g. http://127.0.0.1:8001, no trailing slash).
 func NewClient(baseURL string) *Client {
 	tr := &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
@@ -45,7 +41,6 @@ func NewClient(baseURL string) *Client {
 	}
 }
 
-// WithHTTPClient overrides the HTTP client (e.g. shorter timeouts in tests).
 func (c *Client) WithHTTPClient(h *http.Client) *Client {
 	c.httpClient = h
 	return c
@@ -60,7 +55,6 @@ type embedResponse struct {
 	Dimensions int         `json:"dimensions"`
 }
 
-// Embed implements Embedder.
 func (c *Client) Embed(ctx context.Context, texts []string) ([][]float32, error) {
 	if len(texts) == 0 {
 		return nil, fmt.Errorf("embed: empty texts")

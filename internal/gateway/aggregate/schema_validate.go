@@ -9,8 +9,6 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-// filterToolsForPolicy returns only tools whose namespaced name is in allowed (exact match).
-// If allowed is empty, merged is returned unchanged.
 func filterToolsForPolicy(merged []map[string]any, allowed []string) []map[string]any {
 	if len(allowed) == 0 {
 		return merged
@@ -47,7 +45,6 @@ func compileToolValidator(namespacedName string, schemaJSON json.RawMessage) (*j
 	return c.Compile(loc)
 }
 
-// replaceToolSchemasFromMerged rebuilds compiled JSON Schema validators from aggregated tools/list rows.
 func (a *Aggregator) replaceToolSchemasFromMerged(merged []map[string]any) {
 	out := make(map[string]*jsonschema.Schema)
 	for _, t := range merged {
@@ -102,7 +99,6 @@ func allowedContains(allowed []string, namespacedTool string) bool {
 	return false
 }
 
-// enforceToolPolicy returns an error if JWT allow-list is set and the tool is not listed.
 func enforceToolPolicy(allowed []string, namespacedTool string) error {
 	if len(allowed) == 0 {
 		return nil

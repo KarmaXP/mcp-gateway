@@ -8,8 +8,6 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 )
 
-// LexicalEmbedder is a deterministic, dependency-free embedder for reproducible router benchmarks.
-// It hashes word tokens into a bag-of-features vector (not semantic; suitable for pipeline/latency tests).
 type LexicalEmbedder struct {
 	Dim int
 }
@@ -28,7 +26,6 @@ func fnv32(s string) uint32 {
 	return h.Sum32()
 }
 
-// Embed implements router.embed.Embedder.
 func (l LexicalEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

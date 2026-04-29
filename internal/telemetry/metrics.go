@@ -65,7 +65,6 @@ func registerInstruments() error {
 	return nil
 }
 
-// SetIndexedCatalogToolCount updates the observable gauge for indexed tools (call after successful router Reindex).
 func SetIndexedCatalogToolCount(n int64) {
 	if n < 0 {
 		n = 0
@@ -73,7 +72,6 @@ func SetIndexedCatalogToolCount(n int64) {
 	indexedCatalogTools.Store(n)
 }
 
-// RecordSemanticRouting emits router metrics from a completed decision (err may be non-nil).
 func RecordSemanticRouting(ctx context.Context, dec *router.RoutingDecision, resolveErr error) {
 	if !metricsReady.Load() || dec == nil {
 		return

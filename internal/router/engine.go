@@ -18,13 +18,11 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 )
 
-// CatalogEntry is one tool row plus backend id for indexing.
 type CatalogEntry struct {
 	ToolRow   index.ToolRow
 	BackendID string
 }
 
-// Engine runs signal → routing decision for tools/call.
 type Engine struct {
 	cfg      Config
 	embedder embed.Embedder
@@ -35,12 +33,11 @@ type Engine struct {
 	catalog       map[string]struct{}
 	catalogVer    string
 	backendByTool map[string]string
-	toolDoc       map[string]string // tool name → indexed document text (BM25 rerank)
+	toolDoc       map[string]string
 
 	rules *rules.Rules
 }
 
-// NewEngine constructs a router engine. embedder may be nil only when ModeOff.
 func NewEngine(cfg Config, e embed.Embedder, st store.Store, vectorDim int) *Engine {
 	if vectorDim <= 0 {
 		vectorDim = 384
@@ -56,7 +53,6 @@ func NewEngine(cfg Config, e embed.Embedder, st store.Store, vectorDim int) *Eng
 	}
 }
 
-// SetRules installs the optional rules layer (aliases, silo narrowing). Nil disables rules.
 func (e *Engine) SetRules(r *rules.Rules) {
 	if e == nil {
 		return
@@ -66,19 +62,16 @@ func (e *Engine) SetRules(r *rules.Rules) {
 	e.mu.Unlock()
 }
 
-// Enabled reports whether vector routing is active.
 func (e *Engine) Enabled() bool {
 	return e != nil && e.cfg.Mode != ModeOff
 }
 
-// CatalogVersion returns the active indexed catalog hash.
 func (e *Engine) CatalogVersion() string {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.catalogVer
 }
 
-// Reindex rebuilds the vector index from an aggregated tools/list snapshot.
 func (e *Engine) Reindex(ctx context.Context, version string, entries []CatalogEntry) error {
 	if e == nil || !e.Enabled() {
 		return nil
@@ -152,7 +145,6 @@ func (e *Engine) Reindex(ctx context.Context, version string, entries []CatalogE
 	return nil
 }
 
-// ResolveToolsCall returns the namespaced tool name to forward to the multiplexer.
 func (e *Engine) ResolveToolsCall(ctx context.Context, sig RoutingSignal) (string, *RoutingDecision, error) {
 	if e == nil || !e.Enabled() {
 		return sig.ToolName, &RoutingDecision{FallbackLayer: "none", Outcome: OutcomeNone}, nil
@@ -334,7 +326,6 @@ func (e *Engine) hybridRerank(query string, results []store.Result) []store.Resu
 }
 
 func summarizeSignal(sig RoutingSignal) string {
-	// Log dimensions only, not tool arguments (security / cardinality).
 	return fmt.Sprintf("tool_len=%d intent_len=%d", len(sig.ToolName), len(sig.IntentText))
 }
 
@@ -378,7 +369,6 @@ func jsonKeys(raw json.RawMessage) []string {
 	return keys
 }
 
-// BuildCatalogEntries maps tools/list JSON + prefix→backendID into router entries.
 func BuildCatalogEntries(listJSON []byte, backendForPrefix func(prefix string) (string, error)) ([]CatalogEntry, error) {
 	rows, err := index.ParseToolsListJSON(listJSON)
 	if err != nil {

@@ -1,4 +1,3 @@
-// Package config loads gateway YAML plus environment overrides.
 package config
 
 import (
@@ -13,7 +12,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config is the root gateway configuration document.
 type Config struct {
 	Backends []Backend `yaml:"backends"`
 	Router   Router    `yaml:"router"`
@@ -21,7 +19,6 @@ type Config struct {
 	Embed    Embed     `yaml:"embed"`
 }
 
-// Backend is one upstream MCP server (HTTP+SSE or stdio).
 type Backend struct {
 	ID             string            `yaml:"id"`
 	Prefix         string            `yaml:"prefix"`
@@ -30,15 +27,14 @@ type Backend struct {
 	Env            map[string]string `yaml:"env"`
 	MaxConcurrency int               `yaml:"max_concurrency"`
 	AuthToken      string            `yaml:"auth_token"`
-	AuthTokenEnv   string            `yaml:"auth_token_env"` // env var name holding bearer token
+	AuthTokenEnv   string            `yaml:"auth_token_env"`
 }
 
-// Router holds semantic router tuning (env overrides after load).
 type Router struct {
-	Mode            string      `yaml:"mode"` // off | on | assist_list
+	Mode            string      `yaml:"mode"`
 	TopK            int         `yaml:"top_k"`
 	ScoreMin        float64     `yaml:"score_min"`
-	HybridAlpha     float64     `yaml:"hybrid_alpha"` // BM25–vector blend on store results; 0 disables
+	HybridAlpha     float64     `yaml:"hybrid_alpha"`
 	AllowAutoRename bool        `yaml:"allow_auto_rename"`
 	EmbedTimeout    string      `yaml:"embed_timeout"`
 	QueryTimeout    string      `yaml:"query_timeout"`
@@ -46,25 +42,21 @@ type Router struct {
 	Rules           RouterRules `yaml:"rules"`
 }
 
-// RouterRules configures the deterministic rules layer (aliases, silo keywords).
 type RouterRules struct {
 	Aliases      map[string]string `yaml:"aliases"`
 	SiloKeywords map[string]string `yaml:"silo_keywords"`
 }
 
-// Qdrant names the vector collection; URL comes from QDRANT_URL.
 type Qdrant struct {
 	Collection string `yaml:"collection"`
 }
 
-// Embed configures the embedding sidecar base URL when not using env only.
 type Embed struct {
 	URL string `yaml:"url"`
 }
 
 var errNoBackends = errors.New("config: no backends defined")
 
-// Load reads MCP_GATEWAY_CONFIG (or gateway.yaml / config/gateway.yaml), merges MCP_GATEWAY_BACKENDS JSON if set, then ApplyEnvOverrides.
 func Load() (Config, error) {
 	path := strings.TrimSpace(os.Getenv("MCP_GATEWAY_CONFIG"))
 	if path == "" {
@@ -105,7 +97,6 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
-// Validate checks backend entries and router mode.
 func (c *Config) Validate() error {
 	if len(c.Backends) == 0 {
 		return errNoBackends
@@ -143,7 +134,6 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// ApplyEnvOverrides applies the same knobs historically read only from env (YAML fills defaults first).
 func (c *Config) ApplyEnvOverrides() {
 	if v := strings.TrimSpace(os.Getenv("EMBED_URL")); v != "" {
 		c.Embed.URL = v
@@ -183,7 +173,6 @@ func (c *Config) ApplyEnvOverrides() {
 	}
 }
 
-// RouterEmbedTimeout returns router embed HTTP timeout (defaults 10s).
 func (c *Config) RouterEmbedTimeout() time.Duration {
 	if c == nil {
 		return 10 * time.Second
@@ -194,7 +183,6 @@ func (c *Config) RouterEmbedTimeout() time.Duration {
 	return 10 * time.Second
 }
 
-// RouterQueryTimeout returns vector store query timeout (defaults 5s).
 func (c *Config) RouterQueryTimeout() time.Duration {
 	if c == nil {
 		return 5 * time.Second
@@ -213,7 +201,6 @@ func parseDurationString(s string) (time.Duration, error) {
 	return time.ParseDuration(s)
 }
 
-// QdrantCollection returns collection name (default mcp_tool_catalog).
 func (c *Config) QdrantCollection() string {
 	if c == nil || strings.TrimSpace(c.Qdrant.Collection) == "" {
 		return "mcp_tool_catalog"
@@ -221,7 +208,6 @@ func (c *Config) QdrantCollection() string {
 	return strings.TrimSpace(c.Qdrant.Collection)
 }
 
-// ResolveAuthToken returns the bearer token for an upstream if configured.
 func (b *Backend) ResolveAuthToken() string {
 	if t := strings.TrimSpace(b.AuthToken); t != "" {
 		return t

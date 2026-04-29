@@ -1,4 +1,3 @@
-// Package mock provides in-process test doubles implementing backend.Backend.
 package mock
 
 import (
@@ -12,25 +11,20 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
 
-// Backend is a test double that implements backend.Backend with canned MCP-style responses.
 type Backend struct {
 	id         string
 	prefix     string
 	toolNames  []string
 	lastNative string
 
-	// ToolsCallDelay simulates a slow upstream on tools/call only (honours ctx cancel).
 	ToolsCallDelay time.Duration
-	// ToolsCallErr, if set, makes tools/call return (nil, err) without invoking default logic.
-	ToolsCallErr error
+	ToolsCallErr   error
 
-	// InputSchemaByTool overrides inputSchema for a native tool name in tools/list (for JSON Schema tests).
 	InputSchemaByTool map[string]map[string]any
 
 	mu sync.Mutex
 }
 
-// New builds a mock backend with the given tools (native names only).
 func New(id, prefix string, toolNames []string) *Backend {
 	return &Backend{id: id, prefix: prefix, toolNames: append([]string(nil), toolNames...)}
 }
@@ -38,7 +32,6 @@ func New(id, prefix string, toolNames []string) *Backend {
 func (b *Backend) ID() string     { return b.id }
 func (b *Backend) Prefix() string { return b.prefix }
 
-// LastNativeTool returns the tool name from the most recent tools/call (for tests).
 func (b *Backend) LastNativeTool() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
