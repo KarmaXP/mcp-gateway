@@ -6,6 +6,8 @@ SHELL := /bin/bash
 BINARY_NAME=mcp-gateway
 MAIN_PATH=cmd/gateway/main.go
 COMPOSE=docker compose -f deployments/docker-compose.yaml --env-file .env
+# Before compose file had `name: mcp-gateway`, the implicit project was `deployments` (directory name).
+COMPOSE_LEGACY=docker compose -f deployments/docker-compose.yaml -p deployments
 GATEWAY_PORT ?= 18080
 
 # Colors
@@ -37,10 +39,10 @@ help:
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "lint" "Run golangci-lint (install via go run if missing)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "tidy" "Clean up and verify Go modules"
 	@printf "\n"
-	@printf "$(BLUE)▶ Infrastructure & Docker$(RESET)\n"
+	@printf "$(BLUE)▶ MCP Gateway (Docker Compose)$(RESET)\n"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-build"    "Build the gateway Docker image"
-	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-up"       "Start infra (Qdrant · OTel · Tempo · Prometheus · Grafana)"
-	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-up-full"  "Start infra + gateway container"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-up"       "Start mcp-gateway stack deps (Qdrant · OTel · Tempo · Prometheus · Grafana)"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-up-full"  "Start full mcp-gateway stack including gateway container"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-down"     "Stop and remove all containers"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-logs"     "Follow logs from all running services"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-clean"    "Remove containers, volumes and built image"
@@ -55,7 +57,9 @@ build:
 
 run:
 	@echo "🚀 Starting $(BINARY_NAME)..."
-	@set -a && ([ -f .env ] && . ./.env || true) && set +a && go run $(MAIN_PATH)
+	@bash -c 'set -a && ([ -f .env ] && . ./.env || true) && set +a && \
+		: "$${MCP_GATEWAY_CONFIG:=deployments/gateway.example.yaml}" && export MCP_GATEWAY_CONFIG && \
+		exec go run $(MAIN_PATH)'
 
 stop:
 	@echo "🛑 Stopping $(BINARY_NAME)..."
@@ -107,21 +111,23 @@ docker-build:
 	@docker build -t mcp-gateway:dev .
 
 docker-up:
-	@echo "🐳 Starting infrastructure..."
+	@echo "🐳 Starting mcp-gateway compose stack (dependencies)..."
 	@$(COMPOSE) up -d
 
 docker-up-full: docker-build
-	@echo "🐳 Starting full stack (infra + gateway)..."
+	@echo "🐳 Starting mcp-gateway compose stack (dependencies + gateway app)..."
 	@$(COMPOSE) --profile gateway up -d
 
 docker-down:
-	@echo "🛑 Stopping all containers..."
-	@$(COMPOSE) --profile gateway down
+	@echo "🛑 Stopping mcp-gateway compose stack..."
+	@$(COMPOSE) --profile gateway down --remove-orphans
+	@-$(COMPOSE_LEGACY) --profile gateway down --remove-orphans
 
 docker-logs:
 	@$(COMPOSE) --profile gateway logs -f
 
 docker-clean:
-	@echo "🧹 Removing containers, volumes and image..."
+	@echo "🧹 Removing containers, volumes and images..."
 	@$(COMPOSE) --profile gateway down -v --remove-orphans
-	@docker rmi mcp-gateway:dev 2>/dev/null || true
+	@-$(COMPOSE_LEGACY) --profile gateway down -v --remove-orphans
+	@docker rmi mcp-gateway:dev mcp-gateway-embed:dev 2>/dev/null || true
