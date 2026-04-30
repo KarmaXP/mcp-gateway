@@ -9,7 +9,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
+
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 )
 
 // QdrantVectorStore talks to a Qdrant HTTP API for production-scale semantic index storage.
@@ -32,7 +33,7 @@ func NewQdrantVectorStore(baseURL, collection string, vectorDim int) (*QdrantVec
 		baseURL:    baseURL,
 		collection: collection,
 		dim:        vectorDim,
-		client:     &http.Client{Timeout: 60 * time.Second},
+		client:     &http.Client{Timeout: defaults.QdrantHTTPClientTimeout},
 	}, nil
 }
 
@@ -63,15 +64,15 @@ func (q *QdrantVectorStore) doJSON(ctx context.Context, method, path string, bod
 		return 0, err
 	}
 	defer res.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(res.Body, 8<<20))
+	raw, err := io.ReadAll(io.LimitReader(res.Body, defaults.MaxQdrantHTTPBodyBytes))
 	if err != nil {
 		return res.StatusCode, err
 	}
 	if out != nil && len(raw) > 0 {
 		if err := json.Unmarshal(raw, out); err != nil {
 			snippet := len(raw)
-			if snippet > 200 {
-				snippet = 200
+			if snippet > defaults.MaxQdrantErrorSnippetBytes {
+				snippet = defaults.MaxQdrantErrorSnippetBytes
 			}
 			return res.StatusCode, fmt.Errorf("router/store/qdrant: decode %s: %w (body=%s)", path, err, string(raw[:snippet]))
 		}
@@ -107,7 +108,7 @@ func (q *QdrantVectorStore) Upsert(ctx context.Context, records []ToolVectorReco
 		return fmt.Errorf("router/store/qdrant: create collection: status %d", st)
 	}
 
-	const batch = 64
+	batch := defaults.ReindexEmbedBatchSize
 	for i := 0; i < len(records); i += batch {
 		j := i + batch
 		if j > len(records) {
@@ -165,7 +166,7 @@ func (q *QdrantVectorStore) Query(ctx context.Context, vector []float32, topK in
 		return nil, ErrDimensionMismatch
 	}
 	if topK <= 0 {
-		topK = 8
+		topK = defaults.DefaultVectorSearchTopK
 	}
 
 	var must []map[string]any
@@ -231,7 +232,7 @@ func PingCollections(ctx context.Context, baseURL string) error {
 		return err
 	}
 	defer res.Body.Close()
-	_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 512))
+	_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, defaults.MaxQdrantPingDiscardBytes))
 	if res.StatusCode != http.StatusOK {
 		return fmt.Errorf("router/store/qdrant: ping: status %d", res.StatusCode)
 	}

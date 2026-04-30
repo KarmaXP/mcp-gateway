@@ -9,16 +9,20 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"time"
 
 	"go.opentelemetry.io/otel/codes"
 
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/session"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
 )
+
+// writeTimeoutDisabled is used for WriteTimeout so long-lived SSE responses are not cut off.
+const writeTimeoutDisabled = 0
 
 type Server struct {
 	sessions   *session.SessionManager
@@ -64,10 +68,10 @@ func New(mpx *multiplex.Multiplexer, addr string, opts ...Option) *Server {
 	s.srv = &http.Server{
 		Addr:              addr,
 		Handler:           s.handler,
-		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       60 * time.Second,
-		WriteTimeout:      0, // SSE: avoid a global response write deadline
-		IdleTimeout:       120 * time.Second,
+		ReadHeaderTimeout: defaults.HTTPReadHeaderTimeout,
+		ReadTimeout:       defaults.HTTPReadTimeout,
+		WriteTimeout:      writeTimeoutDisabled, // SSE: avoid a global response write deadline
+		IdleTimeout:       defaults.HTTPIdleTimeout,
 	}
 	return s
 }
@@ -123,7 +127,7 @@ func (s *Server) handleMCPSSE(w http.ResponseWriter, r *http.Request) {
 				if !ok {
 					return
 				}
-				_, err := fmt.Fprintf(w, "event: jsonrpc\ndata: %s\n\n", payload)
+				_, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", mcpwire.SSEJSONRPCEvent, payload)
 				if err != nil {
 					return
 				}
@@ -170,7 +174,7 @@ func (s *Server) handleMCPRPC(w http.ResponseWriter, r *http.Request) {
 		httpErr("unknown session", http.StatusNotFound)
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	body, err := io.ReadAll(io.LimitReader(r.Body, defaults.MaxMCPRPCBodyBytes))
 	if err != nil {
 		httpErr("read body", http.StatusBadRequest)
 		return

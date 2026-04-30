@@ -13,8 +13,14 @@ import (
 
 	"golang.org/x/sync/semaphore"
 
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+)
+
+const (
+	weightedSemaphoreTickets int64 = 1
+	pendingJSONRPCChannelCap int   = 1
 )
 
 type HTTPMCPUpstream struct {
@@ -42,7 +48,7 @@ func NewHTTPMCPUpstream(lifecycle context.Context, id, prefix, baseURL string, m
 		lifecycle = context.Background()
 	}
 	if maxConcurrency <= 0 {
-		maxConcurrency = 8
+		maxConcurrency = defaults.UpstreamMaxConcurrency
 	}
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" {
@@ -93,7 +99,7 @@ func (c *HTTPMCPUpstream) connectLocked() error {
 	resp, err := c.client.Do(req)
 	if err != nil {
 		if resp != nil && resp.Body != nil {
-			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 8<<10))
+			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, defaults.MaxSSEDiscardBodyBytes))
 			_ = resp.Body.Close()
 		}
 		return fmt.Errorf("mcphttp %s: GET sse: %w", c.id, err)
@@ -107,7 +113,7 @@ func (c *HTTPMCPUpstream) connectLocked() error {
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, defaults.MaxHTTPUpstreamErrorBody))
 		return fmt.Errorf("mcphttp %s: GET sse: %s: %s", c.id, resp.Status, strings.TrimSpace(string(b)))
 	}
 	sid := strings.TrimSpace(resp.Header.Get(mcpwire.HeaderMCPSessionID))
@@ -136,7 +142,7 @@ func (c *HTTPMCPUpstream) readSSE(body io.Reader, ctx context.Context) {
 		dataBuf   strings.Builder
 	)
 	flush := func() {
-		if eventName != "jsonrpc" {
+		if eventName != mcpwire.SSEJSONRPCEvent {
 			eventName, dataBuf = "", strings.Builder{}
 			return
 		}
@@ -169,13 +175,13 @@ func (c *HTTPMCPUpstream) readSSE(body io.Reader, ctx context.Context) {
 		if strings.HasPrefix(line, ":") {
 			continue
 		}
-		if strings.HasPrefix(line, "event:") {
+		if strings.HasPrefix(line, mcpwire.SSEEventLinePrefix) {
 			flush()
-			eventName = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+			eventName = strings.TrimSpace(strings.TrimPrefix(line, mcpwire.SSEEventLinePrefix))
 			continue
 		}
-		if strings.HasPrefix(line, "data:") {
-			payload := strings.TrimPrefix(line[5:], " ")
+		if strings.HasPrefix(line, mcpwire.SSEDataLinePrefix) {
+			payload := strings.TrimSpace(strings.TrimPrefix(line, mcpwire.SSEDataLinePrefix))
 			if dataBuf.Len() > 0 {
 				dataBuf.WriteByte('\n')
 			}
@@ -231,17 +237,17 @@ func (c *HTTPMCPUpstream) postRPC(ctx context.Context, req *rpc.Request) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusAccepted {
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, defaults.MaxHTTPUpstreamErrorBody))
 		return fmt.Errorf("mcphttp %s: POST rpc: %s: %s", c.id, resp.Status, strings.TrimSpace(string(b)))
 	}
 	return nil
 }
 
 func (c *HTTPMCPUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
-	if err := c.sem.Acquire(ctx, 1); err != nil {
+	if err := c.sem.Acquire(ctx, weightedSemaphoreTickets); err != nil {
 		return nil, err
 	}
-	defer c.sem.Release(1)
+	defer c.sem.Release(weightedSemaphoreTickets)
 
 	if err := c.ensureSession(ctx); err != nil {
 		return nil, err
@@ -258,7 +264,7 @@ func (c *HTTPMCPUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Resp
 	if key == "" {
 		return nil, fmt.Errorf("mcphttp %s: missing jsonrpc id", c.id)
 	}
-	ch := make(chan *rpc.Response, 1)
+	ch := make(chan *rpc.Response, pendingJSONRPCChannelCap)
 	c.pendMu.Lock()
 	c.pending[key] = ch
 	c.pendMu.Unlock()

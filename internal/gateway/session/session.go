@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
@@ -84,7 +85,7 @@ func NewSession(parent context.Context, id string, mpx *multiplex.Multiplexer, m
 		cancel:      cancel,
 		multiplexer: mpx,
 		middlewares: append([]Middleware(nil), mws...),
-		out:         make(chan []byte, 64),
+		out:         make(chan []byte, defaults.SessionOutboundChannelSize),
 	}
 }
 

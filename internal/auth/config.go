@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
 )
 
@@ -24,7 +25,7 @@ type JWTAuthConfig struct {
 }
 
 func JWTAuthFromEnvironment() JWTAuthConfig {
-	ttl := 5 * time.Minute
+	ttl := defaults.DefaultJWKSCacheTTL
 	if v := os.Getenv("JWT_JWKS_CACHE_TTL"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			ttl = d

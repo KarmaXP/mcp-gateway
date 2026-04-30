@@ -4,6 +4,13 @@ import (
 	"context"
 	"math"
 	"sync"
+
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
+)
+
+const (
+	cosineSimilarityMax = 1.0
+	cosineSimilarityMin = -1.0
 )
 
 // InMemoryVectorStore is a cosine-similarity vector index for tests and small deployments.
@@ -51,7 +58,7 @@ func (m *InMemoryVectorStore) Query(ctx context.Context, vector []float32, topK 
 		return nil, ErrDimensionMismatch
 	}
 	if topK <= 0 {
-		topK = 8
+		topK = defaults.DefaultVectorSearchTopK
 	}
 	allow := map[string]struct{}{}
 	useAllow := len(filter.AllowedToolNames) > 0
@@ -108,11 +115,11 @@ func cosineSim(a, b []float32) float64 {
 	for i := range a {
 		dot += float64(a[i] * b[i])
 	}
-	if dot > 1 {
-		dot = 1
+	if dot > cosineSimilarityMax {
+		dot = cosineSimilarityMax
 	}
-	if dot < -1 {
-		dot = -1
+	if dot < cosineSimilarityMin {
+		dot = cosineSimilarityMin
 	}
 	return dot
 }

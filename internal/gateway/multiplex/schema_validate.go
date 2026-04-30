@@ -57,7 +57,7 @@ func (a *Multiplexer) replaceToolSchemasFromMerged(merged []map[string]any) {
 			continue
 		}
 		raw, err := json.Marshal(sch)
-		if err != nil || len(raw) == 0 || string(raw) == "null" {
+		if err != nil || len(raw) == 0 || string(raw) == jsonNullLiteral {
 			continue
 		}
 		v, err := compileToolValidator(name, raw)

@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 	"sync/atomic"
-	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
@@ -17,13 +16,15 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 )
 
 var ActiveSessions atomic.Int64
 
 func Init(ctx context.Context, serviceName string) (shutdown func(context.Context) error, err error) {
 	if serviceName == "" {
-		serviceName = "mcp-gateway"
+		serviceName = defaults.DefaultTelemetryServiceName
 	}
 	res, err := resource.New(ctx,
 		resource.WithFromEnv(),
@@ -57,7 +58,7 @@ func Init(ctx context.Context, serviceName string) (shutdown func(context.Contex
 		if err != nil {
 			return nil, fmt.Errorf("telemetry: metric exporter: %w", err)
 		}
-		reader := sdkmetric.NewPeriodicReader(mexp, sdkmetric.WithInterval(15*time.Second))
+		reader := sdkmetric.NewPeriodicReader(mexp, sdkmetric.WithInterval(defaults.OTLPMetricExportInterval))
 		mp = sdkmetric.NewMeterProvider(
 			sdkmetric.WithReader(reader),
 			sdkmetric.WithResource(res),

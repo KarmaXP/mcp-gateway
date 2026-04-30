@@ -9,7 +9,8 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"time"
+
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 )
 
 type Embedder interface {
@@ -25,17 +26,17 @@ func NewClient(baseURL string) *Client {
 	tr := &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
 		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          64,
-		MaxIdleConnsPerHost:   16,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-		DialContext:           (&net.Dialer{Timeout: 5 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+		MaxIdleConns:          defaults.EmbedTransportMaxIdleConns,
+		MaxIdleConnsPerHost:   defaults.EmbedTransportMaxIdleConnsPerHost,
+		IdleConnTimeout:       defaults.EmbedIdleConnTimeout,
+		TLSHandshakeTimeout:   defaults.EmbedTLSHandshakeTimeout,
+		ExpectContinueTimeout: defaults.EmbedExpectContinueTimeout,
+		DialContext:           (&net.Dialer{Timeout: defaults.EmbedDialTimeout, KeepAlive: defaults.EmbedTCPKeepAlive}).DialContext,
 	}
 	return &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),
 		httpClient: &http.Client{
-			Timeout:   60 * time.Second,
+			Timeout:   defaults.EmbedHTTPClientTimeout,
 			Transport: tr,
 		},
 	}
@@ -73,7 +74,7 @@ func (c *Client) Embed(ctx context.Context, texts []string) ([][]float32, error)
 		return nil, fmt.Errorf("embed: http: %w", err)
 	}
 	defer res.Body.Close()
-	rb, err := io.ReadAll(io.LimitReader(res.Body, 1<<22))
+	rb, err := io.ReadAll(io.LimitReader(res.Body, defaults.MaxEmbedHTTPResponseBody))
 	if err != nil {
 		return nil, fmt.Errorf("embed: read body: %w", err)
 	}

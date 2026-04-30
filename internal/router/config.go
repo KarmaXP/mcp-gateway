@@ -1,6 +1,10 @@
 package router
 
-import "time"
+import (
+	"time"
+
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
+)
 
 // SemanticRouterRuntimeConfig holds in-process tuning for vector routing (timeouts, thresholds).
 type SemanticRouterRuntimeConfig struct {
@@ -20,11 +24,11 @@ type SemanticRouterRuntimeConfig struct {
 func DefaultSemanticRouterRuntimeConfig() SemanticRouterRuntimeConfig {
 	return SemanticRouterRuntimeConfig{
 		Mode:            ModeOff,
-		TopK:            8,
-		ScoreMin:        0.35,
+		TopK:            defaults.RouterTopK,
+		ScoreMin:        defaults.RouterScoreMin,
 		HybridAlpha:     0,
 		AllowAutoRename: false,
-		EmbedTimeout:    10 * time.Second,
-		QueryTimeout:    5 * time.Second,
+		EmbedTimeout:    defaults.RouterEmbedTimeout,
+		QueryTimeout:    defaults.RouterQueryTimeout,
 	}
 }

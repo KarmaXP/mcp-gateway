@@ -7,8 +7,14 @@ import (
 )
 
 const (
-	k1 = 1.2
-	b  = 0.75
+	BM25K1 = 1.2
+	BM25B  = 0.75
+
+	bm25IDFSmoothN     = 0.5
+	bm25MinTermFreq    = 1.0
+	bm25MinDocFreq     = 1
+	bm25EmptyDocLength = 1.0
+	bm25ScoreUnity     = 1.0
 )
 
 func tokenize(s string) []string {
@@ -50,7 +56,7 @@ func Score(query, doc string, avgDL float64, N int, df map[string]int) float64 {
 	tf := termFreq(doc)
 	dl := float64(len(tokenize(doc)))
 	if dl == 0 {
-		dl = 1
+		dl = bm25EmptyDocLength
 	}
 	if avgDL <= 0 {
 		avgDL = dl
@@ -63,11 +69,11 @@ func Score(query, doc string, avgDL float64, N int, df map[string]int) float64 {
 		}
 		dfi := df[term]
 		if dfi == 0 {
-			dfi = 1
+			dfi = bm25MinDocFreq
 		}
-		idf := math.Log(1 + (float64(N)-float64(dfi)+0.5)/(float64(dfi)+0.5))
-		denom := f + k1*(1-b+b*(dl/avgDL))
-		sum += idf * (f * (k1 + 1)) / denom
+		idf := math.Log(1 + (float64(N)-float64(dfi)+bm25IDFSmoothN)/(float64(dfi)+bm25IDFSmoothN))
+		denom := f + BM25K1*(1-BM25B+BM25B*(dl/avgDL))
+		sum += idf * (f * (BM25K1 + bm25ScoreUnity)) / denom
 	}
 	return sum
 }
@@ -75,7 +81,7 @@ func Score(query, doc string, avgDL float64, N int, df map[string]int) float64 {
 func CorpusStats(docs []string) (avgDL float64, N int, df map[string]int) {
 	N = len(docs)
 	if N == 0 {
-		return 1, 0, map[string]int{}
+		return bm25EmptyDocLength, 0, map[string]int{}
 	}
 	df = make(map[string]int)
 	var totalLen float64
@@ -113,15 +119,15 @@ func RerankWeights(query string, docTexts []string, vectorScores []float64, alph
 		}
 	}
 	if maxR == 0 {
-		maxR = 1
+		maxR = bm25ScoreUnity
 	}
 	out := make([]float64, len(vectorScores))
 	for i := range vectorScores {
 		nrm := raw[i] / maxR
-		if nrm > 1 {
-			nrm = 1
+		if nrm > bm25ScoreUnity {
+			nrm = bm25ScoreUnity
 		}
-		out[i] = (1-alpha)*vectorScores[i] + alpha*nrm
+		out[i] = (bm25ScoreUnity-alpha)*vectorScores[i] + alpha*nrm
 	}
 	return out
 }

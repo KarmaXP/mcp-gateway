@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 )
 
 func TestLoadYAMLAndEnvBackends(t *testing.T) {
@@ -54,7 +56,7 @@ func TestValidateDuplicatePrefix(t *testing.T) {
 
 func TestQdrantCollectionDefault(t *testing.T) {
 	var c GatewayConfig
-	require.Equal(t, "mcp_tool_catalog", c.QdrantCollection())
+	require.Equal(t, defaults.DefaultQdrantCollectionName, c.QdrantCollection())
 	c.Qdrant.Collection = "custom"
 	require.Equal(t, "custom", c.QdrantCollection())
 }

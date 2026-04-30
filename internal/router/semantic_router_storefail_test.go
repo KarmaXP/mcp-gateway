@@ -11,6 +11,12 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 )
 
+const (
+	testVectorDim    = 4
+	testRouterTopK   = 4
+	testRouterMinHit = 0.5
+)
+
 type errStore struct {
 	inner *store.InMemoryVectorStore
 	err   error
@@ -33,7 +39,7 @@ func (e *errStore) DeleteCatalogVersion(ctx context.Context, version string) err
 }
 
 func TestSemanticRouterStoreQueryFails(t *testing.T) {
-	dim := 4
+	dim := testVectorDim
 	mem := store.NewInMemoryVectorStore(dim)
 	st := &errStore{inner: mem, err: errors.New("vector backend unavailable")}
 	emb := &mapEmbed{vecs: make(map[string][]float32), dim: dim}
@@ -45,8 +51,8 @@ func TestSemanticRouterStoreQueryFails(t *testing.T) {
 
 	cfg := DefaultSemanticRouterRuntimeConfig()
 	cfg.Mode = ModeAssistList
-	cfg.TopK = 4
-	cfg.ScoreMin = 0.5
+	cfg.TopK = testRouterTopK
+	cfg.ScoreMin = testRouterMinHit
 	sr := NewSemanticRouter(cfg, emb, st, dim)
 	require.NoError(t, sr.Reindex(context.Background(), "v1", []IndexedTool{{ToolRow: row, UpstreamID: "b1"}}))
 

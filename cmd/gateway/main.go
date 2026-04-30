@@ -9,11 +9,11 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/KarmaXP/mcp-gateway/internal/auth"
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/config"
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/httpserver"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/orchestrator"
@@ -37,7 +37,7 @@ func preflightQdrant(cfg config.GatewayConfig) {
 	if qURL == "" {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), defaults.PreflightQdrantTimeout)
 	defer cancel()
 	if err := store.PingCollections(ctx, qURL); err != nil {
 		slog.Warn("qdrant preflight failed (continuing; router/index may fail until Qdrant is healthy)",
@@ -53,7 +53,7 @@ func multiplexerOptions(cfg config.GatewayConfig) ([]multiplex.Option, error) {
 	opts := []multiplex.Option{multiplex.WithListTTL(0)}
 	mode := strings.ToLower(strings.TrimSpace(cfg.SemanticRouter.Mode))
 	if mode == "" {
-		mode = "off"
+		mode = string(router.ModeOff)
 	}
 	if mode != "on" && mode != "assist_list" {
 		return opts, nil
@@ -61,11 +61,11 @@ func multiplexerOptions(cfg config.GatewayConfig) ([]multiplex.Option, error) {
 
 	embedURL := strings.TrimSpace(cfg.Embedding.URL)
 	if embedURL == "" {
-		embedURL = "http://127.0.0.1:8001"
+		embedURL = defaults.DefaultEmbedServiceURL
 	}
 	dim := cfg.SemanticRouter.VectorDim
 	if dim <= 0 {
-		dim = 384
+		dim = defaults.VectorDimension
 	}
 
 	rcfg := router.DefaultSemanticRouterRuntimeConfig()
@@ -113,13 +113,13 @@ func multiplexerOptions(cfg config.GatewayConfig) ([]multiplex.Option, error) {
 
 func main() {
 	ctx := context.Background()
-	teleShutdown, err := telemetry.Init(ctx, "mcp-gateway")
+	teleShutdown, err := telemetry.Init(ctx, defaults.DefaultTelemetryServiceName)
 	if err != nil {
 		slog.Error("telemetry init", "err", err)
 		os.Exit(1)
 	}
 	defer func() {
-		sctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		sctx, cancel := context.WithTimeout(context.Background(), defaults.TelemetryShutdownTimeout)
 		defer cancel()
 		if err := teleShutdown(sctx); err != nil {
 			slog.Error("telemetry shutdown", "err", err)
@@ -142,7 +142,7 @@ func main() {
 		port = strings.TrimSpace(os.Getenv("GATEWAY_PORT"))
 	}
 	if port == "" {
-		port = "8080"
+		port = defaults.DefaultGatewayHTTPPort
 	}
 	addr := ":" + port
 
@@ -174,7 +174,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	httpOpts := orchestrator.HTTPServerOptions("mcp-gateway", authCfg, validator)
+	httpOpts := orchestrator.HTTPServerOptions(defaults.DefaultTelemetryServiceName, authCfg, validator)
 	httpOpts = append(httpOpts, httpserver.WithShutdownContext(rootCtx))
 	srv := httpserver.New(mpx, addr, httpOpts...)
 
@@ -189,7 +189,7 @@ func main() {
 	<-rootCtx.Done()
 	slog.Info("shutdown signal received")
 
-	sctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	sctx, cancel := context.WithTimeout(context.Background(), defaults.HTTPServerShutdownTimeout)
 	defer cancel()
 	if err := srv.Shutdown(sctx); err != nil {
 		slog.Error("http shutdown", "err", err)

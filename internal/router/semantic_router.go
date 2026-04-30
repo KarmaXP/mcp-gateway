@@ -10,12 +10,19 @@ import (
 	"sync"
 	"time"
 
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/namespace"
 	"github.com/KarmaXP/mcp-gateway/internal/router/bm25"
 	"github.com/KarmaXP/mcp-gateway/internal/router/embed"
 	"github.com/KarmaXP/mcp-gateway/internal/router/index"
 	"github.com/KarmaXP/mcp-gateway/internal/router/rules"
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
+)
+
+const (
+	exactMatchConfidence         = 1.0
+	singleQueryEmbeddingCount    = 1
+	ambiguityScoreDeltaThreshold = 0.05
 )
 
 // IndexedTool is one catalog tool row plus the upstream that owns its namespace prefix.
@@ -42,7 +49,7 @@ type SemanticRouter struct {
 
 func NewSemanticRouter(cfg SemanticRouterRuntimeConfig, e embed.Embedder, st store.Store, vectorDim int) *SemanticRouter {
 	if vectorDim <= 0 {
-		vectorDim = 384
+		vectorDim = defaults.VectorDimension
 	}
 	return &SemanticRouter{
 		cfg:            cfg,
@@ -91,7 +98,7 @@ func (sr *SemanticRouter) Reindex(ctx context.Context, version string, tools []I
 		docs[i] = index.FormatDocument(ent.ToolRow)
 	}
 
-	batch := 64
+	batch := defaults.ReindexEmbedBatchSize
 	var all [][]float32
 	for i := 0; i < len(docs); i += batch {
 		j := i + batch
@@ -181,15 +188,15 @@ func (sr *SemanticRouter) ResolveToolsCall(ctx context.Context, sig RoutingSigna
 		uid := sr.upstreamID(toolForExact)
 		dec.UpstreamID = uid
 		dec.ToolNameNamespaced = toolForExact
-		dec.Confidence = 1
+		dec.Confidence = exactMatchConfidence
 		if rl != nil && strings.TrimSpace(sig.ToolName) != "" && toolForExact != sig.ToolName {
 			dec.FallbackLayer = "rules"
 			dec.Outcome = OutcomeRulesAlias
-			dec.Candidates = []ScoredTool{{Name: toolForExact, Score: 1, Source: "rules"}}
+			dec.Candidates = []ScoredTool{{Name: toolForExact, Score: exactMatchConfidence, Source: "rules"}}
 		} else {
 			dec.FallbackLayer = "exact"
 			dec.Outcome = OutcomeExact
-			dec.Candidates = []ScoredTool{{Name: toolForExact, Score: 1, Source: "exact"}}
+			dec.Candidates = []ScoredTool{{Name: toolForExact, Score: exactMatchConfidence, Source: "exact"}}
 		}
 		dec.LatencyMS = time.Since(start).Milliseconds()
 		slog.InfoContext(ctx, "router decision", "layer", dec.FallbackLayer, "tool", toolForExact, "latency_ms", dec.LatencyMS)
@@ -214,7 +221,7 @@ func (sr *SemanticRouter) ResolveToolsCall(ctx context.Context, sig RoutingSigna
 		dec.LatencyMS = time.Since(start).Milliseconds()
 		return "", dec, fmt.Errorf("%w: %w", ErrDegradedNoExact, err)
 	}
-	if len(vecs) != 1 || len(vecs[0]) != sr.dim {
+	if len(vecs) != singleQueryEmbeddingCount || len(vecs[0]) != sr.dim {
 		dec.Outcome = OutcomeMissInvalidEmbedding
 		dec.LatencyMS = time.Since(start).Milliseconds()
 		return "", dec, fmt.Errorf("%w", ErrInvalidEmbedding)
@@ -258,7 +265,7 @@ func (sr *SemanticRouter) ResolveToolsCall(ctx context.Context, sig RoutingSigna
 		slog.InfoContext(ctx, "router decision", "layer", "vector", "outcome", "below_threshold", "top", top.Score, "latency_ms", dec.LatencyMS)
 		return "", dec, fmt.Errorf("%w: got %.4f min %.4f", ErrBelowThreshold, top.Score, sr.cfg.ScoreMin)
 	}
-	if len(results) > 1 && results[1].Score >= sr.cfg.ScoreMin && (results[0].Score-results[1].Score) < 0.05 {
+	if len(results) > 1 && results[1].Score >= sr.cfg.ScoreMin && (results[0].Score-results[1].Score) < ambiguityScoreDeltaThreshold {
 		dec.Outcome = OutcomeMissAmbiguous
 		dec.LatencyMS = time.Since(start).Milliseconds()
 		slog.InfoContext(ctx, "router decision", "layer", "vector", "outcome", "ambiguous", "latency_ms", dec.LatencyMS)

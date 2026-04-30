@@ -17,34 +17,44 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
+)
+
+const (
+	devJWTTokenTTL   = time.Hour
+	devJWTIssuedSkew = -time.Minute
+
+	exitStatusGeneralError = 1
+	exitStatusInvalidUsage = 2
 )
 
 func main() {
 	iss := flag.String("issuer", "https://dev.local", "")
-	aud := flag.String("audience", "mcp-gateway", "")
+	aud := flag.String("audience", defaults.DefaultTelemetryServiceName, "")
 	keyPath := flag.String("key", "", "path to RSA private key PEM")
 	kid := flag.String("kid", "dev-1", "")
 	flag.Parse()
 	if *keyPath == "" {
 		fmt.Fprintln(os.Stderr, "-key required")
-		os.Exit(2)
+		os.Exit(exitStatusInvalidUsage)
 	}
 	priv, err := loadRSAPrivateKey(*keyPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		os.Exit(exitStatusGeneralError)
 	}
 	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.RegisteredClaims{
 		Issuer:    *iss,
 		Audience:  jwt.ClaimStrings{*aud},
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * time.Hour)),
-		IssuedAt:  jwt.NewNumericDate(time.Now().Add(-1 * time.Minute)),
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(devJWTTokenTTL)),
+		IssuedAt:  jwt.NewNumericDate(time.Now().Add(devJWTIssuedSkew)),
 	})
 	tok.Header["kid"] = *kid
 	s, err := tok.SignedString(priv)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		os.Exit(exitStatusGeneralError)
 	}
 	fmt.Print(s)
 }

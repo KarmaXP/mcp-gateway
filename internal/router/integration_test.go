@@ -14,19 +14,29 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/router/embed"
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
+)
+
+const (
+	integrationProbeTimeout = 2 * time.Second
+	integrationScoreMin     = 0.22
+	integrationEmbedTimeout = 60 * time.Second
+	integrationQueryTimeout = 30 * time.Second
+
+	integrationQdrantCollectionPrefix = "mcp_router_itest_"
 )
 
 func TestSemanticVectorRoutingWithQdrantAndMiniLM(t *testing.T) {
 	ctx := context.Background()
 	qURL := strings.TrimSpace(os.Getenv("QDRANT_URL"))
 	if qURL == "" {
-		qURL = "http://127.0.0.1:6333"
+		qURL = defaults.DefaultQdrantHTTPURL
 	}
 	embURL := strings.TrimSpace(os.Getenv("EMBED_URL"))
 	if embURL == "" {
-		embURL = "http://127.0.0.1:8001"
+		embURL = defaults.DefaultEmbedServiceURL
 	}
 
 	skipUnlessIntegrationDeps(t, probeURL(ctx, qURL+"/collections"),
@@ -34,20 +44,20 @@ func TestSemanticVectorRoutingWithQdrantAndMiniLM(t *testing.T) {
 	skipUnlessIntegrationDeps(t, probeURL(ctx, embURL+"/healthz"),
 		"embed service not reachable at %s (compose maps embed to host port 8001 by default)", embURL)
 
-	coll := "mcp_router_itest_" + strings.ReplaceAll(uuid.NewString(), "-", "_")
-	st, err := store.NewQdrantVectorStore(qURL, coll, 384)
+	coll := integrationQdrantCollectionPrefix + strings.ReplaceAll(uuid.NewString(), "-", "_")
+	st, err := store.NewQdrantVectorStore(qURL, coll, defaults.VectorDimension)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = httpDelete(ctx, qURL+"/collections/"+coll) })
 
 	cfg := DefaultSemanticRouterRuntimeConfig()
 	cfg.Mode = ModeAssistList
-	cfg.ScoreMin = 0.22
-	cfg.TopK = 8
+	cfg.ScoreMin = integrationScoreMin
+	cfg.TopK = defaults.RouterTopK
 	cfg.AllowAutoRename = true
-	cfg.EmbedTimeout = 60 * time.Second
-	cfg.QueryTimeout = 30 * time.Second
+	cfg.EmbedTimeout = integrationEmbedTimeout
+	cfg.QueryTimeout = integrationQueryTimeout
 
-	sr := NewSemanticRouter(cfg, embed.NewClient(embURL), st, 384)
+	sr := NewSemanticRouter(cfg, embed.NewClient(embURL), st, defaults.VectorDimension)
 
 	listJSON := []byte(`{"tools":[
 		{"name":"alpha__echo","description":"mock tool echo","inputSchema":{"type":"object","properties":{}}},
@@ -79,7 +89,7 @@ func TestSemanticVectorRoutingWithQdrantAndMiniLM(t *testing.T) {
 }
 
 func probeURL(ctx context.Context, u string) bool {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, integrationProbeTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
@@ -90,7 +100,7 @@ func probeURL(ctx context.Context, u string) bool {
 		return false
 	}
 	_ = res.Body.Close()
-	return res.StatusCode < 500
+	return res.StatusCode < http.StatusInternalServerError
 }
 
 func skipUnlessIntegrationDeps(t *testing.T, ok bool, format string, args ...any) {

@@ -13,15 +13,23 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
 
+const (
+	defaultListenAddr     = "127.0.0.1:31400"
+	smokeEventChannelSize = 32
+)
+
 func main() {
-	addr := flag.String("listen", "127.0.0.1:31400", "HTTP listen address")
+	addr := flag.String("listen", defaultListenAddr, "HTTP listen address")
 	flag.Parse()
 
 	s := &upstream{
-		events: make(chan string, 32),
+		events: make(chan string, smokeEventChannelSize),
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /mcp/sse", s.handleSSE)
@@ -41,7 +49,7 @@ type upstream struct {
 func (s *upstream) handleSSE(w http.ResponseWriter, r *http.Request) {
 	fl, ok := w.(http.Flusher)
 	if !ok {
-		http.Error(w, "no flush", 500)
+		http.Error(w, "no flush", http.StatusInternalServerError)
 		return
 	}
 	s.mu.Lock()
@@ -64,7 +72,7 @@ func (s *upstream) handleSSE(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if _, err := fmt.Fprintf(w, "event: jsonrpc\ndata: %s\n\n", msg); err != nil {
+			if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", mcpwire.SSEJSONRPCEvent, msg); err != nil {
 				return
 			}
 			fl.Flush()
@@ -80,21 +88,21 @@ func (s *upstream) handleRPC(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad session", http.StatusUnauthorized)
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	body, err := io.ReadAll(io.LimitReader(r.Body, defaults.MaxMCPRPCBodyBytes))
 	if err != nil {
-		http.Error(w, "read", 400)
+		http.Error(w, "read", http.StatusBadRequest)
 		return
 	}
 	req, err := rpc.ParseRequest(body)
 	if err != nil {
-		http.Error(w, err.Error(), 400)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	switch req.Method {
 	case "initialize":
 		res := map[string]any{
-			"protocolVersion": "2024-11-05",
+			"protocolVersion": mcpwire.MCPProtocolVersion,
 			"capabilities":    map[string]any{"tools": map[string]any{}},
 			"serverInfo":      map[string]any{"name": "smoke-upstream"},
 		}
@@ -119,7 +127,7 @@ func (s *upstream) handleRPC(w http.ResponseWriter, r *http.Request) {
 		})
 		s.push(rpc.NewResult(req.ID, raw))
 	default:
-		s.push(rpc.NewError(req.ID, -32601, "not found: "+req.Method, nil))
+		s.push(rpc.NewError(req.ID, errcodes.MethodNotFound, "not found: "+req.Method, nil))
 	}
 	w.WriteHeader(http.StatusAccepted)
 }

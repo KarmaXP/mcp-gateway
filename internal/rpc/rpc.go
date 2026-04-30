@@ -7,7 +7,12 @@ import (
 	"fmt"
 )
 
-const JSONRPCVersion = "2.0"
+const (
+	JSONRPCVersion = "2.0"
+
+	jsonObjectStartByte = '{'
+	jsonRawNull         = "null"
+)
 
 var (
 	ErrInvalidRequest = errors.New("rpc: invalid JSON-RPC request")
@@ -30,7 +35,7 @@ func ParseRequest(raw []byte) (*Request, error) {
 	if len(raw) == 0 {
 		return nil, fmt.Errorf("%w: empty body", ErrInvalidRequest)
 	}
-	if raw[0] != '{' {
+	if raw[0] != jsonObjectStartByte {
 		return nil, ErrNotObject
 	}
 	var req Request
@@ -43,7 +48,7 @@ func ParseRequest(raw []byte) (*Request, error) {
 	if req.Method == "" {
 		return nil, fmt.Errorf("%w: method required", ErrInvalidRequest)
 	}
-	if len(req.ID) > 0 && string(req.ID) == "null" {
+	if len(req.ID) > 0 && string(req.ID) == jsonRawNull {
 		return nil, fmt.Errorf("%w: id must be omitted for notifications, not null", ErrInvalidRequest)
 	}
 	return &req, nil
@@ -91,7 +96,7 @@ func ParseResponse(raw []byte) (*Response, error) {
 	if len(raw) == 0 {
 		return nil, fmt.Errorf("%w: empty body", ErrInvalidRequest)
 	}
-	if raw[0] != '{' {
+	if raw[0] != jsonObjectStartByte {
 		return nil, ErrNotObject
 	}
 	var resp Response

@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 )
 
 // GatewayConfig is the root document loaded from YAML and environment (MCP_GATEWAY_*).
@@ -145,7 +147,7 @@ func (c *GatewayConfig) ApplyEnvOverrides() {
 		c.Embedding.URL = v
 	}
 	if c.Embedding.URL == "" {
-		c.Embedding.URL = "http://127.0.0.1:8001"
+		c.Embedding.URL = defaults.DefaultEmbedServiceURL
 	}
 
 	if v := strings.TrimSpace(os.Getenv("ROUTER_MODE")); v != "" {
@@ -181,22 +183,22 @@ func (c *GatewayConfig) ApplyEnvOverrides() {
 
 func (c *GatewayConfig) RouterEmbedTimeout() time.Duration {
 	if c == nil {
-		return 10 * time.Second
+		return defaults.RouterEmbedTimeout
 	}
 	if d, err := parseDurationString(c.SemanticRouter.EmbedTimeout); err == nil && d > 0 {
 		return d
 	}
-	return 10 * time.Second
+	return defaults.RouterEmbedTimeout
 }
 
 func (c *GatewayConfig) RouterQueryTimeout() time.Duration {
 	if c == nil {
-		return 5 * time.Second
+		return defaults.RouterQueryTimeout
 	}
 	if d, err := parseDurationString(c.SemanticRouter.QueryTimeout); err == nil && d > 0 {
 		return d
 	}
-	return 5 * time.Second
+	return defaults.RouterQueryTimeout
 }
 
 func parseDurationString(s string) (time.Duration, error) {
@@ -209,7 +211,7 @@ func parseDurationString(s string) (time.Duration, error) {
 
 func (c *GatewayConfig) QdrantCollection() string {
 	if c == nil || strings.TrimSpace(c.Qdrant.Collection) == "" {
-		return "mcp_tool_catalog"
+		return defaults.DefaultQdrantCollectionName
 	}
 	return strings.TrimSpace(c.Qdrant.Collection)
 }

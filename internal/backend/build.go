@@ -8,6 +8,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/backend/mcphttp"
 	"github.com/KarmaXP/mcp-gateway/internal/backend/mcpstdio"
 	"github.com/KarmaXP/mcp-gateway/internal/config"
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 )
 
 var (
@@ -28,7 +29,7 @@ func ConnectUpstreams(ctx context.Context, defs []config.UpstreamDefinition) ([]
 	for _, d := range defs {
 		max := int64(d.MaxConcurrency)
 		if max <= 0 {
-			max = 8
+			max = defaults.UpstreamMaxConcurrency
 		}
 		switch {
 		case strings.TrimSpace(d.URL) != "":

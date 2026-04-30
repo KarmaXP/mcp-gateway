@@ -9,6 +9,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/router"
 )
 
@@ -95,6 +96,6 @@ func RecordSemanticRouting(ctx context.Context, dec *router.RoutingDecision, res
 	}
 	semanticOutcomes.Add(ctx, 1, metric.WithAttributes(attrs...))
 	if dec.LatencyMS > 0 {
-		semanticDuration.Record(ctx, float64(dec.LatencyMS)/1000.0, metric.WithAttributes(attrs...))
+		semanticDuration.Record(ctx, float64(dec.LatencyMS)/defaults.MillisecondsPerSecond, metric.WithAttributes(attrs...))
 	}
 }

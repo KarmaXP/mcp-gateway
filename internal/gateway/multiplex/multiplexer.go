@@ -17,8 +17,10 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/namespace"
 	"github.com/KarmaXP/mcp-gateway/internal/router"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
@@ -27,6 +29,10 @@ import (
 )
 
 var errNoUpstreamsResponded = errors.New("multiplex: no upstreams responded to initialize")
+
+const jsonNullLiteral = "null"
+
+var emptyToolArguments = json.RawMessage(`{}`)
 
 type Multiplexer struct {
 	upstreams []backend.Upstream
@@ -87,10 +93,10 @@ func New(upstreams []backend.Upstream, opts ...Option) (*Multiplexer, error) {
 	a := &Multiplexer{
 		upstreams:   append([]backend.Upstream(nil), upstreams...),
 		byPrefix:    byPrefix,
-		initTimeout: 5 * time.Second,
-		listTimeout: 10 * time.Second,
-		callTimeout: 60 * time.Second,
-		listTTL:     30 * time.Second,
+		initTimeout: defaults.MultiplexInitTimeout,
+		listTimeout: defaults.MultiplexListTimeout,
+		callTimeout: defaults.MultiplexCallTimeout,
+		listTTL:     defaults.MultiplexListCacheTTL,
 	}
 	for _, o := range opts {
 		o(a)
@@ -154,11 +160,11 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 
 func hostParams() json.RawMessage {
 	p := map[string]any{
-		"protocolVersion": "2024-11-05",
+		"protocolVersion": mcpwire.MCPProtocolVersion,
 		"capabilities":    map[string]any{},
 		"clientInfo": map[string]any{
-			"name":    "mcp-gateway",
-			"version": "0.1.0",
+			"name":    mcpwire.GatewayClientName,
+			"version": mcpwire.GatewayClientVersion,
 		},
 	}
 	b, _ := json.Marshal(p)
@@ -167,11 +173,11 @@ func hostParams() json.RawMessage {
 
 func mergeInitializeResults(results []json.RawMessage, upstreams []backend.Upstream) (map[string]any, error) {
 	merged := map[string]any{
-		"protocolVersion": "2024-11-05",
+		"protocolVersion": mcpwire.MCPProtocolVersion,
 		"capabilities":    map[string]any{},
 		"serverInfo": map[string]any{
-			"name":    "mcp-gateway",
-			"version": "0.1.0",
+			"name":    mcpwire.GatewayClientName,
+			"version": mcpwire.GatewayClientVersion,
 			"extras": map[string]any{
 				"backends": []string{},
 			},
@@ -434,8 +440,8 @@ func (a *Multiplexer) ToolsCall(ctx context.Context, hostID json.RawMessage, par
 }
 
 func coalesceArgs(a json.RawMessage) json.RawMessage {
-	if len(a) == 0 || string(a) == "null" {
-		return json.RawMessage(`{}`)
+	if len(a) == 0 || string(a) == jsonNullLiteral {
+		return emptyToolArguments
 	}
 	return a
 }

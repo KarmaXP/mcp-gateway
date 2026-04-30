@@ -5,8 +5,11 @@ import (
 	"hash/fnv"
 	"strings"
 
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 )
+
+const lexicalEmbedUnitAxisValue float32 = 1
 
 type LexicalEmbedder struct {
 	Dim int
@@ -32,7 +35,7 @@ func (l LexicalEmbedder) Embed(ctx context.Context, texts []string) ([][]float32
 	}
 	dim := l.Dim
 	if dim <= 0 {
-		dim = 384
+		dim = defaults.VectorDimension
 	}
 	out := make([][]float32, len(texts))
 	for i, t := range texts {
@@ -41,7 +44,7 @@ func (l LexicalEmbedder) Embed(ctx context.Context, texts []string) ([][]float32
 			v[int(fnv32(w))%dim] += 1
 		}
 		if !store.L2Normalize(v) {
-			v[0] = 1
+			v[0] = lexicalEmbedUnitAxisValue
 			_ = store.L2Normalize(v)
 		}
 		out[i] = v

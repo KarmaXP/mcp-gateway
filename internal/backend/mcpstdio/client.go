@@ -14,7 +14,13 @@ import (
 
 	"golang.org/x/sync/semaphore"
 
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+)
+
+const (
+	weightedSemaphoreTickets int64 = 1
+	pendingJSONRPCChannelCap int   = 1
 )
 
 type StdioMCPUpstream struct {
@@ -47,7 +53,7 @@ func NewStdioMCPUpstream(lifecycle context.Context, id, prefix string, command, 
 		return nil, nil, fmt.Errorf("mcpstdio: empty command")
 	}
 	if maxConcurrency <= 0 {
-		maxConcurrency = 8
+		maxConcurrency = defaults.UpstreamMaxConcurrency
 	}
 	c := &StdioMCPUpstream{
 		id:        id,
@@ -146,10 +152,10 @@ func (c *StdioMCPUpstream) writeLineLocked(payload []byte) error {
 }
 
 func (c *StdioMCPUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
-	if err := c.sem.Acquire(ctx, 1); err != nil {
+	if err := c.sem.Acquire(ctx, weightedSemaphoreTickets); err != nil {
 		return nil, err
 	}
-	defer c.sem.Release(1)
+	defer c.sem.Release(weightedSemaphoreTickets)
 
 	if err := c.ensure(ctx); err != nil {
 		return nil, err
@@ -174,7 +180,7 @@ func (c *StdioMCPUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Res
 	if key == "" {
 		return nil, fmt.Errorf("mcpstdio %s: missing jsonrpc id", c.id)
 	}
-	ch := make(chan *rpc.Response, 1)
+	ch := make(chan *rpc.Response, pendingJSONRPCChannelCap)
 	c.pendMu.Lock()
 	c.pending[key] = ch
 	c.pendMu.Unlock()

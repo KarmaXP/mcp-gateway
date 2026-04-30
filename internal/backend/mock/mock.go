@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
 
@@ -47,13 +49,13 @@ func (b *MockUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Respons
 	case "tools/call":
 		return b.toolsCall(ctx, req)
 	default:
-		return rpc.NewError(req.ID, -32601, fmt.Sprintf("method not found: %s", req.Method), nil), nil
+		return rpc.NewError(req.ID, errcodes.MethodNotFound, fmt.Sprintf("method not found: %s", req.Method), nil), nil
 	}
 }
 
 func (b *MockUpstream) initialize(_ context.Context, req *rpc.Request) (*rpc.Response, error) {
 	result := map[string]any{
-		"protocolVersion": "2024-11-05",
+		"protocolVersion": mcpwire.MCPProtocolVersion,
 		"capabilities": map[string]any{
 			"tools": map[string]any{},
 		},
@@ -117,7 +119,7 @@ func (b *MockUpstream) toolsCall(ctx context.Context, req *rpc.Request) (*rpc.Re
 	}
 	if len(req.Params) > 0 {
 		if err := json.Unmarshal(req.Params, &params); err != nil {
-			return rpc.NewError(req.ID, -32602, "invalid params", nil), nil
+			return rpc.NewError(req.ID, errcodes.InvalidParams, "invalid params", nil), nil
 		}
 	}
 	b.mu.Lock()
@@ -132,7 +134,7 @@ func (b *MockUpstream) toolsCall(ctx context.Context, req *rpc.Request) (*rpc.Re
 		}
 	}
 	if !valid {
-		return rpc.NewError(req.ID, -32602, fmt.Sprintf("unknown tool %q", params.Name), nil), nil
+		return rpc.NewError(req.ID, errcodes.InvalidParams, fmt.Sprintf("unknown tool %q", params.Name), nil), nil
 	}
 
 	content := []map[string]any{

@@ -19,23 +19,53 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
+	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+)
+
+const (
+	defaultLoadtestGatewayURL = "http://127.0.0.1:18080"
+	defaultLoadtestWorkers    = 8
+	defaultWarmupIterations   = 2
+	defaultTestWindow         = 30 * time.Second
+
+	sseEventLineBuffer       = 256
+	microsecondsPerMillis    = 1000
+	throughputMinDenominator = 1
+
+	percentileP50 = 50
+	percentileP95 = 95
+	percentileP99 = 99
+
+	percentileIndexDivisor = 100
+
+	exitStatusGeneralError = 1
+	exitStatusInvalidUsage = 2
+)
+
+var (
+	loadtestInitAckTimeout   = 15 * time.Second
+	loadtestToolsListTimeout = 30 * time.Second
+	loadtestToolsCallTimeout = 60 * time.Second
 )
 
 func main() {
-	base := flag.String("url", "http://127.0.0.1:18080", "Gateway base URL (no trailing slash)")
+	base := flag.String("url", defaultLoadtestGatewayURL, "Gateway base URL (no trailing slash)")
 	mode := flag.String("mode", "direct", "direct (exact tool name) or semantic (vague name → vector router)")
-	workers := flag.Int("workers", 8, "Concurrent workers")
-	duration := flag.Duration("duration", 30*time.Second, "Test window per worker (after warmup)")
-	warmup := flag.Int("warmup", 2, "Warmup iterations per worker (discarded)")
+	workers := flag.Int("workers", defaultLoadtestWorkers, "Concurrent workers")
+	duration := flag.Duration("duration", defaultTestWindow, "Test window per worker (after warmup)")
+	warmup := flag.Int("warmup", defaultWarmupIterations, "Warmup iterations per worker (discarded)")
 	flag.Parse()
 
 	if *workers < 1 {
 		fmt.Fprintln(os.Stderr, "workers must be >= 1")
-		os.Exit(2)
+		os.Exit(exitStatusInvalidUsage)
 	}
 	if *mode != "direct" && *mode != "semantic" {
 		fmt.Fprintln(os.Stderr, "mode must be direct or semantic")
-		os.Exit(2)
+		os.Exit(exitStatusInvalidUsage)
 	}
 
 	client := &http.Client{Timeout: 0}
@@ -74,26 +104,26 @@ func main() {
 	fmt.Printf("mode=%s workers=%d window=%s samples=%d errors=%d\n", *mode, *workers, *duration, len(samples), errs.Load())
 	if len(samples) == 0 {
 		fmt.Println("no successful samples")
-		os.Exit(1)
+		os.Exit(exitStatusGeneralError)
 	}
 	sec := duration.Seconds()
 	if sec <= 0 {
-		sec = 1
+		sec = throughputMinDenominator
 	}
 	fmt.Printf("throughput_rps_est=%.2f\n", float64(len(samples))/sec)
-	fmt.Printf("latency_p50_ms=%.3f\n", percentileMs(samples, 50))
-	fmt.Printf("latency_p95_ms=%.3f\n", percentileMs(samples, 95))
-	fmt.Printf("latency_p99_ms=%.3f\n", percentileMs(samples, 99))
-	fmt.Printf("latency_min_ms=%.3f\n", float64(samples[0].Microseconds())/1000)
-	fmt.Printf("latency_max_ms=%.3f\n", float64(samples[len(samples)-1].Microseconds())/1000)
+	fmt.Printf("latency_p50_ms=%.3f\n", percentileMs(samples, percentileP50))
+	fmt.Printf("latency_p95_ms=%.3f\n", percentileMs(samples, percentileP95))
+	fmt.Printf("latency_p99_ms=%.3f\n", percentileMs(samples, percentileP99))
+	fmt.Printf("latency_min_ms=%.3f\n", float64(samples[0].Microseconds())/microsecondsPerMillis)
+	fmt.Printf("latency_max_ms=%.3f\n", float64(samples[len(samples)-1].Microseconds())/microsecondsPerMillis)
 }
 
 func percentileMs(d []time.Duration, p int) float64 {
 	if len(d) == 0 {
 		return 0
 	}
-	idx := (len(d) - 1) * p / 100
-	return float64(d[idx].Microseconds()) / 1000
+	idx := (len(d) - 1) * p / percentileIndexDivisor
+	return float64(d[idx].Microseconds()) / microsecondsPerMillis
 }
 
 func oneIteration(client *http.Client, base, mode string) (callLatency time.Duration, err error) {
@@ -106,23 +136,23 @@ func oneIteration(client *http.Client, base, mode string) (callLatency time.Dura
 
 	id := nextID()
 	if err := postRPC(client, base+"/mcp/rpc", sid, fmt.Sprintf(
-		`{"jsonrpc":"2.0","id":%d,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"loadtest","version":"0"}}}`,
-		id)); err != nil {
+		`{"jsonrpc":"%s","id":%d,"method":"initialize","params":{"protocolVersion":"%s","capabilities":{},"clientInfo":{"name":"loadtest","version":"0"}}}`,
+		rpc.JSONRPCVersion, id, mcpwire.MCPProtocolVersion)); err != nil {
 		return 0, err
 	}
-	if _, err := waitDataJSON(events, id, 15*time.Second); err != nil {
+	if _, err := waitDataJSON(events, id, loadtestInitAckTimeout); err != nil {
 		return 0, err
 	}
 
-	if err := postRPC(client, base+"/mcp/rpc", sid, `{"jsonrpc":"2.0","method":"notifications/initialized"}`); err != nil {
+	if err := postRPC(client, base+"/mcp/rpc", sid, fmt.Sprintf(`{"jsonrpc":"%s","method":"notifications/initialized"}`, rpc.JSONRPCVersion)); err != nil {
 		return 0, err
 	}
 
 	id = nextID()
-	if err := postRPC(client, base+"/mcp/rpc", sid, fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"method":"tools/list"}`, id)); err != nil {
+	if err := postRPC(client, base+"/mcp/rpc", sid, fmt.Sprintf(`{"jsonrpc":"%s","id":%d,"method":"tools/list"}`, rpc.JSONRPCVersion, id)); err != nil {
 		return 0, err
 	}
-	if _, err := waitDataJSON(events, id, 30*time.Second); err != nil {
+	if _, err := waitDataJSON(events, id, loadtestToolsListTimeout); err != nil {
 		return 0, err
 	}
 
@@ -131,13 +161,13 @@ func oneIteration(client *http.Client, base, mode string) (callLatency time.Dura
 		toolName = `repeat user text back to them like an echo mock tool`
 	}
 	id = nextID()
-	callBody := fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":{"name":%q,"arguments":{}}}`, id, toolName)
+	callBody := fmt.Sprintf(`{"jsonrpc":"%s","id":%d,"method":"tools/call","params":{"name":%q,"arguments":{}}}`, rpc.JSONRPCVersion, id, toolName)
 
 	t0 := time.Now()
 	if err := postRPC(client, base+"/mcp/rpc", sid, callBody); err != nil {
 		return 0, err
 	}
-	raw, err := waitDataJSON(events, id, 60*time.Second)
+	raw, err := waitDataJSON(events, id, loadtestToolsCallTimeout)
 	if err != nil {
 		return 0, err
 	}
@@ -183,7 +213,7 @@ func openSSE(ctx context.Context, client *http.Client, u string) (sid string, ou
 		resp.Body.Close()
 		return "", nil, nil, fmt.Errorf("missing Mcp-Session-Id")
 	}
-	ch := make(chan string, 256)
+	ch := make(chan string, sseEventLineBuffer)
 	cctx, cfn := context.WithCancel(ctx)
 	go func() {
 		defer resp.Body.Close()
@@ -222,7 +252,7 @@ func postRPC(client *http.Client, url, sid, body string) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusAccepted {
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, defaults.MaxHTTPUpstreamErrorBody))
 		return fmt.Errorf("post status %d: %s", resp.StatusCode, string(b))
 	}
 	return nil
@@ -240,10 +270,10 @@ func waitDataJSON(events <-chan string, id int64, timeout time.Duration) ([]byte
 				return nil, fmt.Errorf("sse closed")
 			}
 			s := strings.TrimSpace(line)
-			if !strings.HasPrefix(s, "data:") {
+			if !strings.HasPrefix(s, mcpwire.SSEDataLinePrefix) {
 				continue
 			}
-			payload := strings.TrimSpace(strings.TrimPrefix(s, "data:"))
+			payload := strings.TrimSpace(strings.TrimPrefix(s, mcpwire.SSEDataLinePrefix))
 			if !strings.Contains(payload, needle) {
 				continue
 			}

@@ -7,6 +7,9 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 )
 
+// Prefix length for "bearer " (Authorization header scheme, case-insensitive check on a lowercased copy).
+const bearerAuthSchemeLowerLen = 7
+
 func HTTPMiddleware(cfg JWTAuthConfig, v *Validator) func(http.Handler) http.Handler {
 	if cfg.Mode == "" || cfg.Mode == "none" {
 		return func(next http.Handler) http.Handler { return next }
@@ -24,7 +27,7 @@ func HTTPMiddleware(cfg JWTAuthConfig, v *Validator) func(http.Handler) http.Han
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
-			tok := strings.TrimSpace(raw[7:])
+			tok := strings.TrimSpace(raw[bearerAuthSchemeLowerLen:])
 			if tok == "" {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
