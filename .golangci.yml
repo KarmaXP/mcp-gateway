@@ -12,13 +12,22 @@ linters:
     - unused
     - gofmt
     - bodyclose
+    - mnd
 
 linters-settings:
   staticcheck:
     checks: ["all"]
+  mnd:
+    checks:
+      - argument
+      - case
+      - condition
+      - operation
+      - return
 
 issues:
   exclude-rules:
     - path: _test\.go
       linters:
         - bodyclose
+        - mnd

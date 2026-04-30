@@ -88,6 +88,13 @@ Structured logs use `log/slog` with a handler that attaches **trace_id** when a 
 
 Standard Go layout: `cmd/`, `internal/`, `deployments/`, `docs/`, `scripts/`. Public reusable libraries would live under `pkg/` if added; this module is primarily an application.
 
+## Code quality guardrail (no magic numbers)
+
+- Runtime numeric defaults and limits are centralized in `internal/defaults`.
+- MCP wire/protocol strings are centralized in `internal/gateway/mcpwire`.
+- Do not introduce raw numeric literals for tunable behavior in production code; use named constants/defaults.
+- CI lint includes `mnd` to catch newly introduced magic numbers in non-test Go code.
+
 ## Continuous integration
 
 GitHub Actions: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push and pull request: `setup-go` with module cache, `golangci-lint`, unit tests, and a job that starts Qdrant + embed from Compose and runs `-tags=integration` tests.
