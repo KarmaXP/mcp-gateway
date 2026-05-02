@@ -18,6 +18,10 @@ var (
 	indexedCatalogTools atomic.Int64
 	semanticOutcomes    metric.Int64Counter
 	semanticDuration    metric.Float64Histogram
+	policyDecisions     metric.Int64Counter
+	jwksLookups         metric.Int64Counter
+	toolArgsValidation  metric.Int64Counter
+	rateLimitEvents     metric.Int64Counter
 )
 
 func registerInstruments() error {
@@ -34,6 +38,27 @@ func registerInstruments() error {
 	)
 	if err != nil {
 		return fmt.Errorf("telemetry: semantic histogram: %w", err)
+	}
+
+	policyDecisions, err = m.Int64Counter("mcp.gateway.policy.decisions",
+		metric.WithDescription("Policy allow/deny decisions (bounded outcome and reason labels)"))
+	if err != nil {
+		return fmt.Errorf("telemetry: policy decisions counter: %w", err)
+	}
+	jwksLookups, err = m.Int64Counter("mcp.gateway.auth.jwks.lookups",
+		metric.WithDescription("JWKS resolution: cache hit, refresh, or error class"))
+	if err != nil {
+		return fmt.Errorf("telemetry: jwks lookups counter: %w", err)
+	}
+	toolArgsValidation, err = m.Int64Counter("mcp.gateway.tool_args.validation",
+		metric.WithDescription("tools/call argument checks: limits vs JSON Schema stage"))
+	if err != nil {
+		return fmt.Errorf("telemetry: tool args validation counter: %w", err)
+	}
+	rateLimitEvents, err = m.Int64Counter("mcp.gateway.ratelimit.events",
+		metric.WithDescription("HTTP rate limiter: allowed vs throttled"))
+	if err != nil {
+		return fmt.Errorf("telemetry: ratelimit counter: %w", err)
 	}
 
 	g, err := m.Int64ObservableGauge("mcp.gateway.active_sse_sessions",
@@ -98,4 +123,76 @@ func RecordSemanticRouting(ctx context.Context, dec *router.RoutingDecision, res
 	if dec.LatencyMS > 0 {
 		semanticDuration.Record(ctx, float64(dec.LatencyMS)/defaults.MillisecondsPerSecond, metric.WithAttributes(attrs...))
 	}
+}
+
+// RecordPolicyDecision records a coarse policy outcome for tools/call authz or session allow-list build (bounded labels).
+func RecordPolicyDecision(ctx context.Context, outcome, reason string) {
+	if !metricsReady.Load() {
+		return
+	}
+	if outcome != defaults.MetricPolicyOutcomeAllow && outcome != defaults.MetricPolicyOutcomeDeny {
+		outcome = defaults.MetricPolicyOutcomeDeny
+	}
+	reason = normalizePolicyReason(reason)
+	policyDecisions.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("outcome", outcome),
+		attribute.String("reason", reason),
+	))
+}
+
+func normalizePolicyReason(r string) string {
+	switch r {
+	case defaults.MetricPolicyReasonAllowListMatch,
+		defaults.MetricPolicyReasonNotInAllowList,
+		defaults.MetricPolicyReasonPolicyEvalFailed:
+		return r
+	default:
+		return defaults.MetricPolicyReasonOther
+	}
+}
+
+// RecordJWKSLookup records JWKS cache behavior for a signing-key resolution (bounded result label).
+func RecordJWKSLookup(ctx context.Context, result string) {
+	if !metricsReady.Load() {
+		return
+	}
+	switch result {
+	case defaults.MetricJWKSResultHit,
+		defaults.MetricJWKSResultRefresh,
+		defaults.MetricJWKSResultErrorFetch,
+		defaults.MetricJWKSResultErrorMissingKid,
+		defaults.MetricJWKSResultErrorUnknownKid:
+	default:
+		result = defaults.MetricJWKSResultErrorFetch
+	}
+	jwksLookups.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result)))
+}
+
+// RecordToolArgsValidation records limits or JSON Schema validation outcome for tools/call arguments.
+func RecordToolArgsValidation(ctx context.Context, stage, result string) {
+	if !metricsReady.Load() {
+		return
+	}
+	if stage != defaults.MetricArgsStageLimits && stage != defaults.MetricArgsStageSchema {
+		stage = defaults.MetricArgsStageLimits
+	}
+	if result != defaults.MetricArgsResultPass && result != defaults.MetricArgsResultFail {
+		result = defaults.MetricArgsResultFail
+	}
+	toolArgsValidation.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("stage", stage),
+		attribute.String("result", result),
+	))
+}
+
+// RecordRateLimit records whether a request was admitted or rejected by the token-bucket limiter.
+func RecordRateLimit(ctx context.Context, allowed bool) {
+	if !metricsReady.Load() {
+		return
+	}
+	res := defaults.MetricRateLimitThrottled
+	if allowed {
+		res = defaults.MetricRateLimitAllowed
+	}
+	rateLimitEvents.Add(ctx, 1, metric.WithAttributes(attribute.String("result", res)))
 }
