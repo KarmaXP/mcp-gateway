@@ -30,13 +30,14 @@ const (
 )
 
 type RoutingSignal struct {
-	SessionID      string
-	Method         string
-	ToolName       string
-	ArgumentsJSON  json.RawMessage
-	IntentText     string
-	AllowedTools   []string
-	CatalogVersion string
+	SessionID       string
+	Method          string
+	ToolName        string
+	ArgumentsJSON   json.RawMessage
+	IntentText      string
+	AllowedTools    []string
+	CatalogVersion  string
+	RecentToolNames []string
 }
 
 type RoutingDecision struct {

@@ -173,6 +173,20 @@ func (sr *SemanticRouter) maybeHybridRerank(qtext string, results []store.Vector
 	return results
 }
 
+// tieBreakAmbiguousPair prefers the top-two vector candidate that appears most recently in session tool history.
+func tieBreakAmbiguousPair(top, second store.VectorSearchHit, recent []string) (store.VectorSearchHit, store.VectorSearchHit, bool) {
+	for i := len(recent) - 1; i >= 0; i-- {
+		name := recent[i]
+		if name == top.ToolName {
+			return top, second, true
+		}
+		if name == second.ToolName {
+			return second, top, true
+		}
+	}
+	return top, second, false
+}
+
 func vectorHitCandidates(results []store.VectorSearchHit, hybrid bool) []ScoredTool {
 	src := "vector"
 	if hybrid {
@@ -193,10 +207,16 @@ func (sr *SemanticRouter) validateVectorTop(ctx context.Context, sig RoutingSign
 		return fmt.Errorf("%w: got %.4f min %.4f", ErrBelowThreshold, top.Score, sr.cfg.ScoreMin)
 	}
 	if len(results) > 1 && results[1].Score >= sr.cfg.ScoreMin && (results[0].Score-results[1].Score) < ambiguityScoreDeltaThreshold {
-		dec.Outcome = OutcomeMissAmbiguous
-		dec.LatencyMS = time.Since(start).Milliseconds()
-		slog.InfoContext(ctx, "router decision", "layer", "vector", "outcome", "ambiguous", "latency_ms", dec.LatencyMS)
-		return fmt.Errorf("%w", ErrAmbiguous)
+		if newTop, newSecond, ok := tieBreakAmbiguousPair(results[0], results[1], sig.RecentToolNames); ok {
+			results[0], results[1] = newTop, newSecond
+			top = results[0]
+			slog.InfoContext(ctx, "router decision", "layer", "vector", "outcome", "history_tie_break", "top", top.ToolName)
+		} else {
+			dec.Outcome = OutcomeMissAmbiguous
+			dec.LatencyMS = time.Since(start).Milliseconds()
+			slog.InfoContext(ctx, "router decision", "layer", "vector", "outcome", "ambiguous", "latency_ms", dec.LatencyMS)
+			return fmt.Errorf("%w", ErrAmbiguous)
+		}
 	}
 	if !sr.cfg.AllowAutoRename && sig.ToolName != "" && top.ToolName != sig.ToolName {
 		dec.Outcome = OutcomeMissRenameDisallowed
