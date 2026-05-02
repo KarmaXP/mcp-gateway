@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
@@ -25,6 +26,8 @@ type MockUpstream struct {
 	InputSchemaByTool map[string]map[string]any
 
 	mu sync.Mutex
+
+	toolsCallInvocations atomic.Uint64
 }
 
 func NewMockUpstream(id, prefix string, toolNames []string) *MockUpstream {
@@ -38,6 +41,14 @@ func (b *MockUpstream) LastNativeTool() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.lastNative
+}
+
+// ToolsCallInvocationCount is the number of tools/call JSON-RPC requests accepted by this mock (after authz in the gateway).
+func (b *MockUpstream) ToolsCallInvocationCount() uint64 {
+	if b == nil {
+		return 0
+	}
+	return b.toolsCallInvocations.Load()
 }
 
 func (b *MockUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
@@ -99,6 +110,7 @@ func (b *MockUpstream) toolsList(ctx context.Context, req *rpc.Request) (*rpc.Re
 }
 
 func (b *MockUpstream) toolsCall(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
+	b.toolsCallInvocations.Add(1)
 	b.mu.Lock()
 	errCall := b.ToolsCallErr
 	delay := b.ToolsCallDelay
