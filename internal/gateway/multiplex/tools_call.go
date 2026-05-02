@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 
@@ -35,15 +36,21 @@ func (a *Multiplexer) ToolsCall(ctx context.Context, hostID json.RawMessage, par
 		return errResp, nil
 	}
 
+	muxStart := time.Now()
 	b, native, err := a.resolveBackendForTool(p.Name)
 	if err != nil {
+		telemetry.RecordInternalPhase(ctx, "tools/call", defaults.MetricInternalPhaseMux, time.Since(muxStart))
 		return rpc.NewError(hostID, errcodes.InvalidParams, err.Error(), nil), nil
 	}
 
-	return a.invokeUpstreamToolsCall(ctx, hostID, b, native, argsForForward)
+	return a.invokeUpstreamToolsCall(ctx, hostID, b, native, argsForForward, muxStart)
 }
 
 func (a *Multiplexer) enforceHostToolAuthz(ctx context.Context, hostID json.RawMessage, namespacedTool string) *rpc.Response {
+	secStart := time.Now()
+	defer func() {
+		telemetry.RecordInternalPhase(ctx, "tools/call", defaults.MetricInternalPhaseSecurity, time.Since(secStart))
+	}()
 	actx, span := telemetry.StartSpan(ctx, telemetry.SpanSecurityAuthz)
 	defer span.End()
 	span.SetAttributes(attribute.String("mcp.tool.name", namespacedTool))
@@ -83,6 +90,10 @@ func (a *Multiplexer) applySemanticToolRouting(ctx context.Context, hostID json.
 	if a.semantic == nil || !a.semantic.Enabled() {
 		return nil
 	}
+	routeStart := time.Now()
+	defer func() {
+		telemetry.RecordInternalPhase(ctx, "tools/call", defaults.MetricInternalPhaseRouter, time.Since(routeStart))
+	}()
 	rctx, span := telemetry.StartSpan(ctx, telemetry.SpanSemanticRouter)
 	sig := a.semanticRoutingSignal(ctx, p.Name, p.Arguments)
 	resolved, dec, err := a.semantic.ResolveToolsCall(rctx, sig)
@@ -114,7 +125,7 @@ type backendCaller interface {
 	Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error)
 }
 
-func (a *Multiplexer) invokeUpstreamToolsCall(ctx context.Context, hostID json.RawMessage, b backendCaller, native string, args json.RawMessage) (*rpc.Response, error) {
+func (a *Multiplexer) invokeUpstreamToolsCall(ctx context.Context, hostID json.RawMessage, b backendCaller, native string, args json.RawMessage, muxStart time.Time) (*rpc.Response, error) {
 	forwardParams, err := json.Marshal(map[string]any{
 		"name":      native,
 		"arguments": args,
@@ -122,6 +133,7 @@ func (a *Multiplexer) invokeUpstreamToolsCall(ctx context.Context, hostID json.R
 	if err != nil {
 		return nil, fmt.Errorf("multiplex: marshal tools/call forward params: %w", err)
 	}
+	telemetry.RecordInternalPhase(ctx, "tools/call", defaults.MetricInternalPhaseMux, time.Since(muxStart))
 	callCtx, cancel := context.WithTimeout(ctx, a.callTimeout)
 	defer cancel()
 	bctx, bspan := telemetry.StartSpan(callCtx, telemetry.SpanBackendCall)
