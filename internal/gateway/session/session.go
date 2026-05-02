@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/google/uuid"
 
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
@@ -73,6 +75,9 @@ type Session struct {
 	initCompleted bool
 	ready         bool
 
+	// toolHist stores successful tools/call names (namespaced), oldest first, capped for router context.
+	toolHist []string
+
 	out chan []byte
 }
 
@@ -89,6 +94,34 @@ func NewSession(parent context.Context, id string, mpx *multiplex.Multiplexer, m
 }
 
 func (s *Session) ID() string { return s.id }
+
+// RecordSuccessfulToolCall implements hostctx.SuccessfulToolCallRecorder.
+func (s *Session) RecordSuccessfulToolCall(namespaced string) {
+	namespaced = strings.TrimSpace(namespaced)
+	if namespaced == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.toolHist = append(s.toolHist, namespaced)
+	max := defaults.SessionToolHistoryMax
+	if max <= 0 {
+		max = 8
+	}
+	if len(s.toolHist) > max {
+		s.toolHist = s.toolHist[len(s.toolHist)-max:]
+	}
+}
+
+func (s *Session) recentToolSnapshot() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.toolHist) == 0 {
+		return nil
+	}
+	out := append([]string(nil), s.toolHist...)
+	return out
+}
 
 func (s *Session) Close() {
 	s.cancel()
@@ -118,6 +151,10 @@ func (s *Session) Dispatch(reqCtx context.Context, req *rpc.Request) error {
 		return err
 	}
 
+	ctx = hostctx.WithMCPSessionID(ctx, s.id)
+	ctx = hostctx.WithToolCallRecorder(ctx, s)
+	ctx = hostctx.WithRecentToolNames(ctx, s.recentToolSnapshot())
+
 	if req.IsNotification() {
 		return s.handleNotification(ctx, req)
 	}
@@ -131,6 +168,14 @@ func (s *Session) Dispatch(reqCtx context.Context, req *rpc.Request) error {
 		return s.handleToolsList(ctx, req)
 	case "tools/call":
 		return s.handleToolsCall(ctx, req)
+	case "resources/list":
+		return s.handleResourcesList(ctx, req)
+	case "resources/read":
+		return s.handleResourcesRead(ctx, req)
+	case "prompts/list":
+		return s.handlePromptsList(ctx, req)
+	case "prompts/get":
+		return s.handlePromptsGet(ctx, req)
 	default:
 		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.MethodNotFound, fmt.Sprintf("method not found: %s", req.Method), nil))
 	}
@@ -215,6 +260,50 @@ func (s *Session) handleToolsCall(ctx context.Context, req *rpc.Request) error {
 	resp, err := s.multiplexer.ToolsCall(ctx, req.ID, req.Params)
 	if err != nil {
 		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.GatewayInternal, "tools/call failed", nil))
+	}
+	return s.EnqueueResponse(resp)
+}
+
+func (s *Session) handleResourcesList(ctx context.Context, req *rpc.Request) error {
+	if err := s.requireReady(); err != nil {
+		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.HandshakeIncomplete, err.Error(), nil))
+	}
+	resp, err := s.multiplexer.ResourcesList(ctx, req.ID)
+	if err != nil {
+		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.GatewayInternal, "resources/list failed", nil))
+	}
+	return s.EnqueueResponse(resp)
+}
+
+func (s *Session) handleResourcesRead(ctx context.Context, req *rpc.Request) error {
+	if err := s.requireReady(); err != nil {
+		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.HandshakeIncomplete, err.Error(), nil))
+	}
+	resp, err := s.multiplexer.ResourcesRead(ctx, req.ID, req.Params)
+	if err != nil {
+		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.GatewayInternal, "resources/read failed", nil))
+	}
+	return s.EnqueueResponse(resp)
+}
+
+func (s *Session) handlePromptsList(ctx context.Context, req *rpc.Request) error {
+	if err := s.requireReady(); err != nil {
+		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.HandshakeIncomplete, err.Error(), nil))
+	}
+	resp, err := s.multiplexer.PromptsList(ctx, req.ID)
+	if err != nil {
+		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.GatewayInternal, "prompts/list failed", nil))
+	}
+	return s.EnqueueResponse(resp)
+}
+
+func (s *Session) handlePromptsGet(ctx context.Context, req *rpc.Request) error {
+	if err := s.requireReady(); err != nil {
+		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.HandshakeIncomplete, err.Error(), nil))
+	}
+	resp, err := s.multiplexer.PromptsGet(ctx, req.ID, req.Params)
+	if err != nil {
+		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.GatewayInternal, "prompts/get failed", nil))
 	}
 	return s.EnqueueResponse(resp)
 }

@@ -39,7 +39,7 @@ func TestSessionMethodNotFound(t *testing.T) {
 
 	require.NoError(t, s.Dispatch(context.Background(), &rpc.Request{
 		JSONRPC: rpc.JSONRPCVersion,
-		Method:  "resources/list",
+		Method:  "experimental/unsupported_method",
 		ID:      json.RawMessage(`9`),
 	}))
 	raw := <-s.Out()
@@ -178,6 +178,46 @@ func TestSessionToolsCallAfterHandshake(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw, &resp))
 	require.Nil(t, resp.Error)
 	require.Contains(t, string(resp.Result), "ok from b1:echo")
+}
+
+func TestSessionResourcesListEmptyWhenBackendsOmit(t *testing.T) {
+	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
+	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
+	require.NoError(t, err)
+	s := NewSession(context.Background(), "s-res", agg, nil)
+	handshake(t, s)
+	require.NoError(t, s.Dispatch(context.Background(), &rpc.Request{
+		JSONRPC: rpc.JSONRPCVersion,
+		Method:  "resources/list",
+		ID:      json.RawMessage(`8`),
+	}))
+	raw := <-s.Out()
+	var resp rpc.Response
+	require.NoError(t, json.Unmarshal(raw, &resp))
+	require.Nil(t, resp.Error)
+	var body struct {
+		Resources []any `json:"resources"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Result, &body))
+	require.Len(t, body.Resources, 0)
+}
+
+func TestSessionToolHistoryRecordsSuccessfulToolsCall(t *testing.T) {
+	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
+	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
+	require.NoError(t, err)
+	s := NewSession(context.Background(), "s-hist", agg, nil)
+	handshake(t, s)
+	params, _ := json.Marshal(map[string]any{"name": "alpha__echo", "arguments": map[string]any{}})
+	require.NoError(t, s.Dispatch(context.Background(), &rpc.Request{
+		JSONRPC: rpc.JSONRPCVersion,
+		Method:  "tools/call",
+		ID:      json.RawMessage(`4`),
+		Params:  params,
+	}))
+	<-s.Out()
+	hist := s.recentToolSnapshot()
+	require.Equal(t, []string{"alpha__echo"}, hist)
 }
 
 func TestSessionDispatchNilRequestContext(t *testing.T) {
