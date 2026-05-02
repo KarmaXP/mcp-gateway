@@ -11,12 +11,12 @@ const (
 	JSONRPCVersion = "2.0"
 
 	jsonObjectStartByte = '{'
-	jsonRawNull         = "null"
+	jsonRawNull = "null"
 )
 
 var (
 	ErrInvalidRequest = errors.New("rpc: invalid JSON-RPC request")
-	ErrNotObject      = errors.New("rpc: body must be a JSON object")
+	ErrNotObject = errors.New("rpc: body must be a JSON object")
 )
 
 type Request struct {

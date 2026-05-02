@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	defaultListenAddr     = "127.0.0.1:31400"
+	defaultListenAddr = "127.0.0.1:31400"
 	smokeEventChannelSize = 32
 )
 

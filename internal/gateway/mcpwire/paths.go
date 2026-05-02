@@ -3,9 +3,9 @@ package mcpwire
 
 const (
 	PathHealthz = "/healthz"
-	PathReadyz  = "/readyz"
-	PathMCPSSE  = "/mcp/sse"
-	PathMCPRPC  = "/mcp/rpc"
+	PathReadyz = "/readyz"
+	PathMCPSSE = "/mcp/sse"
+	PathMCPRPC = "/mcp/rpc"
 
 	HeaderMCPSessionID = "Mcp-Session-Id"
 )

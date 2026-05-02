@@ -46,7 +46,7 @@ func (SlogAuditSink) Emit(ctx context.Context, rec AuditRecord) error {
 }
 
 var (
-	sinkMu          sync.RWMutex
+	sinkMu sync.RWMutex
 	globalAuditSink AuditSink = SlogAuditSink{}
 )
 

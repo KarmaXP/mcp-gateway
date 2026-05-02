@@ -21,7 +21,7 @@ import (
 
 const (
 	integrationProbeTimeout = 2 * time.Second
-	integrationScoreMin     = 0.22
+	integrationScoreMin = 0.22
 	integrationEmbedTimeout = 60 * time.Second
 	integrationQueryTimeout = 30 * time.Second
 

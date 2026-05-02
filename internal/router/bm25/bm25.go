@@ -8,13 +8,13 @@ import (
 
 const (
 	BM25K1 = 1.2
-	BM25B  = 0.75
+	BM25B = 0.75
 
-	bm25IDFSmoothN     = 0.5
-	bm25MinTermFreq    = 1.0
-	bm25MinDocFreq     = 1
+	bm25IDFSmoothN = 0.5
+	bm25MinTermFreq = 1.0
+	bm25MinDocFreq = 1
 	bm25EmptyDocLength = 1.0
-	bm25ScoreUnity     = 1.0
+	bm25ScoreUnity = 1.0
 )
 
 func tokenize(s string) []string {

@@ -27,12 +27,12 @@ import (
 
 const (
 	defaultLoadtestGatewayURL = "http://127.0.0.1:18080"
-	defaultLoadtestWorkers    = 8
-	defaultWarmupIterations   = 2
-	defaultTestWindow         = 30 * time.Second
+	defaultLoadtestWorkers = 8
+	defaultWarmupIterations = 2
+	defaultTestWindow = 30 * time.Second
 
-	sseEventLineBuffer       = 256
-	microsecondsPerMillis    = 1000
+	sseEventLineBuffer = 256
+	microsecondsPerMillis = 1000
 	throughputMinDenominator = 1
 
 	percentileP50 = 50
@@ -46,7 +46,7 @@ const (
 )
 
 var (
-	loadtestInitAckTimeout   = 15 * time.Second
+	loadtestInitAckTimeout = 15 * time.Second
 	loadtestToolsListTimeout = 30 * time.Second
 	loadtestToolsCallTimeout = 60 * time.Second
 )

@@ -14,15 +14,15 @@ import (
 )
 
 var (
-	metricsReady        atomic.Bool
+	metricsReady atomic.Bool
 	indexedCatalogTools atomic.Int64
-	semanticOutcomes    metric.Int64Counter
-	semanticDuration    metric.Float64Histogram
-	policyDecisions     metric.Int64Counter
-	jwksLookups         metric.Int64Counter
-	toolArgsValidation  metric.Int64Counter
-	rateLimitEvents     metric.Int64Counter
-	payloadBytesReject  metric.Int64Counter
+	semanticOutcomes metric.Int64Counter
+	semanticDuration metric.Float64Histogram
+	policyDecisions metric.Int64Counter
+	jwksLookups metric.Int64Counter
+	toolArgsValidation metric.Int64Counter
+	rateLimitEvents metric.Int64Counter
+	payloadBytesReject metric.Int64Counter
 )
 
 func registerInstruments() error {

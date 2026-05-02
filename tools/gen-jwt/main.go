@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	devJWTTokenTTL   = time.Hour
+	devJWTTokenTTL = time.Hour
 	devJWTIssuedSkew = -time.Minute
 
 	exitStatusGeneralError = 1

@@ -9,9 +9,9 @@ import (
 const Separator = "__"
 
 var (
-	ErrInvalidPrefix     = errors.New("namespace: invalid prefix")
-	ErrInvalidToolName   = errors.New("namespace: invalid namespaced tool name")
-	ErrAmbiguousPrefix   = errors.New("namespace: prefix is not unique in catalog")
+	ErrInvalidPrefix = errors.New("namespace: invalid prefix")
+	ErrInvalidToolName = errors.New("namespace: invalid namespaced tool name")
+	ErrAmbiguousPrefix = errors.New("namespace: prefix is not unique in catalog")
 	ErrNativeContainsSep = errors.New("namespace: native tool name must not contain separator")
 )
 

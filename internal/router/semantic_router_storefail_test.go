@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	testVectorDim    = 4
-	testRouterTopK   = 4
+	testVectorDim = 4
+	testRouterTopK = 4
 	testRouterMinHit = 0.5
 )
 

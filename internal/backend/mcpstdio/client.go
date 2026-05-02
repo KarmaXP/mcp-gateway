@@ -20,7 +20,7 @@ import (
 
 const (
 	weightedSemaphoreTickets int64 = 1
-	pendingJSONRPCChannelCap int   = 1
+	pendingJSONRPCChannelCap int = 1
 )
 
 type StdioMCPUpstream struct {

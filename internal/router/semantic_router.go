@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	exactMatchConfidence         = 1.0
-	singleQueryEmbeddingCount    = 1
+	exactMatchConfidence = 1.0
+	singleQueryEmbeddingCount = 1
 	ambiguityScoreDeltaThreshold = 0.05
 )
 
