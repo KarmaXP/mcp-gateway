@@ -1,4 +1,4 @@
-// Package session tracks MCP handshake and dispatches JSON-RPC for one SSE connection.
+// MCP handshake and JSON-RPC dispatch for one SSE connection.
 package session
 
 import (
@@ -20,7 +20,6 @@ var ErrUnknownSession = errors.New("session: unknown id")
 
 type Middleware func(ctx context.Context, req *rpc.Request) error
 
-// SessionManager owns SSE sessions and dispatches RPC to the multiplexer.
 type SessionManager struct {
 	mu          sync.RWMutex
 	sessions    map[string]*Session

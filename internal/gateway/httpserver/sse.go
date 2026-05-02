@@ -11,8 +11,6 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/session"
 )
 
-// writeMCPSSEResponseLoop streams JSON-RPC payloads from the session outbound channel as SSE events.
-// heartbeat sends periodic SSE comment lines so intermediaries detect dead connections.
 func writeMCPSSEResponseLoop(ctx context.Context, fl http.Flusher, w io.Writer, sess *session.Session, heartbeat time.Duration) {
 	if heartbeat <= 0 {
 		for {

@@ -5,12 +5,11 @@ import (
 	"strings"
 )
 
-// HeaderMCPIntent is the HTTP header carrying optional natural-language intent for semantic routing.
+// Optional natural-language hint for semantic routing (HTTP header name).
 const HeaderMCPIntent = "X-MCP-Intent"
 
 type clientIntentKey struct{}
 
-// WithClientIntent attaches trimmed client-supplied intent text to the request context.
 func WithClientIntent(ctx context.Context, intent string) context.Context {
 	if ctx == nil {
 		ctx = context.Background()
@@ -18,7 +17,6 @@ func WithClientIntent(ctx context.Context, intent string) context.Context {
 	return context.WithValue(ctx, clientIntentKey{}, strings.TrimSpace(intent))
 }
 
-// ClientIntentFromContext returns intent text set with WithClientIntent, or "".
 func ClientIntentFromContext(ctx context.Context) string {
 	if ctx == nil {
 		return ""
@@ -29,7 +27,7 @@ func ClientIntentFromContext(ctx context.Context) string {
 
 type allowedToolNamesKey struct{}
 
-// WithAllowedToolNames attaches a copy of namespaced tool names the caller may invoke (JWT / policy).
+// Namespaced tool ids the principal may call (from JWT and/or policy merge).
 func WithAllowedToolNames(parent context.Context, toolNames []string) context.Context {
 	if parent == nil {
 		parent = context.Background()
@@ -41,7 +39,6 @@ func WithAllowedToolNames(parent context.Context, toolNames []string) context.Co
 	return context.WithValue(parent, allowedToolNamesKey{}, cp)
 }
 
-// AllowedToolNamesFromContext returns names from WithAllowedToolNames, or nil if unset.
 func AllowedToolNamesFromContext(ctx context.Context) []string {
 	if ctx == nil {
 		return nil
@@ -56,7 +53,7 @@ func AllowedToolNamesFromContext(ctx context.Context) []string {
 
 type subjectIDKey struct{}
 
-// WithSubjectID attaches a JWT subject (sub) for audit correlation; do not log raw values (hash in audit layer).
+// JWT sub for audit paths — hash before logging (SEC5).
 func WithSubjectID(parent context.Context, subject string) context.Context {
 	if parent == nil {
 		parent = context.Background()
@@ -68,7 +65,6 @@ func WithSubjectID(parent context.Context, subject string) context.Context {
 	return context.WithValue(parent, subjectIDKey{}, subject)
 }
 
-// SubjectIDFromContext returns the subject set with WithSubjectID, or "".
 func SubjectIDFromContext(ctx context.Context) string {
 	if ctx == nil {
 		return ""
@@ -79,7 +75,6 @@ func SubjectIDFromContext(ctx context.Context) string {
 
 type policyVersionKey struct{}
 
-// WithPolicyVersion attaches the active policy configuration version for audit and traces.
 func WithPolicyVersion(parent context.Context, version string) context.Context {
 	if parent == nil {
 		parent = context.Background()
@@ -91,7 +86,6 @@ func WithPolicyVersion(parent context.Context, version string) context.Context {
 	return context.WithValue(parent, policyVersionKey{}, version)
 }
 
-// PolicyVersionFromContext returns the policy version from WithPolicyVersion, or "".
 func PolicyVersionFromContext(ctx context.Context) string {
 	if ctx == nil {
 		return ""

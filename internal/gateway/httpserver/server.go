@@ -1,4 +1,4 @@
-// Package httpserver serves MCP over HTTP (SSE session + JSON-RPC POST).
+// MCP host transport: SSE + JSON-RPC POST.
 package httpserver
 
 import (
@@ -21,8 +21,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
 )
 
-// writeTimeoutDisabled is used for WriteTimeout so long-lived SSE responses are not cut off.
-const writeTimeoutDisabled = 0
+const writeTimeoutDisabled = 0 // SSE long-lived responses must not hit a global write deadline
 
 type Server struct {
 	sessions   *session.SessionManager
@@ -52,7 +51,6 @@ func WithShutdownContext(ctx context.Context) Option {
 	}
 }
 
-// WithSSEHeartbeatInterval sets the interval for SSE comment keep-alives (": keepalive"); zero uses defaults.SSECommentHeartbeat.
 func WithSSEHeartbeatInterval(d time.Duration) Option {
 	return func(s *Server) {
 		s.sseHeartbeat = d
@@ -82,7 +80,7 @@ func New(mpx *multiplex.Multiplexer, addr string, opts ...Option) *Server {
 		Handler:           s.handler,
 		ReadHeaderTimeout: defaults.HTTPReadHeaderTimeout,
 		ReadTimeout:       defaults.HTTPReadTimeout,
-		WriteTimeout:      writeTimeoutDisabled, // SSE: avoid a global response write deadline
+		WriteTimeout:      writeTimeoutDisabled,
 		IdleTimeout:       defaults.HTTPIdleTimeout,
 	}
 	return s
@@ -175,7 +173,6 @@ func (s *Server) handleMCPRPC(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, int64(defaults.MaxMCPRPCBodyBytes))
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		// MaxBytesReader returns a body-too-large error (see net/http ErrBodyTooLarge on supported Go versions).
 		if isRequestBodyTooLargeError(err) {
 			telemetry.RecordPayloadBytesRejected(rctx, defaults.MetricBytesRejectReasonHTTPBody)
 			httpErr("request body too large", http.StatusRequestEntityTooLarge)
