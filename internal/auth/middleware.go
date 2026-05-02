@@ -13,7 +13,7 @@ import (
 // Prefix length for "bearer " (Authorization header scheme, case-insensitive check on a lowercased copy).
 const bearerAuthSchemeLowerLen = 7
 
-func HTTPMiddleware(cfg JWTAuthConfig, v *Validator, pol *policy.Engine) func(http.Handler) http.Handler {
+func HTTPMiddleware(cfg JWTAuthConfig, v *Validator, pol *policy.Holder) func(http.Handler) http.Handler {
 	if cfg.Mode == "" || cfg.Mode == "none" {
 		return func(next http.Handler) http.Handler { return next }
 	}
@@ -44,7 +44,11 @@ func HTTPMiddleware(cfg JWTAuthConfig, v *Validator, pol *policy.Engine) func(ht
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
-			tools, err := effectiveAllowList(pol, claims)
+			var eng *policy.Engine
+			if pol != nil {
+				eng = pol.Load()
+			}
+			tools, err := effectiveAllowList(eng, claims)
 			if err != nil {
 				telemetry.RecordPolicyDecision(r.Context(), defaults.MetricPolicyOutcomeDeny, defaults.MetricPolicyReasonPolicyEvalFailed)
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -54,8 +58,8 @@ func HTTPMiddleware(cfg JWTAuthConfig, v *Validator, pol *policy.Engine) func(ht
 			if sub := claims.Subject(); sub != "" {
 				ctx = hostctx.WithSubjectID(ctx, sub)
 			}
-			if pol != nil {
-				ctx = hostctx.WithPolicyVersion(ctx, pol.Version())
+			if eng != nil {
+				ctx = hostctx.WithPolicyVersion(ctx, eng.Version())
 			}
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

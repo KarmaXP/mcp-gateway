@@ -34,3 +34,9 @@ const (
 	MetricArgsResultPass = "pass"
 	MetricArgsResultFail = "fail"
 )
+
+// Payload / body rejection reasons (bounded; O5).
+const (
+	MetricBytesRejectReasonHTTPBody = "http_body_too_large"
+	MetricBytesRejectReasonToolArgs = "tool_args_too_large"
+)

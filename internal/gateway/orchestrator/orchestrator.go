@@ -12,7 +12,7 @@ import (
 )
 
 // HTTPServerOptions returns production middleware (JWT, rate limit, OTel HTTP tracing) for httpserver.New.
-func HTTPServerOptions(serviceName string, authCfg auth.JWTAuthConfig, v *auth.Validator, pol *policy.Engine, rl ratelimit.Config) []httpserver.Option {
+func HTTPServerOptions(serviceName string, authCfg auth.JWTAuthConfig, v *auth.Validator, pol *policy.Holder, rl ratelimit.Config) []httpserver.Option {
 	if serviceName == "" {
 		serviceName = "mcp-gateway"
 	}

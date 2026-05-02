@@ -22,6 +22,7 @@ var (
 	jwksLookups         metric.Int64Counter
 	toolArgsValidation  metric.Int64Counter
 	rateLimitEvents     metric.Int64Counter
+	payloadBytesReject  metric.Int64Counter
 )
 
 func registerInstruments() error {
@@ -59,6 +60,11 @@ func registerInstruments() error {
 		metric.WithDescription("HTTP rate limiter: allowed vs throttled"))
 	if err != nil {
 		return fmt.Errorf("telemetry: ratelimit counter: %w", err)
+	}
+	payloadBytesReject, err = m.Int64Counter("mcp.gateway.payload.bytes_rejected",
+		metric.WithDescription("Rejected oversized payloads: HTTP RPC body vs tools/call arguments (bounded reason)"))
+	if err != nil {
+		return fmt.Errorf("telemetry: payload bytes rejected counter: %w", err)
 	}
 
 	g, err := m.Int64ObservableGauge("mcp.gateway.active_sse_sessions",
@@ -195,4 +201,17 @@ func RecordRateLimit(ctx context.Context, allowed bool) {
 		res = defaults.MetricRateLimitAllowed
 	}
 	rateLimitEvents.Add(ctx, 1, metric.WithAttributes(attribute.String("result", res)))
+}
+
+// RecordPayloadBytesRejected records an oversized input rejection (HTTP body or tool arguments).
+func RecordPayloadBytesRejected(ctx context.Context, reason string) {
+	if !metricsReady.Load() {
+		return
+	}
+	switch reason {
+	case defaults.MetricBytesRejectReasonHTTPBody, defaults.MetricBytesRejectReasonToolArgs:
+	default:
+		reason = defaults.MetricBytesRejectReasonHTTPBody
+	}
+	payloadBytesReject.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", reason)))
 }

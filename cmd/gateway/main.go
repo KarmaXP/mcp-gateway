@@ -158,6 +158,8 @@ func main() {
 	rootCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	polHolder := policy.NewHolder(policy.NewEngine(cfg.Policy))
+
 	upstreams, cleanupUpstreams, err := backend.ConnectUpstreams(rootCtx, cfg.Upstreams)
 	if err != nil {
 		slog.Error("connect upstreams", "err", err)
@@ -170,17 +172,30 @@ func main() {
 		slog.Error("multiplexer options", "err", err)
 		os.Exit(1)
 	}
-	polEngine := policy.NewEngine(cfg.Policy)
-	mpxOpts = append(mpxOpts, multiplex.WithPolicyEngine(polEngine))
+	mpxOpts = append(mpxOpts, multiplex.WithPolicyHolder(polHolder))
 	mpx, err := multiplex.New(upstreams, mpxOpts...)
 	if err != nil {
 		slog.Error("multiplexer", "err", err)
 		os.Exit(1)
 	}
 
-	httpOpts := orchestrator.HTTPServerOptions(defaults.DefaultTelemetryServiceName, authCfg, validator, polEngine, ratelimit.FromEnvironment())
+	httpOpts := orchestrator.HTTPServerOptions(defaults.DefaultTelemetryServiceName, authCfg, validator, polHolder, ratelimit.FromEnvironment())
 	httpOpts = append(httpOpts, httpserver.WithShutdownContext(rootCtx))
 	srv := httpserver.New(mpx, addr, httpOpts...)
+
+	go func() {
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, syscall.SIGHUP)
+		for range ch {
+			cfg2, err := config.Load()
+			if err != nil {
+				slog.Error("policy reload skipped: config load failed", "err", err)
+				continue
+			}
+			polHolder.Store(policy.NewEngine(cfg2.Policy))
+			slog.Info("policy reloaded from config", "policy_version", cfg2.Policy.Version)
+		}
+	}()
 
 	go func() {
 		slog.Info("mcp-gateway listening", "addr", addr)

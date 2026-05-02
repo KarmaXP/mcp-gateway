@@ -177,6 +177,7 @@ func (s *Server) handleMCPRPC(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// MaxBytesReader returns a body-too-large error (see net/http ErrBodyTooLarge on supported Go versions).
 		if isRequestBodyTooLargeError(err) {
+			telemetry.RecordPayloadBytesRejected(rctx, defaults.MetricBytesRejectReasonHTTPBody)
 			httpErr("request body too large", http.StatusRequestEntityTooLarge)
 			return
 		}

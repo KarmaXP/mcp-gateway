@@ -48,7 +48,7 @@ type Multiplexer struct {
 
 	semantic *router.SemanticRouter
 
-	policyEngine *policy.Engine
+	policyHolder *policy.Holder
 	argLimits    validate.Limits
 
 	catMu  sync.RWMutex
@@ -80,9 +80,20 @@ func WithSemanticRouter(sr *router.SemanticRouter) Option {
 	return func(a *Multiplexer) { a.semantic = sr }
 }
 
-// WithPolicyEngine attaches gateway policy for elevated-tool schema rules (SEC3).
+// WithPolicyHolder attaches a reloadable policy holder (elevated-tool schema rules, SEC3).
+func WithPolicyHolder(h *policy.Holder) Option {
+	return func(a *Multiplexer) { a.policyHolder = h }
+}
+
+// WithPolicyEngine attaches a static policy engine (convenience wrapper around WithPolicyHolder).
 func WithPolicyEngine(p *policy.Engine) Option {
-	return func(a *Multiplexer) { a.policyEngine = p }
+	return func(a *Multiplexer) {
+		if p == nil {
+			a.policyHolder = nil
+			return
+		}
+		a.policyHolder = policy.NewHolder(p)
+	}
 }
 
 // WithArgumentValidateLimits overrides defaults for tools/call JSON argument bounds.

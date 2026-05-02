@@ -3,6 +3,7 @@ package multiplex
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -106,6 +107,9 @@ func (a *Multiplexer) validateToolArgsWithSpan(ctx context.Context, hostID json.
 
 	if err := validate.CheckArgumentJSON(argsJSON, a.argLimits); err != nil {
 		span.RecordError(err)
+		if errors.Is(err, validate.ErrArgumentsTooLarge) {
+			telemetry.RecordPayloadBytesRejected(ctx, defaults.MetricBytesRejectReasonToolArgs)
+		}
 		telemetry.RecordToolArgsValidation(ctx, defaults.MetricArgsStageLimits, defaults.MetricArgsResultFail)
 		return rpc.NewError(hostID, errcodes.InvalidParams, err.Error(), nil)
 	}
@@ -115,7 +119,11 @@ func (a *Multiplexer) validateToolArgsWithSpan(ctx context.Context, hostID json.
 	sch := a.toolValidators[namespacedTool]
 	a.schemaMu.RUnlock()
 
-	if a.policyEngine != nil && a.policyEngine.RequiresStrictSchema(namespacedTool) && sch == nil {
+	var pol *policy.Engine
+	if a.policyHolder != nil {
+		pol = a.policyHolder.Load()
+	}
+	if pol != nil && pol.RequiresStrictSchema(namespacedTool) && sch == nil {
 		err := fmt.Errorf("tool %q requires input schema (elevated policy)", namespacedTool)
 		span.RecordError(err)
 		telemetry.RecordToolArgsValidation(ctx, defaults.MetricArgsStageSchema, defaults.MetricArgsResultFail)

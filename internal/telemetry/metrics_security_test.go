@@ -30,4 +30,7 @@ func TestSecurityMetricsRecordersNoPanic(t *testing.T) {
 	RecordToolArgsValidation(ctx, "bad-stage", "bad-result")
 	RecordRateLimit(ctx, true)
 	RecordRateLimit(ctx, false)
+	RecordPayloadBytesRejected(ctx, defaults.MetricBytesRejectReasonHTTPBody)
+	RecordPayloadBytesRejected(ctx, defaults.MetricBytesRejectReasonToolArgs)
+	RecordPayloadBytesRejected(ctx, "unknown-reason")
 }

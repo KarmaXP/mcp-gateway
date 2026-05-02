@@ -3,10 +3,14 @@ package validate
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 )
+
+// ErrArgumentsTooLarge is returned when the raw JSON arguments exceed MaxBytes (use with errors.Is).
+var ErrArgumentsTooLarge = errors.New("validate: arguments exceed max size")
 
 // Limits bounds decoded JSON shape for tools/call arguments (DoS / depth guards).
 type Limits struct {
@@ -30,7 +34,7 @@ func CheckArgumentJSON(raw json.RawMessage, lim Limits) error {
 		lim = DefaultLimits()
 	}
 	if len(raw) > lim.MaxBytes {
-		return fmt.Errorf("arguments exceed max size (%d bytes)", lim.MaxBytes)
+		return fmt.Errorf("%w (%d bytes; limit %d)", ErrArgumentsTooLarge, len(raw), lim.MaxBytes)
 	}
 	if len(raw) == 0 {
 		return nil

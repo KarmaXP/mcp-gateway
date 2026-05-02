@@ -2,6 +2,7 @@ package validate
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -33,4 +34,12 @@ func TestCheckArgumentJSON_AcceptsSmallObject(t *testing.T) {
 	lim := Limits{MaxBytes: 1024, MaxDepth: 8, MaxKeys: 32}
 	raw, _ := json.Marshal(map[string]any{"msg": "hi"})
 	require.NoError(t, CheckArgumentJSON(raw, lim))
+}
+
+func TestCheckArgumentJSON_ErrArgumentsTooLarge(t *testing.T) {
+	lim := Limits{MaxBytes: 4, MaxDepth: 8, MaxKeys: 32}
+	raw := json.RawMessage(`{"a":1}`)
+	err := CheckArgumentJSON(raw, lim)
+	require.Error(t, err)
+	require.True(t, errors.Is(err, ErrArgumentsTooLarge), "%v", err)
 }
