@@ -14,7 +14,6 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 )
 
-// GatewayConfig is the root document loaded from YAML and environment (MCP_GATEWAY_*).
 type GatewayConfig struct {
 	Upstreams      []UpstreamDefinition     `yaml:"backends"`
 	SemanticRouter SemanticRouterSettings   `yaml:"router"`
@@ -23,7 +22,7 @@ type GatewayConfig struct {
 	Embedding      EmbeddingServiceSettings `yaml:"embed"`
 }
 
-// PolicySettings configures MCP tool authorization helpers (RAR merge, elevated tools, tool groups).
+// RAR merge with JWT allow lists, elevated tools (strict schema), tool groups.
 type PolicySettings struct {
 	Version            string              `yaml:"version"`
 	ElevatedTools      []string            `yaml:"elevated_tools"`
@@ -31,7 +30,6 @@ type PolicySettings struct {
 	AllowOnEvalFailure bool                `yaml:"allow_on_eval_failure"`
 }
 
-// UpstreamDefinition describes one MCP server the gateway fans out to (HTTP+SSE or stdio).
 type UpstreamDefinition struct {
 	ID             string            `yaml:"id"`
 	Prefix         string            `yaml:"prefix"`
@@ -43,7 +41,6 @@ type UpstreamDefinition struct {
 	AuthTokenEnv   string            `yaml:"auth_token_env"`
 }
 
-// SemanticRouterSettings is the semantic tool-routing block from gateway.yaml (mode, thresholds, rules).
 type SemanticRouterSettings struct {
 	Mode            string                    `yaml:"mode"`
 	TopK            int                       `yaml:"top_k"`
@@ -56,18 +53,16 @@ type SemanticRouterSettings struct {
 	Rules           DeterministicRoutingRules `yaml:"rules"`
 }
 
-// DeterministicRoutingRules configures alias and silo narrowing before vector search.
+// Alias map and intent keyword → prefix narrowing before vector search.
 type DeterministicRoutingRules struct {
 	Aliases      map[string]string `yaml:"aliases"`
 	SiloKeywords map[string]string `yaml:"silo_keywords"`
 }
 
-// QdrantSettings names the vector collection; base URL comes from QDRANT_URL.
 type QdrantSettings struct {
 	Collection string `yaml:"collection"`
 }
 
-// EmbeddingServiceSettings is the embedding HTTP sidecar (URL may be overridden by EMBED_URL).
 type EmbeddingServiceSettings struct {
 	URL string `yaml:"url"`
 }
