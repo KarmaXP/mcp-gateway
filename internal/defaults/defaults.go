@@ -16,6 +16,8 @@ const (
 	MaxToolArgumentsJSONKeys = 256
 
 	MaxMCPRPCBodyBytes = 1 << 20
+	// MaxOTelSpanAttributeBytes caps string attribute values to limit export size / cardinality abuse.
+	MaxOTelSpanAttributeBytes = 256
 	MaxEmbedHTTPResponseBody = 1 << 22
 	MaxQdrantHTTPBodyBytes = 8 << 20
 	MaxQdrantErrorSnippetBytes = 200
