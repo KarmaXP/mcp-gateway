@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"math"
+	"sort"
 	"sync"
 
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
@@ -93,13 +94,7 @@ func (m *InMemoryVectorStore) Query(ctx context.Context, vector []float32, topK 
 			score: s,
 		})
 	}
-	for i := 0; i < len(cand); i++ {
-		for j := i + 1; j < len(cand); j++ {
-			if cand[j].score > cand[i].score {
-				cand[i], cand[j] = cand[j], cand[i]
-			}
-		}
-	}
+	sort.Slice(cand, func(i, j int) bool { return cand[i].score > cand[j].score })
 	if len(cand) > topK {
 		cand = cand[:topK]
 	}

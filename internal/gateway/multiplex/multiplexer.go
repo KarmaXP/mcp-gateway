@@ -285,10 +285,14 @@ func (a *Multiplexer) ToolsList(ctx context.Context, hostID json.RawMessage) (*r
 		return nil, fmt.Errorf("multiplex: tools/list upstreams: %w", err)
 	}
 
-	var merged []map[string]any
+	mergedCap := 0
+	for i := range a.upstreams {
+		mergedCap += len(results[i].tools)
+	}
+	merged := make([]map[string]any, 0, mergedCap)
 	for i, b := range a.upstreams {
 		prefix := b.Prefix()
-		tools := append([]map[string]any(nil), results[i].tools...)
+		tools := results[i].tools
 		sort.Slice(tools, func(i, j int) bool {
 			n1, _ := tools[i]["name"].(string)
 			n2, _ := tools[j]["name"].(string)

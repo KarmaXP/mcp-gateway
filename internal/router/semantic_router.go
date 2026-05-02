@@ -99,7 +99,7 @@ func (sr *SemanticRouter) Reindex(ctx context.Context, version string, tools []I
 	}
 
 	batch := defaults.ReindexEmbedBatchSize
-	var all [][]float32
+	all := make([][]float32, 0, len(tools))
 	for i := 0; i < len(docs); i += batch {
 		j := i + batch
 		if j > len(docs) {
@@ -143,10 +143,10 @@ func (sr *SemanticRouter) Reindex(ctx context.Context, version string, tools []I
 	sr.catalog = make(map[string]struct{}, len(tools))
 	sr.upstreamByTool = make(map[string]string, len(tools))
 	sr.toolDoc = make(map[string]string, len(tools))
-	for _, ent := range tools {
+	for i, ent := range tools {
 		sr.catalog[ent.ToolRow.Name] = struct{}{}
 		sr.upstreamByTool[ent.ToolRow.Name] = ent.UpstreamID
-		sr.toolDoc[ent.ToolRow.Name] = index.FormatDocument(ent.ToolRow)
+		sr.toolDoc[ent.ToolRow.Name] = docs[i]
 	}
 	sr.mu.Unlock()
 
