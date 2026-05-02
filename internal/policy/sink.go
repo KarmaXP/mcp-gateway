@@ -9,7 +9,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
 )
 
-// AuditRecord is a bounded security audit event (SEC5: no tokens or argument bodies).
+// No tokens or argument payloads (SEC5).
 type AuditRecord struct {
 	Outcome       string
 	Reason        string
@@ -19,12 +19,11 @@ type AuditRecord struct {
 	At            time.Time
 }
 
-// AuditSink receives policy audit records (structured log, Kafka, syslog, etc.).
+// Emit must not write tokens or argument bodies (SEC5).
 type AuditSink interface {
 	Emit(ctx context.Context, rec AuditRecord) error
 }
 
-// SlogAuditSink is the default sink: structured slog + policy decision metrics.
 type SlogAuditSink struct{}
 
 func (SlogAuditSink) Emit(ctx context.Context, rec AuditRecord) error {
@@ -51,7 +50,6 @@ var (
 	globalAuditSink AuditSink = SlogAuditSink{}
 )
 
-// SetAuditSink swaps the process-wide audit sink (tests, future Kafka/syslog). Nil restores SlogAuditSink.
 func SetAuditSink(s AuditSink) {
 	sinkMu.Lock()
 	defer sinkMu.Unlock()

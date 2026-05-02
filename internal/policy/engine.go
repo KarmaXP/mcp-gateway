@@ -8,7 +8,6 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/config"
 )
 
-// Engine evaluates JWT/RAR-derived allow lists and elevated-tool (strict schema) rules.
 type Engine struct {
 	version         string
 	elevated        map[string]struct{}
@@ -16,7 +15,6 @@ type Engine struct {
 	allowOnEvalFail bool
 }
 
-// NewEngine builds a policy engine from gateway config (fail-soft on empty settings).
 func NewEngine(s config.PolicySettings) *Engine {
 	e := make(map[string]struct{})
 	for _, t := range s.ElevatedTools {
@@ -54,7 +52,6 @@ func NewEngine(s config.PolicySettings) *Engine {
 	}
 }
 
-// Version returns the configured policy version string for audit and telemetry.
 func (e *Engine) Version() string {
 	if e == nil {
 		return ""
@@ -62,7 +59,7 @@ func (e *Engine) Version() string {
 	return e.version
 }
 
-// RequiresStrictSchema implements SEC3 for tools listed as elevated in config.
+// SEC3: elevated tools must have a compiled input schema.
 func (e *Engine) RequiresStrictSchema(namespacedTool string) bool {
 	if e == nil || namespacedTool == "" {
 		return false
@@ -71,8 +68,7 @@ func (e *Engine) RequiresStrictSchema(namespacedTool string) bool {
 	return ok
 }
 
-// EffectiveAllowList computes the namespaced tool allow list for the session (SEC2, RAR merge).
-// Nil or empty slice means no JWT-imposed filter (full merged catalog), matching existing gateway behavior.
+// SEC2: merged JWT ∪ RAR allow list; empty ⇒ no restriction (full catalog for that principal).
 func (e *Engine) EffectiveAllowList(c ClaimsInput) ([]string, error) {
 	if c == nil {
 		return nil, nil

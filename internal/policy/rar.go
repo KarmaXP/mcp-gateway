@@ -15,8 +15,7 @@ type rarDetail struct {
 	ToolPattern string `json:"tool_pattern"`
 }
 
-// expandAuthorizationDetails maps RFC 9396-style authorization_details entries into namespaced tool ids.
-// Patterns use filepath.Match glob semantics (e.g. "prom__*").
+// RAR authorization_details → namespaced ids; globs use filepath.Match.
 func expandAuthorizationDetails(raw json.RawMessage) ([]string, error) {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil, nil
@@ -51,7 +50,6 @@ func expandAuthorizationDetails(raw json.RawMessage) ([]string, error) {
 	return dedupeStrings(out), nil
 }
 
-// MatchTool reports whether namespacedTool matches an allow entry (exact id or glob pattern).
 func MatchTool(namespacedTool, entry string) (bool, error) {
 	if namespacedTool == "" || entry == "" {
 		return false, nil

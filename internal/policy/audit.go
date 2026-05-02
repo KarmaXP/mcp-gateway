@@ -7,13 +7,10 @@ import (
 	"time"
 )
 
-// Audit keys — structured security audit (SEC5: no tokens, payloads, or argument bodies).
-const (
-	AuditMessageKey = "mcp_security_audit"
-)
+// Log attribute key for policy audit records (SEC5: no secrets in attrs).
+const AuditMessageKey = "mcp_security_audit"
 
-// LogAudit emits a structured audit record for allow/deny decisions via the configured AuditSink.
-// subjectID is hashed; toolName and reason must not contain secrets or argument data.
+// Emits via AuditSink; toolName/reason must not carry secrets (SEC5).
 func LogAudit(ctx context.Context, outcome, reason, toolName, subjectID, policyVersion string) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -29,7 +26,7 @@ func LogAudit(ctx context.Context, outcome, reason, toolName, subjectID, policyV
 	_ = currentAuditSink().Emit(ctx, rec)
 }
 
-// HashSubject returns an 8-hex-char prefix of SHA-256(sub) for logs (O5: no raw user IDs in high-cardinality metrics; logs use truncated hash).
+// Truncated SHA-256 for logs (O5).
 func HashSubject(subjectID string) string {
 	if subjectID == "" {
 		return ""

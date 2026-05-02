@@ -2,8 +2,7 @@ package policy
 
 import "fmt"
 
-// AllowedListContains reports whether namespacedTool is permitted by the effective allow list.
-// An empty allowed list means no JWT/RAR restriction (caller may use the full merged catalog).
+// allowed empty ⇒ any tool in catalog (no restriction).
 func AllowedListContains(namespacedTool string, allowed []string) (bool, error) {
 	if len(allowed) == 0 {
 		return true, nil
