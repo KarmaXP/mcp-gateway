@@ -1,5 +1,4 @@
-// Package multiplex fans out host JSON-RPC to MCP upstreams: merged initialize/tools/list,
-// optional semantic routing and schema validation, and tools/call forwarding with namespacing.
+// Host JSON-RPC merged across MCP upstreams; optional semantic router and argument validation.
 package multiplex
 
 import (
@@ -80,12 +79,12 @@ func WithSemanticRouter(sr *router.SemanticRouter) Option {
 	return func(a *Multiplexer) { a.semantic = sr }
 }
 
-// WithPolicyHolder attaches a reloadable policy holder (elevated-tool schema rules, SEC3).
+// Reloadable policy (elevated tools / SEC3).
 func WithPolicyHolder(h *policy.Holder) Option {
 	return func(a *Multiplexer) { a.policyHolder = h }
 }
 
-// WithPolicyEngine attaches a static policy engine (convenience wrapper around WithPolicyHolder).
+// Convenience: WithPolicyHolder(policy.NewHolder(p)).
 func WithPolicyEngine(p *policy.Engine) Option {
 	return func(a *Multiplexer) {
 		if p == nil {
@@ -96,7 +95,6 @@ func WithPolicyEngine(p *policy.Engine) Option {
 	}
 }
 
-// WithArgumentValidateLimits overrides defaults for tools/call JSON argument bounds.
 func WithArgumentValidateLimits(l validate.Limits) Option {
 	return func(a *Multiplexer) { a.argLimits = l }
 }

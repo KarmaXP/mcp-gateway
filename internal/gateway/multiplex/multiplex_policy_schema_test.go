@@ -89,7 +89,6 @@ func TestToolsCallElevatedToolRequiresSchema(t *testing.T) {
 	a, err := New([]backend.Upstream{b1}, WithListTTL(0), WithPolicyEngine(pol))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
-	// No inputSchema from mock → list leaves validators empty for this tool
 	_, _ = a.ToolsList(context.Background(), json.RawMessage(`2`))
 
 	params, _ := json.Marshal(map[string]any{"name": "alpha__echo", "arguments": map[string]any{"msg": "hi"}})

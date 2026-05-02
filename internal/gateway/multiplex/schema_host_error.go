@@ -8,7 +8,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-// hostVisibleJSONSchemaError maps validator errors to host-safe messages (SEC5: no instance values).
+// SEC5: never include instance values in the returned string.
 func hostVisibleJSONSchemaError(err error) string {
 	var verr *jsonschema.ValidationError
 	if errors.As(err, &verr) {
