@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 
+	"go.opentelemetry.io/otel/codes"
 	"golang.org/x/time/rate"
 
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
@@ -45,6 +46,7 @@ func HTTPMiddleware(cfg Config) func(http.Handler) http.Handler {
 			mu.Unlock()
 			if !b.Allow() {
 				telemetry.RecordRateLimit(r.Context(), false)
+				telemetry.EndHostRPCSpanIfOpen(r.Context(), codes.Error, "rate limited")
 				http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
 				return
 			}

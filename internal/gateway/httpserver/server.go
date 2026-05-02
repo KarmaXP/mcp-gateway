@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
@@ -152,8 +153,18 @@ func mergeWithShutdown(reqCtx, shutdownCtx context.Context) (context.Context, co
 
 func (s *Server) handleMCPRPC(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	rctx, span := telemetry.StartSpan(r.Context(), telemetry.SpanMCPHostRequest)
-	defer span.End()
+	rctx := r.Context()
+	var span trace.Span
+	if telemetry.HostRPCStartedFromContext(rctx) {
+		span = trace.SpanFromContext(rctx)
+	} else {
+		rctx, span = telemetry.StartSpan(rctx, telemetry.SpanMCPHostRequest)
+	}
+	defer func() {
+		if span != nil && span.IsRecording() {
+			span.End()
+		}
+	}()
 
 	httpErr := func(msg string, code int) {
 		span.SetStatus(codes.Error, msg)
@@ -170,6 +181,7 @@ func (s *Server) handleMCPRPC(w http.ResponseWriter, r *http.Request) {
 		httpErr("unknown session", http.StatusNotFound)
 		return
 	}
+	parseStart := time.Now()
 	r.Body = http.MaxBytesReader(w, r.Body, int64(defaults.MaxMCPRPCBodyBytes))
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -187,6 +199,12 @@ func (s *Server) handleMCPRPC(w http.ResponseWriter, r *http.Request) {
 		httpErr(err.Error(), http.StatusBadRequest)
 		return
 	}
+	method := req.Method
+	if method == "" {
+		method = defaults.MetricInternalMethodUnknown
+	}
+	telemetry.RecordInternalPhase(rctx, method, defaults.MetricInternalPhaseParse, time.Since(parseStart))
+
 	ctx := hostctx.WithClientIntent(rctx, r.Header.Get(hostctx.HeaderMCPIntent))
 	if err := sess.Dispatch(ctx, req); err != nil {
 		slog.WarnContext(r.Context(), "dispatch", "err", err)

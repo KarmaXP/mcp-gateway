@@ -15,9 +15,8 @@ func HTTPServerOptions(serviceName string, authCfg auth.JWTAuthConfig, v *auth.V
 	if serviceName == "" {
 		serviceName = "mcp-gateway"
 	}
+	// Outermost: HTTP server span; then JWT (may start mcp.host.request for POST /mcp/rpc); then rate limit; then mux.
 	return []httpserver.Option{
-		httpserver.WithHTTPMiddleware(auth.HTTPMiddleware(authCfg, v, pol)),
-		httpserver.WithHTTPMiddleware(ratelimit.HTTPMiddleware(rl)),
 		httpserver.WithHTTPMiddleware(func(h http.Handler) http.Handler {
 			return otelhttp.NewHandler(h, serviceName,
 				otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string {
@@ -25,5 +24,7 @@ func HTTPServerOptions(serviceName string, authCfg auth.JWTAuthConfig, v *auth.V
 				}),
 			)
 		}),
+		httpserver.WithHTTPMiddleware(auth.HTTPMiddleware(authCfg, v, pol)),
+		httpserver.WithHTTPMiddleware(ratelimit.HTTPMiddleware(rl)),
 	}
 }
