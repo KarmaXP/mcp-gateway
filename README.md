@@ -88,12 +88,14 @@ Structured logs use `log/slog` with a handler that attaches **trace_id** when a 
 
 Standard Go layout: `cmd/`, `internal/`, `deployments/`, `docs/`, `scripts/`. Public reusable libraries would live under `pkg/` if added; this module is primarily an application.
 
-## Code quality guardrail (no magic numbers)
+## Code quality guardrail (defaults, performance, structure)
 
 - Runtime numeric defaults and limits are centralized in `internal/defaults`.
 - MCP wire/protocol strings are centralized in `internal/gateway/mcpwire`.
 - Do not introduce raw numeric literals for tunable behavior in production code; use named constants/defaults.
 - CI lint includes `mnd` to catch newly introduced magic numbers in non-test Go code.
+- **Performance on hot paths** (`tools/list`, `tools/call`, semantic reindex, vector query): avoid unmarshaling or marshaling the same catalog payload twice when maps or rows are already in memory; use appropriate sorting (`sort.Slice` vs nested loops), preallocate when size is known, and reuse derived text (e.g. formatted tool docs) across embedding and rerank. See `.ai/rules/first-pass-quality.md` section 7.
+- **Readability:** prefer short functions with one responsibility and split large types across focused files in the same package (e.g. `tools_list.go`, `semantic_router_resolve.go`) rather than growing a single source file. See `.ai/rules/first-pass-quality.md` section 8 and `.ai/rules/go.md`.
 
 ## Continuous integration
 
