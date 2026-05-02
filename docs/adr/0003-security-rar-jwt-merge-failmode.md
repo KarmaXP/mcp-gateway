@@ -47,6 +47,11 @@ Unknown **`mcp_tool_groups`** entries are an error from `EffectiveAllowList` (fa
 
 Implementation: `internal/policy/engine.go` (`allowOnEvalFail` / `AllowOnEvalFailure`), `internal/auth/middleware.go` (401 on `EffectiveAllowList` error).
 
+## Decision 4: Audit emission (`AuditSink`) and hot policy reload (`SIGHUP`)
+
+- **Audit:** Allow/deny audit lines are emitted through a pluggable **`policy.AuditSink`** (`Emit(ctx, AuditRecord)`). The default **`SlogAuditSink`** preserves prior behavior: structured **`slog`** (with `mcp_security_audit`, hashed subject prefix, no tokens/args) plus **`telemetry.RecordPolicyDecision`**. **`policy.SetAuditSink`** swaps the sink process-wide (tests, future Kafka/syslog). **`LogAudit`** only builds an **`AuditRecord`** and delegates to the active sink.
+- **Reload:** The active **`policy.Engine`** is held in a **`policy.Holder`** (`Load` / `Store` with **`atomic.Pointer`**). **`SIGHUP`** triggers **`config.Load()`** and **`holder.Store(policy.NewEngine(cfg.Policy))`**. JWT middleware and multiplex read the engine via **`holder.Load()`** on each use, so **new `POST /mcp/rpc`** requests see the updated policy as soon as the swap completes. An existing **SSE** connection does not by itself block policy updates: every RPC still passes through HTTP middleware. Clients that **cache** `tools/list` or tool metadata **in-process** may observe stale catalog or assumptions until they refresh or reconnect.
+
 ## Consequences
 
 - Operators can cite this ADR for **thesis / security review**: RAR shape, merge semantics, and fail-closed default are explicit and implemented in `internal/policy` + auth middleware.
@@ -55,6 +60,6 @@ Implementation: `internal/policy/engine.go` (`allowOnEvalFail` / `AllowOnEvalFai
 ## References
 
 - `docs/architecture/mcp_gateway.plan.md` — security layer and policy
-- `internal/policy/` — engine, RAR expansion, audit logging
+- `internal/policy/` — engine, RAR expansion, `AuditSink`, `Holder`, audit logging
 - `internal/auth/middleware.go` — JWT + effective allow list per request
 - `internal/auth/claims.go` — `mcp_tools`, `mcp_tool_groups`, `authorization_details` input

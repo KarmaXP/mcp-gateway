@@ -26,7 +26,7 @@
   "time": { "from": "now-6h", "to": "now" },
   "timepicker": {},
   "timezone": "",
-  "title": "MCP Gateway — OTel metrics (router & sessions)",
+  "title": "MCP Gateway — OTel metrics (router, sessions, security)",
   "uid": "mcp-gw-otel-v1",
   "version": 1,
   "weekStart": "",
@@ -34,7 +34,7 @@
     {
       "gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 },
       "id": 1,
-      "options": { "content": "**Prometheus** should scrape the OTel Collector metrics endpoint (compose: internal `:8889`, often mapped via a scrape config). OTel instrument names are normalized; if a panel is empty, open **Explore** and search metrics for `semantic_router` or `active_sse` and adjust the query. Custom app metrics are emitted from `internal/telemetry/metrics.go` — router counters and histograms include **`layer`** (`exact`, `rules`, `vector`, `degraded_exact`, `none`, `unknown`)." },
+      "options": { "content": "**Prometheus** should scrape the OTel Collector metrics endpoint (compose: internal `:8889`, often mapped via a scrape config). OTel instrument names are normalized; if a panel is empty, open **Explore** and search metrics for `semantic_router`, `active_sse`, `policy_decisions`, or `jwks_lookups` and adjust the query. Custom app metrics are emitted from `internal/telemetry/metrics.go` — router counters and histograms include **`layer`** (`exact`, `rules`, `vector`, `degraded_exact`, `none`, `unknown`). **Security** row uses regex `__name__` matchers so panels survive OTel→Prometheus name mapping." },
       "title": "Notes",
       "type": "text"
     },
@@ -116,6 +116,82 @@
       ],
       "title": "Routing / multiplexer pressure (proxy: router miss rate)",
       "description": "Dedicated JSON-RPC multiplexor error counters are not exported yet; `result=\"miss\"` on the semantic router counter proxies routing failures (threshold, ambiguity, store errors, etc.).",
+      "type": "timeseries"
+    },
+    {
+      "gridPos": { "h": 2, "w": 24, "x": 0, "y": 18 },
+      "id": 6,
+      "options": { "content": "### Security\nCounters use **bounded labels** only (`outcome`/`reason`, `result`, `stage`). No payloads or user IDs. Regex `__name__` matches OTel dot names once normalized to Prometheus." },
+      "title": "Security (notes)",
+      "type": "text"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${prometheus_datasource}" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "id": 7,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true } },
+      "targets": [
+        {
+          "expr": "sum by (outcome, reason) (rate({__name__=~\".*policy_decisions_total\"}[5m]))",
+          "legendFormat": "{{outcome}} / {{reason}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Policy decisions (rate)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${prometheus_datasource}" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "id": 8,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true } },
+      "targets": [
+        {
+          "expr": "sum by (result) (rate({__name__=~\".*jwks_lookups_total\"}[5m]))",
+          "legendFormat": "{{result}}",
+          "refId": "A"
+        }
+      ],
+      "title": "JWKS lookups (rate)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${prometheus_datasource}" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 28 },
+      "id": 9,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true } },
+      "targets": [
+        {
+          "expr": "sum by (result) (rate({__name__=~\".*ratelimit_events_total\"}[5m]))",
+          "legendFormat": "{{result}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Rate limit events (rate)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${prometheus_datasource}" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 28 },
+      "id": 10,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true } },
+      "targets": [
+        {
+          "expr": "sum by (stage, result) (rate({__name__=~\".*tool_args_validation_total\"}[5m]))",
+          "legendFormat": "{{stage}} / {{result}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (reason) (rate({__name__=~\".*payload_bytes_rejected_total\"}[5m]))",
+          "legendFormat": "bytes_rejected {{reason}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Tool args validation & payload bytes rejected (rate)",
       "type": "timeseries"
     }
   ],
