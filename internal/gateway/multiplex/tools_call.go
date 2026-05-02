@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
@@ -53,23 +54,27 @@ func (a *Multiplexer) enforceHostToolAuthz(ctx context.Context, hostID json.RawM
 	}()
 	actx, span := telemetry.StartSpan(ctx, telemetry.SpanSecurityAuthz)
 	defer span.End()
-	span.SetAttributes(attribute.String("mcp.tool.name", namespacedTool))
+	span.SetAttributes(attribute.String(telemetry.AttrMCPToolName, namespacedTool))
 
 	allowed := hostctx.AllowedToolNamesFromContext(actx)
 	if len(allowed) == 0 {
+		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 	ok, err := policy.AllowedListContains(namespacedTool, allowed)
 	if err != nil {
 		span.RecordError(err)
+		span.SetStatus(codes.Error, "policy evaluation failed")
 		policy.LogAudit(actx, "deny", "policy_eval_failed", namespacedTool, hostctx.SubjectIDFromContext(actx), hostctx.PolicyVersionFromContext(actx))
 		return rpc.NewError(hostID, errcodes.GatewayInternal, "policy evaluation failed", nil)
 	}
 	if !ok {
+		span.SetStatus(codes.Error, "not in allow list")
 		policy.LogAudit(actx, "deny", "not_in_allow_list", namespacedTool, hostctx.SubjectIDFromContext(actx), hostctx.PolicyVersionFromContext(actx))
 		return rpc.NewError(hostID, errcodes.PermissionDenied, fmt.Sprintf("tool %q not allowed for this principal", namespacedTool), nil)
 	}
 	telemetry.RecordPolicyDecision(actx, defaults.MetricPolicyOutcomeAllow, defaults.MetricPolicyReasonAllowListMatch)
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
@@ -95,15 +100,17 @@ func (a *Multiplexer) applySemanticToolRouting(ctx context.Context, hostID json.
 		telemetry.RecordInternalPhase(ctx, "tools/call", defaults.MetricInternalPhaseRouter, time.Since(routeStart))
 	}()
 	rctx, span := telemetry.StartSpan(ctx, telemetry.SpanSemanticRouter)
+	defer span.End()
+	span.SetAttributes(attribute.String(telemetry.AttrMCPMethod, "tools/call"))
 	sig := a.semanticRoutingSignal(ctx, p.Name, p.Arguments)
 	resolved, dec, err := a.semantic.ResolveToolsCall(rctx, sig)
 	telemetry.RecordSemanticRouting(rctx, dec, err)
 	if err != nil {
 		span.RecordError(err)
-		span.End()
+		span.SetStatus(codes.Error, "semantic router")
 		return rpc.NewError(hostID, errcodes.ToolRoutingAmbiguous, err.Error(), nil)
 	}
-	span.End()
+	span.SetStatus(codes.Ok, "")
 	p.Name = resolved
 	return nil
 }
@@ -138,7 +145,10 @@ func (a *Multiplexer) invokeUpstreamToolsCall(ctx context.Context, hostID json.R
 	defer cancel()
 	bctx, bspan := telemetry.StartSpan(callCtx, telemetry.SpanBackendCall)
 	defer bspan.End()
-	bspan.SetAttributes(attribute.String("backend_id", b.ID()))
+	bspan.SetAttributes(
+		attribute.String(telemetry.AttrMCPBackendID, b.ID()),
+		attribute.String(telemetry.AttrMCPMethod, "tools/call"),
+	)
 	req := &rpc.Request{
 		JSONRPC: rpc.JSONRPCVersion,
 		Method:  "tools/call",
@@ -148,7 +158,13 @@ func (a *Multiplexer) invokeUpstreamToolsCall(ctx context.Context, hostID json.R
 	resp, err := b.Call(bctx, req)
 	if err != nil {
 		bspan.RecordError(err)
+		bspan.SetStatus(codes.Error, "backend transport")
 		return rpc.NewError(hostID, errcodes.GatewayInternal, "backend call failed", nil), nil
+	}
+	if resp != nil && resp.Error != nil {
+		bspan.SetStatus(codes.Error, "upstream jsonrpc error")
+	} else {
+		bspan.SetStatus(codes.Ok, "")
 	}
 	return resp, nil
 }

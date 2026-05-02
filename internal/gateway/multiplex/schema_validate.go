@@ -10,6 +10,7 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
@@ -103,10 +104,14 @@ func parseToolsArrayFromListJSON(raw json.RawMessage) ([]map[string]any, error) 
 func (a *Multiplexer) validateToolArgsWithSpan(ctx context.Context, hostID json.RawMessage, namespacedTool string, argsJSON json.RawMessage) *rpc.Response {
 	_, span := telemetry.StartSpan(ctx, telemetry.SpanValidateJSONSchema)
 	defer span.End()
-	span.SetAttributes(attribute.String("mcp.tool.name", namespacedTool))
+	span.SetAttributes(
+		attribute.String(telemetry.AttrMCPToolName, namespacedTool),
+		attribute.String(telemetry.AttrMCPMethod, "tools/call"),
+	)
 
 	if err := validate.CheckArgumentJSON(argsJSON, a.argLimits); err != nil {
 		span.RecordError(err)
+		span.SetStatus(codes.Error, "argument limits")
 		if errors.Is(err, validate.ErrArgumentsTooLarge) {
 			telemetry.RecordPayloadBytesRejected(ctx, defaults.MetricBytesRejectReasonToolArgs)
 		}
@@ -126,23 +131,28 @@ func (a *Multiplexer) validateToolArgsWithSpan(ctx context.Context, hostID json.
 	if pol != nil && pol.RequiresStrictSchema(namespacedTool) && sch == nil {
 		err := fmt.Errorf("tool %q requires input schema (elevated policy)", namespacedTool)
 		span.RecordError(err)
+		span.SetStatus(codes.Error, "elevated schema required")
 		telemetry.RecordToolArgsValidation(ctx, defaults.MetricArgsStageSchema, defaults.MetricArgsResultFail)
 		return rpc.NewError(hostID, errcodes.InvalidParams, err.Error(), nil)
 	}
 	if sch == nil {
+		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 	var inst any
 	if err := json.Unmarshal(argsJSON, &inst); err != nil {
 		span.RecordError(err)
+		span.SetStatus(codes.Error, "arguments json")
 		telemetry.RecordToolArgsValidation(ctx, defaults.MetricArgsStageSchema, defaults.MetricArgsResultFail)
 		return rpc.NewError(hostID, errcodes.InvalidParams, "invalid JSON arguments", nil)
 	}
 	if err := sch.Validate(inst); err != nil {
 		span.RecordError(err)
+		span.SetStatus(codes.Error, "json schema")
 		telemetry.RecordToolArgsValidation(ctx, defaults.MetricArgsStageSchema, defaults.MetricArgsResultFail)
 		return rpc.NewError(hostID, errcodes.InvalidParams, hostVisibleJSONSchemaError(err), nil)
 	}
 	telemetry.RecordToolArgsValidation(ctx, defaults.MetricArgsStageSchema, defaults.MetricArgsResultPass)
+	span.SetStatus(codes.Ok, "")
 	return nil
 }

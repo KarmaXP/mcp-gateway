@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
@@ -25,9 +27,14 @@ import (
 func (a *Multiplexer) ToolsList(ctx context.Context, hostID json.RawMessage) (*rpc.Response, error) {
 	tctx, span := telemetry.StartSpan(ctx, telemetry.SpanMultiplexToolsList)
 	defer span.End()
+	span.SetAttributes(
+		attribute.String(telemetry.AttrMCPMethod, "tools/list"),
+		telemetry.AttrJSONRPCID(hostID),
+	)
 
 	allowed := hostctx.AllowedToolNamesFromContext(tctx)
 	if resp, ok := a.tryCachedToolsList(tctx, hostID, allowed); ok {
+		span.SetStatus(codes.Ok, "")
 		return resp, nil
 	}
 
@@ -37,6 +44,7 @@ func (a *Multiplexer) ToolsList(ctx context.Context, hostID json.RawMessage) (*r
 
 	outFull, err := json.Marshal(map[string]any{"tools": merged})
 	if err != nil {
+		span.SetStatus(codes.Error, "marshal tools/list")
 		return nil, fmt.Errorf("multiplex: marshal tools/list: %w", err)
 	}
 
@@ -70,8 +78,10 @@ func (a *Multiplexer) ToolsList(ctx context.Context, hostID json.RawMessage) (*r
 	toReturn, err := a.toolsListPayloadForClient(mergedForList, allowed)
 	telemetry.RecordInternalPhase(tctx, "tools/list", defaults.MetricInternalPhaseMux, time.Since(muxStart))
 	if err != nil {
+		span.SetStatus(codes.Error, "tools/list policy")
 		return rpc.NewError(hostID, errcodes.GatewayInternal, "tools/list policy failed", nil), nil
 	}
+	span.SetStatus(codes.Ok, "")
 	return rpc.NewResult(hostID, toReturn), nil
 }
 

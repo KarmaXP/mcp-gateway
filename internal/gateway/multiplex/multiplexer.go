@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
@@ -146,6 +148,10 @@ func (a *Multiplexer) PrefixToUpstreamID() map[string]string {
 func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*rpc.Response, error) {
 	tctx, span := telemetry.StartSpan(ctx, telemetry.SpanMultiplexInit)
 	defer span.End()
+	span.SetAttributes(
+		attribute.String(telemetry.AttrMCPMethod, "initialize"),
+		telemetry.AttrJSONRPCID(hostID),
+	)
 
 	results := make([]json.RawMessage, len(a.upstreams))
 	var mu sync.Mutex
@@ -174,18 +180,22 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 		})
 	}
 	if err := g.Wait(); err != nil {
+		span.SetStatus(codes.Error, "initialize upstream group")
 		return nil, fmt.Errorf("multiplex: initialize upstreams: %w", err)
 	}
 
 	merged, err := mergeInitializeResults(results, a.upstreams)
 	if err != nil {
+		span.SetStatus(codes.Error, "all upstreams failed initialize")
 		return rpc.NewError(hostID, errcodes.GatewayInternal, "gateway: all upstreams failed initialize", nil), nil
 	}
 	raw, err := json.Marshal(merged)
 	if err != nil {
+		span.SetStatus(codes.Error, "marshal initialize")
 		return nil, fmt.Errorf("multiplex: marshal initialize result: %w", err)
 	}
 	a.invalidateToolCache()
+	span.SetStatus(codes.Ok, "")
 	return rpc.NewResult(hostID, raw), nil
 }
 
