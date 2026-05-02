@@ -44,7 +44,7 @@ func (a *Multiplexer) ToolsCall(ctx context.Context, hostID json.RawMessage, par
 		return rpc.NewError(hostID, errcodes.InvalidParams, err.Error(), nil), nil
 	}
 
-	return a.invokeUpstreamToolsCall(ctx, hostID, b, native, argsForForward, muxStart)
+	return a.invokeUpstreamToolsCall(ctx, hostID, b, p.Name, native, argsForForward, muxStart)
 }
 
 func (a *Multiplexer) enforceHostToolAuthz(ctx context.Context, hostID json.RawMessage, namespacedTool string) *rpc.Response {
@@ -132,7 +132,7 @@ type backendCaller interface {
 	Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error)
 }
 
-func (a *Multiplexer) invokeUpstreamToolsCall(ctx context.Context, hostID json.RawMessage, b backendCaller, native string, args json.RawMessage, muxStart time.Time) (*rpc.Response, error) {
+func (a *Multiplexer) invokeUpstreamToolsCall(ctx context.Context, hostID json.RawMessage, b backendCaller, namespacedTool, native string, args json.RawMessage, muxStart time.Time) (*rpc.Response, error) {
 	forwardParams, err := json.Marshal(map[string]any{
 		"name":      native,
 		"arguments": args,
@@ -165,6 +165,9 @@ func (a *Multiplexer) invokeUpstreamToolsCall(ctx context.Context, hostID json.R
 		bspan.SetStatus(codes.Error, "upstream jsonrpc error")
 	} else {
 		bspan.SetStatus(codes.Ok, "")
+	}
+	if resp != nil && resp.Error == nil {
+		hostctx.RecordSuccessfulToolCall(ctx, namespacedTool)
 	}
 	return resp, nil
 }

@@ -8,6 +8,10 @@ const (
 	SpanValidateJSONSchema = "mcp.validate.json_schema"
 	SpanMultiplexInit = "mcp.multiplex.initialize"
 	SpanMultiplexToolsList = "mcp.multiplex.tools_list"
+	SpanMultiplexResourcesList = "mcp.multiplex.resources_list"
+	SpanMultiplexResourcesRead = "mcp.multiplex.resources_read"
+	SpanMultiplexPromptsList = "mcp.multiplex.prompts_list"
+	SpanMultiplexPromptsGet = "mcp.multiplex.prompts_get"
 	SpanSemanticRouter = "mcp.router.semantic"
 	SpanBackendCall = "mcp.backend.call"
 )

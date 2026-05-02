@@ -57,6 +57,9 @@ type Multiplexer struct {
 
 	schemaMu       sync.RWMutex
 	toolValidators map[string]*jsonschema.Schema
+
+	strictInit bool
+	strictList bool
 }
 
 type Option func(*Multiplexer)
@@ -99,6 +102,14 @@ func WithPolicyEngine(p *policy.Engine) Option {
 
 func WithArgumentValidateLimits(l validate.Limits) Option {
 	return func(a *Multiplexer) { a.argLimits = l }
+}
+
+// WithAggregationStrict enables fail-closed aggregation (initialize and/or list RPCs).
+func WithAggregationStrict(strictInitialize, strictList bool) Option {
+	return func(a *Multiplexer) {
+		a.strictInit = strictInitialize
+		a.strictList = strictList
+	}
 }
 
 func New(upstreams []backend.Upstream, opts ...Option) (*Multiplexer, error) {
@@ -155,6 +166,7 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 
 	results := make([]json.RawMessage, len(a.upstreams))
 	var mu sync.Mutex
+	var strictFailed bool
 
 	g, ctx := errgroup.WithContext(tctx)
 	for i, b := range a.upstreams {
@@ -167,10 +179,20 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 			resp, err := b.Call(callCtx, req)
 			if err != nil {
 				slog.Warn("initialize backend failed", "backend_id", b.ID(), "err", err)
+				if a.strictInit {
+					mu.Lock()
+					strictFailed = true
+					mu.Unlock()
+				}
 				return nil
 			}
 			if resp.Error != nil {
 				slog.Warn("initialize backend jsonrpc error", "backend_id", b.ID(), "code", resp.Error.Code, "message", resp.Error.Message)
+				if a.strictInit {
+					mu.Lock()
+					strictFailed = true
+					mu.Unlock()
+				}
 				return nil
 			}
 			mu.Lock()
@@ -182,6 +204,11 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 	if err := g.Wait(); err != nil {
 		span.SetStatus(codes.Error, "initialize upstream group")
 		return nil, fmt.Errorf("multiplex: initialize upstreams: %w", err)
+	}
+
+	if a.strictInit && strictFailed {
+		span.SetStatus(codes.Error, "strict initialize aggregation")
+		return rpc.NewError(hostID, errcodes.StrictAggregationFailed, "gateway: strict initialize: one or more upstreams failed", nil), nil
 	}
 
 	merged, err := mergeInitializeResults(results, a.upstreams)
@@ -299,11 +326,13 @@ func (a *Multiplexer) semanticRoutingSignal(ctx context.Context, toolName string
 	a.catMu.RUnlock()
 	allowedList := hostctx.AllowedToolNamesFromContext(ctx)
 	return router.RoutingSignal{
-		Method:         "tools/call",
-		ToolName:       toolName,
-		ArgumentsJSON:  args,
-		IntentText:     hostctx.ClientIntentFromContext(ctx),
-		AllowedTools:   allowedList,
-		CatalogVersion: ver,
+		SessionID:       hostctx.MCPSessionIDFromContext(ctx),
+		Method:          "tools/call",
+		ToolName:        toolName,
+		ArgumentsJSON:   args,
+		IntentText:      hostctx.ClientIntentFromContext(ctx),
+		AllowedTools:    allowedList,
+		CatalogVersion:  ver,
+		RecentToolNames: hostctx.RecentToolNamesFromContext(ctx),
 	}
 }

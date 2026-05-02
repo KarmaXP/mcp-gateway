@@ -38,7 +38,11 @@ func (a *Multiplexer) ToolsList(ctx context.Context, hostID json.RawMessage) (*r
 		return resp, nil
 	}
 
-	merged := a.fetchAndMergeUpstreamTools(tctx)
+	merged, err := a.fetchAndMergeUpstreamTools(tctx)
+	if err != nil {
+		span.SetStatus(codes.Error, "tools/list upstream strict")
+		return rpc.NewError(hostID, errcodes.StrictAggregationFailed, "tools/list: strict aggregation: one or more upstreams failed", nil), nil
+	}
 
 	a.replaceToolSchemasFromMerged(merged)
 
@@ -106,22 +110,29 @@ func (a *Multiplexer) tryCachedToolsList(ctx context.Context, hostID json.RawMes
 	return rpc.NewResult(hostID, cachedCopy), true
 }
 
-func (a *Multiplexer) fetchAndMergeUpstreamTools(ctx context.Context) []map[string]any {
-	perUpstream := a.listToolsFromEachUpstream(ctx)
-	return mergeNamespacedToolList(a.upstreams, perUpstream)
+func (a *Multiplexer) fetchAndMergeUpstreamTools(ctx context.Context) ([]map[string]any, error) {
+	perUpstream, anyFail := a.listToolsFromEachUpstream(ctx)
+	if a.strictList && anyFail {
+		return nil, fmt.Errorf("tools/list: upstream failure")
+	}
+	return mergeNamespacedToolList(a.upstreams, perUpstream), nil
 }
 
-func (a *Multiplexer) listToolsFromEachUpstream(ctx context.Context) [][]map[string]any {
+func (a *Multiplexer) listToolsFromEachUpstream(ctx context.Context) ([][]map[string]any, bool) {
 	n := len(a.upstreams)
 	results := make([][]map[string]any, n)
+	var anyFail bool
 	g, gctx := errgroup.WithContext(ctx)
 	var mu sync.Mutex
 
 	for i, b := range a.upstreams {
 		i, b := i, b
 		g.Go(func() error {
-			tools := a.callUpstreamToolsList(gctx, b)
+			tools, ok := a.callUpstreamToolsList(gctx, b)
 			mu.Lock()
+			if !ok {
+				anyFail = true
+			}
 			results[i] = tools
 			mu.Unlock()
 			return nil
@@ -130,10 +141,10 @@ func (a *Multiplexer) listToolsFromEachUpstream(ctx context.Context) [][]map[str
 	if err := g.Wait(); err != nil {
 		slog.Warn("tools/list upstream group", "err", err)
 	}
-	return results
+	return results, anyFail
 }
 
-func (a *Multiplexer) callUpstreamToolsList(ctx context.Context, b backend.Upstream) []map[string]any {
+func (a *Multiplexer) callUpstreamToolsList(ctx context.Context, b backend.Upstream) ([]map[string]any, bool) {
 	callCtx, cancel := context.WithTimeout(ctx, a.listTimeout)
 	defer cancel()
 	subID := json.RawMessage(fmt.Sprintf(`"gw-list-%s"`, b.ID()))
@@ -141,20 +152,20 @@ func (a *Multiplexer) callUpstreamToolsList(ctx context.Context, b backend.Upstr
 	resp, err := b.Call(callCtx, req)
 	if err != nil {
 		slog.Warn("tools/list backend failed", "backend_id", b.ID(), "err", err)
-		return nil
+		return nil, false
 	}
 	if resp.Error != nil {
 		slog.Warn("tools/list jsonrpc error", "backend_id", b.ID(), "message", resp.Error.Message)
-		return nil
+		return nil, false
 	}
 	var body struct {
 		Tools []map[string]any `json:"tools"`
 	}
 	if err := json.Unmarshal(resp.Result, &body); err != nil {
 		slog.Warn("tools/list decode", "backend_id", b.ID(), "err", err)
-		return nil
+		return nil, false
 	}
-	return body.Tools
+	return body.Tools, true
 }
 
 func mergeNamespacedToolList(upstreams []backend.Upstream, perUpstream [][]map[string]any) []map[string]any {
