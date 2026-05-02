@@ -13,7 +13,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 )
 
-// QdrantVectorStore talks to a Qdrant HTTP API for production-scale semantic index storage.
+// Qdrant HTTP API-backed vector index.
 type QdrantVectorStore struct {
 	baseURL    string
 	collection string

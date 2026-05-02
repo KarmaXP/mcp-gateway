@@ -6,7 +6,6 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 )
 
-// SemanticRouterRuntimeConfig holds in-process tuning for vector routing (timeouts, thresholds).
 type SemanticRouterRuntimeConfig struct {
 	Mode Mode
 

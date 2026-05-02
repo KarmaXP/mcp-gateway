@@ -61,7 +61,6 @@ func ParseToolsListJSON(raw []byte) ([]ToolRow, error) {
 	return out, nil
 }
 
-// InputSchemaPropertyKeys returns top-level JSON Schema "properties" keys for embedding/indexing.
 func InputSchemaPropertyKeys(schema map[string]any) []string {
 	if schema == nil {
 		return nil
@@ -77,8 +76,7 @@ func InputSchemaPropertyKeys(schema map[string]any) []string {
 	return keys
 }
 
-// ToolRowsFromListMaps extracts ToolRow values from decoded tools/list entries (e.g. multiplex merge output).
-// Order matches the input slice. Callers use this to avoid re-parsing tools/list JSON when maps are already available.
+// When tools/list is already decoded as maps (avoids a second full JSON parse).
 func ToolRowsFromListMaps(tools []map[string]any) []ToolRow {
 	out := make([]ToolRow, 0, len(tools))
 	for _, t := range tools {

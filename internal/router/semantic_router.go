@@ -22,13 +22,13 @@ const (
 	ambiguityScoreDeltaThreshold = 0.05
 )
 
-// IndexedTool is one catalog tool row plus the upstream that owns its namespace prefix.
+// One tool row in the catalog plus its upstream id.
 type IndexedTool struct {
 	ToolRow    index.ToolRow
 	UpstreamID string
 }
 
-// SemanticRouter resolves tools/call to a namespaced tool and upstream using exact match, rules, and vector search.
+// Exact match, rules, then vector search for tools/call routing.
 type SemanticRouter struct {
 	cfg      SemanticRouterRuntimeConfig
 	embedder embed.Embedder
@@ -184,7 +184,6 @@ func jsonKeys(raw json.RawMessage) []string {
 	return keys
 }
 
-// BuildIndexedTools parses a tools/list JSON payload and attaches upstream IDs from namespace prefixes.
 func BuildIndexedTools(listJSON []byte, upstreamIDForPrefix func(prefix string) (string, error)) ([]IndexedTool, error) {
 	rows, err := index.ParseToolsListJSON(listJSON)
 	if err != nil {
@@ -193,8 +192,7 @@ func BuildIndexedTools(listJSON []byte, upstreamIDForPrefix func(prefix string) 
 	return buildIndexedToolsFromRows(rows, upstreamIDForPrefix)
 }
 
-// BuildIndexedToolsFromMerged builds the semantic-router catalog from merged tools/list maps without
-// re-marshaling or re-parsing list JSON (avoids redundant work on the tools/list hot path).
+// Prefer when tools/list maps are already decoded (avoids a second full JSON parse).
 func BuildIndexedToolsFromMerged(merged []map[string]any, upstreamIDForPrefix func(prefix string) (string, error)) ([]IndexedTool, error) {
 	return buildIndexedToolsFromRows(index.ToolRowsFromListMaps(merged), upstreamIDForPrefix)
 }

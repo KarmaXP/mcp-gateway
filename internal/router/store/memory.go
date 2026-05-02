@@ -14,7 +14,7 @@ const (
 	cosineSimilarityMin = -1.0
 )
 
-// InMemoryVectorStore is a cosine-similarity vector index for tests and small deployments.
+// Cosine similarity index for tests and small catalogs.
 type InMemoryVectorStore struct {
 	dim int
 
