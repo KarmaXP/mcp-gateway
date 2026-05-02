@@ -20,9 +20,11 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/namespace"
+	"github.com/KarmaXP/mcp-gateway/internal/policy"
 	"github.com/KarmaXP/mcp-gateway/internal/router"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
+	"github.com/KarmaXP/mcp-gateway/internal/validate"
 )
 
 var errNoUpstreamsResponded = errors.New("multiplex: no upstreams responded to initialize")
@@ -45,6 +47,9 @@ type Multiplexer struct {
 	listTTL    time.Duration
 
 	semantic *router.SemanticRouter
+
+	policyEngine *policy.Engine
+	argLimits    validate.Limits
 
 	catMu  sync.RWMutex
 	catVer string
@@ -75,6 +80,16 @@ func WithSemanticRouter(sr *router.SemanticRouter) Option {
 	return func(a *Multiplexer) { a.semantic = sr }
 }
 
+// WithPolicyEngine attaches gateway policy for elevated-tool schema rules (SEC3).
+func WithPolicyEngine(p *policy.Engine) Option {
+	return func(a *Multiplexer) { a.policyEngine = p }
+}
+
+// WithArgumentValidateLimits overrides defaults for tools/call JSON argument bounds.
+func WithArgumentValidateLimits(l validate.Limits) Option {
+	return func(a *Multiplexer) { a.argLimits = l }
+}
+
 func New(upstreams []backend.Upstream, opts ...Option) (*Multiplexer, error) {
 	byPrefix := make(map[string]backend.Upstream, len(upstreams))
 	for _, b := range upstreams {
@@ -97,6 +112,16 @@ func New(upstreams []backend.Upstream, opts ...Option) (*Multiplexer, error) {
 	}
 	for _, o := range opts {
 		o(a)
+	}
+	dl := validate.DefaultLimits()
+	if a.argLimits.MaxBytes <= 0 {
+		a.argLimits.MaxBytes = dl.MaxBytes
+	}
+	if a.argLimits.MaxDepth <= 0 {
+		a.argLimits.MaxDepth = dl.MaxDepth
+	}
+	if a.argLimits.MaxKeys <= 0 {
+		a.argLimits.MaxKeys = dl.MaxKeys
 	}
 	return a, nil
 }

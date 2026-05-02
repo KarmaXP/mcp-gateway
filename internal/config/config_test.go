@@ -54,6 +54,33 @@ func TestValidateDuplicatePrefix(t *testing.T) {
 	require.Error(t, cfg.Validate())
 }
 
+func TestLoadPolicyBlockFromYAML(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "g.yaml")
+	err := os.WriteFile(p, []byte(`
+backends:
+  - id: one
+    prefix: a
+    url: http://example.invalid:9
+policy:
+  version: "test-pol"
+  elevated_tools:
+    - a__x
+  tool_groups:
+    read:
+      - a__list
+  allow_on_eval_failure: true
+`), 0o644)
+	require.NoError(t, err)
+	t.Setenv("MCP_GATEWAY_CONFIG", p)
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, "test-pol", cfg.Policy.Version)
+	require.Equal(t, []string{"a__x"}, cfg.Policy.ElevatedTools)
+	require.Equal(t, []string{"a__list"}, cfg.Policy.ToolGroups["read"])
+	require.True(t, cfg.Policy.AllowOnEvalFailure)
+}
+
 func TestQdrantCollectionDefault(t *testing.T) {
 	var c GatewayConfig
 	require.Equal(t, defaults.DefaultQdrantCollectionName, c.QdrantCollection())

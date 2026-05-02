@@ -23,6 +23,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/KarmaXP/mcp-gateway/internal/auth"
+	"github.com/KarmaXP/mcp-gateway/internal/auth/ratelimit"
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/httpserver"
@@ -54,7 +55,7 @@ func TestHTTPServerOptionsJWTAndOTelProduceSpans(t *testing.T) {
 	agg, err := multiplex.New([]backend.Upstream{b1, b2}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
-	opts := HTTPServerOptions("mcp-gateway-test", cfg, v)
+	opts := HTTPServerOptions("mcp-gateway-test", cfg, v, nil, ratelimit.Config{})
 	srv := httpserver.New(agg, "", opts...)
 	ts := httptest.NewServer(srv)
 	defer ts.Close()

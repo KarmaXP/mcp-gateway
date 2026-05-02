@@ -9,8 +9,10 @@ import (
 
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
+	"github.com/KarmaXP/mcp-gateway/internal/config"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
+	"github.com/KarmaXP/mcp-gateway/internal/policy"
 )
 
 func TestToolsListFilteredByJWTAllowList(t *testing.T) {
@@ -45,7 +47,7 @@ func TestToolsCallRejectedWhenNotInAllowList(t *testing.T) {
 	resp, err := a.ToolsCall(ctx, json.RawMessage(`3`), params)
 	require.NoError(t, err)
 	require.NotNil(t, resp.Error)
-	require.Equal(t, errcodes.RequestRejected, resp.Error.Code)
+	require.Equal(t, errcodes.PermissionDenied, resp.Error.Code)
 }
 
 func TestToolsCallValidatesArgumentsAgainstSchema(t *testing.T) {
@@ -76,4 +78,23 @@ func TestToolsCallValidatesArgumentsAgainstSchema(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, resp.Error)
 	require.Contains(t, string(resp.Result), "ok")
+}
+
+func TestToolsCallElevatedToolRequiresSchema(t *testing.T) {
+	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
+	pol := policy.NewEngine(config.PolicySettings{
+		Version:       "t",
+		ElevatedTools: []string{"alpha__echo"},
+	})
+	a, err := New([]backend.Upstream{b1}, WithListTTL(0), WithPolicyEngine(pol))
+	require.NoError(t, err)
+	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
+	// No inputSchema from mock → list leaves validators empty for this tool
+	_, _ = a.ToolsList(context.Background(), json.RawMessage(`2`))
+
+	params, _ := json.Marshal(map[string]any{"name": "alpha__echo", "arguments": map[string]any{"msg": "hi"}})
+	resp, err := a.ToolsCall(context.Background(), json.RawMessage(`9`), params)
+	require.NoError(t, err)
+	require.NotNil(t, resp.Error)
+	require.Equal(t, errcodes.InvalidParams, resp.Error.Code)
 }

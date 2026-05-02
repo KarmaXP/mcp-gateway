@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"go.opentelemetry.io/otel/codes"
 
@@ -33,6 +34,8 @@ type Server struct {
 	addr    string
 	srv     *http.Server
 	handler http.Handler
+
+	sseHeartbeat time.Duration
 }
 
 type Option func(*Server)
@@ -49,6 +52,13 @@ func WithShutdownContext(ctx context.Context) Option {
 	}
 }
 
+// WithSSEHeartbeatInterval sets the interval for SSE comment keep-alives (": keepalive"); zero uses defaults.SSECommentHeartbeat.
+func WithSSEHeartbeatInterval(d time.Duration) Option {
+	return func(s *Server) {
+		s.sseHeartbeat = d
+	}
+}
+
 func New(mpx *multiplex.Multiplexer, addr string, opts ...Option) *Server {
 	s := &Server{
 		sessions: session.NewSessionManager(mpx),
@@ -57,6 +67,9 @@ func New(mpx *multiplex.Multiplexer, addr string, opts ...Option) *Server {
 	}
 	for _, o := range opts {
 		o(s)
+	}
+	if s.sseHeartbeat <= 0 {
+		s.sseHeartbeat = defaults.SSECommentHeartbeat
 	}
 	s.routes()
 	h := http.Handler(s.mux)
@@ -118,7 +131,7 @@ func (s *Server) handleMCPSSE(w http.ResponseWriter, r *http.Request) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		writeMCPSSEResponseLoop(connCtx, fl, w, sess)
+		writeMCPSSEResponseLoop(connCtx, fl, w, sess, s.sseHeartbeat)
 	}()
 
 	<-connCtx.Done()
@@ -159,8 +172,14 @@ func (s *Server) handleMCPRPC(w http.ResponseWriter, r *http.Request) {
 		httpErr("unknown session", http.StatusNotFound)
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, defaults.MaxMCPRPCBodyBytes))
+	r.Body = http.MaxBytesReader(w, r.Body, int64(defaults.MaxMCPRPCBodyBytes))
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		// MaxBytesReader returns a body-too-large error (see net/http ErrBodyTooLarge on supported Go versions).
+		if isRequestBodyTooLargeError(err) {
+			httpErr("request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		httpErr("read body", http.StatusBadRequest)
 		return
 	}
@@ -196,3 +215,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) AsHandler() http.Handler { return s.handler }
+
+func isRequestBodyTooLargeError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "request body too large") || strings.Contains(msg, "http: request body too large")
+}

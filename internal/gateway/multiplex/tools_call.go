@@ -7,9 +7,11 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/namespace"
+	"github.com/KarmaXP/mcp-gateway/internal/policy"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
 )
@@ -24,8 +26,13 @@ func (a *Multiplexer) ToolsCall(ctx context.Context, hostID json.RawMessage, par
 		return errResp, nil
 	}
 
-	if err := enforceToolPolicy(hostctx.AllowedToolNamesFromContext(ctx), p.Name); err != nil {
-		return rpc.NewError(hostID, errcodes.RequestRejected, err.Error(), nil), nil
+	if errResp := a.enforceHostToolAuthz(ctx, hostID, p.Name); errResp != nil {
+		return errResp, nil
+	}
+
+	argsForForward := coalesceArgs(p.Arguments)
+	if errResp := a.validateToolArgsWithSpan(ctx, hostID, p.Name, argsForForward); errResp != nil {
+		return errResp, nil
 	}
 
 	b, native, err := a.resolveBackendForTool(p.Name)
@@ -33,12 +40,30 @@ func (a *Multiplexer) ToolsCall(ctx context.Context, hostID json.RawMessage, par
 		return rpc.NewError(hostID, errcodes.InvalidParams, err.Error(), nil), nil
 	}
 
-	argsForForward := coalesceArgs(p.Arguments)
-	if err := a.validateToolArgs(p.Name, argsForForward); err != nil {
-		return rpc.NewError(hostID, errcodes.InvalidParams, err.Error(), nil), nil
-	}
-
 	return a.invokeUpstreamToolsCall(ctx, hostID, b, native, argsForForward)
+}
+
+func (a *Multiplexer) enforceHostToolAuthz(ctx context.Context, hostID json.RawMessage, namespacedTool string) *rpc.Response {
+	actx, span := telemetry.StartSpan(ctx, telemetry.SpanSecurityAuthz)
+	defer span.End()
+	span.SetAttributes(attribute.String("mcp.tool.name", namespacedTool))
+
+	allowed := hostctx.AllowedToolNamesFromContext(actx)
+	if len(allowed) == 0 {
+		return nil
+	}
+	ok, err := policy.AllowedListContains(namespacedTool, allowed)
+	if err != nil {
+		span.RecordError(err)
+		policy.LogAudit(actx, "deny", "policy_eval_failed", namespacedTool, hostctx.SubjectIDFromContext(actx), hostctx.PolicyVersionFromContext(actx))
+		return rpc.NewError(hostID, errcodes.GatewayInternal, "policy evaluation failed", nil)
+	}
+	if !ok {
+		policy.LogAudit(actx, "deny", "not_in_allow_list", namespacedTool, hostctx.SubjectIDFromContext(actx), hostctx.PolicyVersionFromContext(actx))
+		return rpc.NewError(hostID, errcodes.PermissionDenied, fmt.Sprintf("tool %q not allowed for this principal", namespacedTool), nil)
+	}
+	telemetry.RecordPolicyDecision(actx, defaults.MetricPolicyOutcomeAllow, defaults.MetricPolicyReasonAllowListMatch)
+	return nil
 }
 
 type toolsCallParams struct {

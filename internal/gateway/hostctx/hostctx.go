@@ -54,6 +54,52 @@ func AllowedToolNamesFromContext(ctx context.Context) []string {
 	return out
 }
 
+type subjectIDKey struct{}
+
+// WithSubjectID attaches a JWT subject (sub) for audit correlation; do not log raw values (hash in audit layer).
+func WithSubjectID(parent context.Context, subject string) context.Context {
+	if parent == nil {
+		parent = context.Background()
+	}
+	subject = strings.TrimSpace(subject)
+	if subject == "" {
+		return parent
+	}
+	return context.WithValue(parent, subjectIDKey{}, subject)
+}
+
+// SubjectIDFromContext returns the subject set with WithSubjectID, or "".
+func SubjectIDFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	s, _ := ctx.Value(subjectIDKey{}).(string)
+	return s
+}
+
+type policyVersionKey struct{}
+
+// WithPolicyVersion attaches the active policy configuration version for audit and traces.
+func WithPolicyVersion(parent context.Context, version string) context.Context {
+	if parent == nil {
+		parent = context.Background()
+	}
+	version = strings.TrimSpace(version)
+	if version == "" {
+		return parent
+	}
+	return context.WithValue(parent, policyVersionKey{}, version)
+}
+
+// PolicyVersionFromContext returns the policy version from WithPolicyVersion, or "".
+func PolicyVersionFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	s, _ := ctx.Value(policyVersionKey{}).(string)
+	return s
+}
+
 func normalizeAllowedToolNames(in []string) []string {
 	if len(in) == 0 {
 		return nil

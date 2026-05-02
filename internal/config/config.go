@@ -18,8 +18,17 @@ import (
 type GatewayConfig struct {
 	Upstreams      []UpstreamDefinition     `yaml:"backends"`
 	SemanticRouter SemanticRouterSettings   `yaml:"router"`
+	Policy         PolicySettings           `yaml:"policy"`
 	Qdrant         QdrantSettings           `yaml:"qdrant"`
 	Embedding      EmbeddingServiceSettings `yaml:"embed"`
+}
+
+// PolicySettings configures MCP tool authorization helpers (RAR merge, elevated tools, tool groups).
+type PolicySettings struct {
+	Version            string              `yaml:"version"`
+	ElevatedTools      []string            `yaml:"elevated_tools"`
+	ToolGroups         map[string][]string `yaml:"tool_groups"`
+	AllowOnEvalFailure bool                `yaml:"allow_on_eval_failure"`
 }
 
 // UpstreamDefinition describes one MCP server the gateway fans out to (HTTP+SSE or stdio).
@@ -178,6 +187,12 @@ func (c *GatewayConfig) ApplyEnvOverrides() {
 	}
 	if v := strings.TrimSpace(os.Getenv("QDRANT_COLLECTION")); v != "" {
 		c.Qdrant.Collection = v
+	}
+	if v := strings.TrimSpace(os.Getenv("POLICY_VERSION")); v != "" {
+		c.Policy.Version = v
+	}
+	if v := strings.ToLower(strings.TrimSpace(os.Getenv("POLICY_ALLOW_ON_EVAL_FAILURE"))); v == "1" || v == "true" || v == "yes" {
+		c.Policy.AllowOnEvalFailure = true
 	}
 }
 

@@ -77,4 +77,11 @@ var (
 	DefaultJWKSCacheTTL = 5 * time.Minute
 
 	OTLPMetricExportInterval = 15 * time.Second
+
+	// SSECommentHeartbeat is the interval between keep-alive comment lines on the host SSE stream.
+	SSECommentHeartbeat = 30 * time.Second
+
+	// HTTP rate limit defaults (token bucket; optional via RATE_LIMIT_ENABLED).
+	DefaultRateLimitRPS   = 100
+	DefaultRateLimitBurst = 200
 )

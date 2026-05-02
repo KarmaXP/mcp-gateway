@@ -6,6 +6,17 @@
 #
 # Optional: auth_token or auth_token_env for HTTP Bearer on upstream requests.
 
+# Gateway policy (RAR merge, tool groups, elevated tools requiring JSON Schema — see internal/policy).
+# policy:
+#   version: "2026-05-01"
+#   allow_on_eval_failure: false
+#   elevated_tools:
+#     - k8s__exec_pod
+#   tool_groups:
+#     k8s_read:
+#       - k8s__get_logs
+#       - k8s__list_pods
+
 backends:
   - id: backend-alpha
     prefix: alpha

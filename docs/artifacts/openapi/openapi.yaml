@@ -39,10 +39,11 @@ info:
     | -32603 | `InternalError` | Standard JSON-RPC server error (reserved by spec). |
     | -32000 | `GatewayInternal` | Upstream/multiplex failure, transport error, or initialize/tools failure. |
     | -32001 | `HandshakeIncomplete` | `tools/*` before `initialize` + `notifications/initialized`. |
-    | -32002 | `RequestRejected` | Middleware or policy rejected the request. |
+    | -32002 | `RequestRejected` | Session middleware rejected the request (e.g. handshake guard). |
+    | -32003 | `PermissionDenied` | Authenticated principal is not allowed to invoke the requested tool (`tools/call`). |
     | -32004 | `ToolRoutingAmbiguous` | Semantic router could not pick a unique tool (threshold, ambiguity, rename policy). |
 
-    The numeric band `-32003` is intentionally unused (reserved gap); do not rely on it.
+    Other bands in `-32005..-32099` remain reserved for future gateway use.
   version: 0.1.0
   license:
     name: Proprietary
@@ -145,8 +146,8 @@ paths:
         Optional header **`X-MCP-Intent`**: free-text session or user intent; copied into the semantic router for
         **`tools/call`** when `ROUTER_MODE` enables routing (ignored when the router is off).
 
-        When **`AUTH_MODE=jwt`**, optional claim **`mcp_tools`** filters **`tools/list`** and rejects **`tools/call`**
-        for tools outside that list; see `bearerAuth`.
+        When **`AUTH_MODE=jwt`**, optional claims **`mcp_tools`**, **`authorization_details`**, and **`mcp_tool_groups`**
+        filter **`tools/list`** and reject **`tools/call`** outside the effective allow list (**-32003**); see `bearerAuth`.
       operationId: postMcpRpc
       security:
         - bearerAuth: []
@@ -228,6 +229,10 @@ paths:
           description: Unauthorized (JWT mode)
         "404":
           description: Unknown `Mcp-Session-Id`
+        "413":
+          description: Request body exceeds the gateway maximum (enforced with `MaxBytesReader` before buffering)
+        "429":
+          description: Rate limit exceeded when `RATE_LIMIT_ENABLED` is set
         "500":
           description: Dispatch failure
 
@@ -239,7 +244,9 @@ components:
       bearerFormat: JWT
       description: |
         RS256 JWT when AUTH_MODE=jwt (optional in dev when AUTH_MODE=none).
-        Optional claim **`mcp_tools`**: JSON array of namespaced tool names the subject may invoke; forwarded to the semantic router allow-list on **`tools/call`**. Omit for no restriction.
+        Optional claim **`mcp_tools`**: JSON array of namespaced tool names; merged with **`authorization_details`** (RFC 9396 RAR-style array) when both are present by **intersection**; forwarded to the semantic router and enforced on **`tools/call`** (JSON-RPC **-32003** `PermissionDenied` when denied).
+        Optional **`mcp_tool_groups`**: expands to tool ids via gateway **`policy.tool_groups`** in MCP config YAML.
+        Optional **`authorization_details`**: entries `{ "type": "mcp_tool", "tool_name": "<namespaced>" }` or `{ "type": "mcp_tool", "tool_pattern": "prefix__*" }` (glob).
 
   schemas:
     SseJsonRpcFrame:
@@ -304,9 +311,10 @@ components:
             - **-32000** — `GatewayInternal`
             - **-32001** — `HandshakeIncomplete`
             - **-32002** — `RequestRejected`
+            - **-32003** — `PermissionDenied`
             - **-32004** — `ToolRoutingAmbiguous`
 
-            Values **-32003** and other `-32005..-32099` are reserved for future gateway use.
+            Values in `-32005..-32099` are reserved for future gateway use.
         message:
           type: string
         data:

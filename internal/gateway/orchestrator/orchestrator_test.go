@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/KarmaXP/mcp-gateway/internal/auth"
+	"github.com/KarmaXP/mcp-gateway/internal/auth/ratelimit"
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/httpserver"
@@ -23,7 +24,7 @@ func TestHTTPServerOptionsWithServer(t *testing.T) {
 	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
-	opts := HTTPServerOptions("test-svc", cfg, v)
+	opts := HTTPServerOptions("test-svc", cfg, v, nil, ratelimit.Config{})
 	srv := httpserver.New(agg, "", opts...)
 
 	ts := httptest.NewServer(srv)

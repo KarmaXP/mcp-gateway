@@ -1,30 +1,39 @@
 package multiplex
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/url"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
+	"go.opentelemetry.io/otel/attribute"
+
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
+	"github.com/KarmaXP/mcp-gateway/internal/policy"
+	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
+	"github.com/KarmaXP/mcp-gateway/internal/validate"
 )
 
-func filterToolsForPolicy(merged []map[string]any, allowed []string) []map[string]any {
+func filterToolsForPolicy(merged []map[string]any, allowed []string) ([]map[string]any, error) {
 	if len(allowed) == 0 {
-		return merged
-	}
-	allow := make(map[string]struct{}, len(allowed))
-	for _, n := range allowed {
-		allow[n] = struct{}{}
+		return merged, nil
 	}
 	out := make([]map[string]any, 0, len(merged))
 	for _, t := range merged {
 		name, _ := t["name"].(string)
-		if _, ok := allow[name]; ok {
+		ok, err := policy.AllowedListContains(name, allowed)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
 			out = append(out, t)
 		}
 	}
-	return out
+	return out, nil
 }
 
 func toolSchemaURL(namespacedName string) string {
@@ -90,38 +99,42 @@ func parseToolsArrayFromListJSON(raw json.RawMessage) ([]map[string]any, error) 
 	return body.Tools, nil
 }
 
-func allowedContains(allowed []string, namespacedTool string) bool {
-	for _, n := range allowed {
-		if n == namespacedTool {
-			return true
-		}
-	}
-	return false
-}
+func (a *Multiplexer) validateToolArgsWithSpan(ctx context.Context, hostID json.RawMessage, namespacedTool string, argsJSON json.RawMessage) *rpc.Response {
+	_, span := telemetry.StartSpan(ctx, telemetry.SpanValidateJSONSchema)
+	defer span.End()
+	span.SetAttributes(attribute.String("mcp.tool.name", namespacedTool))
 
-func enforceToolPolicy(allowed []string, namespacedTool string) error {
-	if len(allowed) == 0 {
-		return nil
+	if err := validate.CheckArgumentJSON(argsJSON, a.argLimits); err != nil {
+		span.RecordError(err)
+		telemetry.RecordToolArgsValidation(ctx, defaults.MetricArgsStageLimits, defaults.MetricArgsResultFail)
+		return rpc.NewError(hostID, errcodes.InvalidParams, err.Error(), nil)
 	}
-	if !allowedContains(allowed, namespacedTool) {
-		return fmt.Errorf("tool %q not allowed for this token", namespacedTool)
-	}
-	return nil
-}
+	telemetry.RecordToolArgsValidation(ctx, defaults.MetricArgsStageLimits, defaults.MetricArgsResultPass)
 
-func (a *Multiplexer) validateToolArgs(namespacedTool string, argsJSON json.RawMessage) error {
 	a.schemaMu.RLock()
 	sch := a.toolValidators[namespacedTool]
 	a.schemaMu.RUnlock()
+
+	if a.policyEngine != nil && a.policyEngine.RequiresStrictSchema(namespacedTool) && sch == nil {
+		err := fmt.Errorf("tool %q requires input schema (elevated policy)", namespacedTool)
+		span.RecordError(err)
+		telemetry.RecordToolArgsValidation(ctx, defaults.MetricArgsStageSchema, defaults.MetricArgsResultFail)
+		return rpc.NewError(hostID, errcodes.InvalidParams, err.Error(), nil)
+	}
 	if sch == nil {
 		return nil
 	}
 	var inst any
 	if err := json.Unmarshal(argsJSON, &inst); err != nil {
-		return fmt.Errorf("invalid JSON arguments: %w", err)
+		span.RecordError(err)
+		telemetry.RecordToolArgsValidation(ctx, defaults.MetricArgsStageSchema, defaults.MetricArgsResultFail)
+		return rpc.NewError(hostID, errcodes.InvalidParams, "invalid JSON arguments", nil)
 	}
 	if err := sch.Validate(inst); err != nil {
-		return fmt.Errorf("arguments do not match tool schema: %w", err)
+		span.RecordError(err)
+		telemetry.RecordToolArgsValidation(ctx, defaults.MetricArgsStageSchema, defaults.MetricArgsResultFail)
+		return rpc.NewError(hostID, errcodes.InvalidParams, hostVisibleJSONSchemaError(err), nil)
 	}
+	telemetry.RecordToolArgsValidation(ctx, defaults.MetricArgsStageSchema, defaults.MetricArgsResultPass)
 	return nil
 }

@@ -2,8 +2,10 @@ package httpserver
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,6 +17,7 @@ import (
 
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
@@ -87,6 +90,67 @@ func TestPostRPCUnknownSession(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusNotFound, res.StatusCode)
 	require.NoError(t, res.Body.Close())
+}
+
+func TestPostRPCBodyTooLarge413(t *testing.T) {
+	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
+	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
+	require.NoError(t, err)
+	srv := New(agg, "")
+	ts := httptest.NewServer(srv)
+	defer ts.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sseReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+PathMCPSSE, nil)
+	sseResp, err := ts.Client().Do(sseReq)
+	require.NoError(t, err)
+	sid := sseResp.Header.Get(HeaderMCPSessionID)
+	require.NotEmpty(t, sid)
+	go func() { _, _ = io.Copy(io.Discard, sseResp.Body) }()
+
+	oversize := bytes.Repeat([]byte("a"), defaults.MaxMCPRPCBodyBytes+1)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+PathMCPRPC, bytes.NewReader(oversize))
+	req.Header.Set(HeaderMCPSessionID, sid)
+	req.Header.Set("Content-Type", "application/json")
+	res, err := ts.Client().Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusRequestEntityTooLarge, res.StatusCode)
+	require.NoError(t, res.Body.Close())
+	cancel()
+	_ = sseResp.Body.Close()
+}
+
+func TestSSEKeepaliveComment(t *testing.T) {
+	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
+	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
+	require.NoError(t, err)
+	srv := New(agg, "", WithSSEHeartbeatInterval(80*time.Millisecond))
+	ts := httptest.NewServer(srv)
+	defer ts.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sseReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+PathMCPSSE, nil)
+	sseResp, err := ts.Client().Do(sseReq)
+	require.NoError(t, err)
+	defer sseResp.Body.Close()
+
+	br := bufio.NewReader(sseResp.Body)
+	deadline := time.Now().Add(2 * time.Second)
+	sawKeepalive := false
+	for time.Now().Before(deadline) {
+		line, err := br.ReadString('\n')
+		if err != nil {
+			break
+		}
+		if strings.HasPrefix(strings.TrimSpace(line), ":") {
+			sawKeepalive = true
+			break
+		}
+	}
+	require.True(t, sawKeepalive, "expected SSE comment line from heartbeat")
+	cancel()
 }
 
 func TestMCPHappyPathOverHTTP(t *testing.T) {

@@ -11,12 +11,14 @@ import (
 	"syscall"
 
 	"github.com/KarmaXP/mcp-gateway/internal/auth"
+	"github.com/KarmaXP/mcp-gateway/internal/auth/ratelimit"
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/config"
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/httpserver"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/orchestrator"
+	"github.com/KarmaXP/mcp-gateway/internal/policy"
 	"github.com/KarmaXP/mcp-gateway/internal/router"
 	"github.com/KarmaXP/mcp-gateway/internal/router/embed"
 	"github.com/KarmaXP/mcp-gateway/internal/router/rules"
@@ -168,13 +170,15 @@ func main() {
 		slog.Error("multiplexer options", "err", err)
 		os.Exit(1)
 	}
+	polEngine := policy.NewEngine(cfg.Policy)
+	mpxOpts = append(mpxOpts, multiplex.WithPolicyEngine(polEngine))
 	mpx, err := multiplex.New(upstreams, mpxOpts...)
 	if err != nil {
 		slog.Error("multiplexer", "err", err)
 		os.Exit(1)
 	}
 
-	httpOpts := orchestrator.HTTPServerOptions(defaults.DefaultTelemetryServiceName, authCfg, validator)
+	httpOpts := orchestrator.HTTPServerOptions(defaults.DefaultTelemetryServiceName, authCfg, validator, polEngine, ratelimit.FromEnvironment())
 	httpOpts = append(httpOpts, httpserver.WithShutdownContext(rootCtx))
 	srv := httpserver.New(mpx, addr, httpOpts...)
 

@@ -12,5 +12,6 @@ const (
 	GatewayInternal      = -32000
 	HandshakeIncomplete  = -32001
 	RequestRejected      = -32002
+	PermissionDenied     = -32003
 	ToolRoutingAmbiguous = -32004
 )

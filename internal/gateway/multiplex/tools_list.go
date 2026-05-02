@@ -13,6 +13,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/namespace"
 	"github.com/KarmaXP/mcp-gateway/internal/router"
@@ -43,7 +44,7 @@ func (a *Multiplexer) ToolsList(ctx context.Context, hostID json.RawMessage) (*r
 
 	toReturn, err := a.toolsListPayloadForClient(merged, outFull, allowed)
 	if err != nil {
-		return nil, err
+		return rpc.NewError(hostID, errcodes.GatewayInternal, "tools/list policy failed", nil), nil
 	}
 	return rpc.NewResult(hostID, toReturn), nil
 }
@@ -190,7 +191,10 @@ func (a *Multiplexer) toolsListPayloadForClient(merged []map[string]any, outFull
 	if len(allowed) == 0 {
 		return outFull, nil
 	}
-	filtered := filterToolsForPolicy(merged, allowed)
+	filtered, err := filterToolsForPolicy(merged, allowed)
+	if err != nil {
+		return nil, fmt.Errorf("multiplex: tools/list policy: %w", err)
+	}
 	filteredRaw, err := json.Marshal(map[string]any{"tools": filtered})
 	if err != nil {
 		return nil, fmt.Errorf("multiplex: marshal filtered tools/list: %w", err)
