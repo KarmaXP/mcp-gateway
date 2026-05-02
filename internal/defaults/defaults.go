@@ -17,6 +17,13 @@ const (
 	SessionOutboundChannelSize = 64
 )
 
+// tools/call argument JSON (pre-schema, boundary validation)
+const (
+	MaxToolArgumentsJSONBytes = 256 << 10
+	MaxToolArgumentsJSONDepth = 32
+	MaxToolArgumentsJSONKeys  = 256
+)
+
 // HTTP read / body limits
 const (
 	MaxMCPRPCBodyBytes         = 1 << 20
