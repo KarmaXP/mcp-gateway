@@ -6,7 +6,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
 
-// Upstream is one configured MCP server the gateway multiplexes to (stdio or HTTP+SSE transport).
+// One MCP server the gateway multiplexes to (stdio or HTTP+SSE).
 type Upstream interface {
 	ID() string
 	Prefix() string

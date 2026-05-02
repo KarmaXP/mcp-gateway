@@ -16,7 +16,7 @@ var (
 	_ Upstream = (*mcpstdio.StdioMCPUpstream)(nil)
 )
 
-// ConnectUpstreams opens one client per UpstreamDefinition. cleanup closes all transports in reverse order.
+// cleanup closes transports in reverse registration order.
 func ConnectUpstreams(ctx context.Context, defs []config.UpstreamDefinition) ([]Upstream, func(), error) {
 	var cleaners []func()
 	cleanup := func() {
