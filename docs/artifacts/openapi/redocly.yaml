@@ -1,0 +1,9 @@
+# Redocly CLI config — extends recommended rules; relaxes style checks that conflict
+# with a localhost-first gateway spec and informative component schemas.
+extends:
+  - recommended
+
+rules:
+  no-server-example.com: off
+  no-unused-components: off
+  operation-4xx-response: off

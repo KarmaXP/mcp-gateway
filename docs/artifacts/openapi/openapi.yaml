@@ -25,7 +25,24 @@ info:
     - **SSE**: long-lived `GET /mcp/sse`; **`Mcp-Session-Id` is only on the GET response** (clients copy it onto every POST).
     - **JSON-RPC**: single request per `POST /mcp/rpc`; responses for requests with `id` are **SSE-only**.
 
-    When `AUTH_MODE=jwt`, all routes except configured health prefixes require a valid `Authorization: Bearer` JWT.
+    When `AUTH_MODE=jwt`, **`GET /mcp/sse`** and **`POST /mcp/rpc`** require `Authorization: Bearer <JWT>` (health routes are skipped by default).
+
+    Optional headers (all routes): **`traceparent`** / **`tracestate`** (W3C Trace Context). When `traceparent` is present, the gateway continues the distributed trace for OTel spans. Omitted headers are safe.
+
+    ### HTTP status vs transport errors (ingress)
+
+    JSON-RPC **application** errors (e.g. `-32003` `PermissionDenied`) are delivered on the **SSE** stream, not in the POST body. HTTP status reflects transport / gatekeeping only:
+
+    | HTTP | Meaning |
+    |------|---------|
+    | **200** | `GET /mcp/sse` stream established. |
+    | **202** | `POST /mcp/rpc` accepted; for requests with `id`, see SSE `event: jsonrpc`. |
+    | **400** | Missing session header, unreadable body, or invalid JSON-RPC envelope. |
+    | **401** | JWT missing/invalid, or JWT claims could not be merged with policy (fail-closed). |
+    | **404** | Unknown `Mcp-Session-Id`. |
+    | **413** | Request body over gateway limit. |
+    | **429** | Rate limited (when enabled). |
+    | **500** | Dispatch or streaming failure. |
 
     ### JSON-RPC error codes (gateway contract)
 
@@ -46,7 +63,8 @@ info:
     Other bands in `-32005..-32099` remain reserved for future gateway use.
   version: 0.1.0
   license:
-    name: Proprietary
+    name: MIT
+    identifier: MIT
 servers:
   - url: http://localhost:18080
     description: Local default (see PORT / GATEWAY_PORT in .env)
@@ -55,8 +73,11 @@ servers:
 
 tags:
   - name: Health
+    description: Liveness and readiness without MCP session semantics
   - name: MCP
+    description: SSE session and JSON-RPC ingress
   - name: JSON-RPC
+    description: Request and error shapes for MCP methods
 
 paths:
   /healthz:
@@ -64,6 +85,7 @@ paths:
       tags: [Health]
       summary: Liveness probe
       operationId: getHealthz
+      security: []
       responses:
         "200":
           description: Process is up
@@ -78,6 +100,7 @@ paths:
       summary: Readiness probe
       description: Phase 1 — no external dependency checks; returns OK when process serves traffic.
       operationId: getReadyz
+      security: []
       responses:
         "200":
           description: Ready to accept traffic
@@ -100,6 +123,9 @@ paths:
       operationId: openMcpSSE
       security:
         - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Traceparent"
+        - $ref: "#/components/parameters/Tracestate"
       responses:
         "200":
           description: Stream established
@@ -143,15 +169,17 @@ paths:
         Supported methods (Phase 1–2 baseline): `initialize`, `ping`, `notifications/initialized` (or `initialized`),
         `tools/list`, `tools/call`. Other methods receive a JSON-RPC error on the SSE stream.
 
-        Optional header **`X-MCP-Intent`**: free-text session or user intent; copied into the semantic router for
-        **`tools/call`** when `ROUTER_MODE` enables routing (ignored when the router is off).
+        Optional header **`X-MCP-Intent`**: free-text session or user intent; forwarded to the semantic router for
+        **`tools/call`** and, when `ROUTER_MODE=filter_list`, for **`tools/list`** subsetting (see README).
 
         When **`AUTH_MODE=jwt`**, optional claims **`mcp_tools`**, **`authorization_details`**, and **`mcp_tool_groups`**
-        filter **`tools/list`** and reject **`tools/call`** outside the effective allow list (**-32003**); see `bearerAuth`.
+        filter **`tools/list`** and reject **`tools/call`** outside the effective allow list (**-32003** on SSE); see `bearerAuth` and schema **`AuthorizationDetailsMcpTool`**.
       operationId: postMcpRpc
       security:
         - bearerAuth: []
       parameters:
+        - $ref: "#/components/parameters/Traceparent"
+        - $ref: "#/components/parameters/Tracestate"
         - name: Mcp-Session-Id
           in: header
           required: true
@@ -198,14 +226,26 @@ paths:
                   jsonrpc: "2.0"
                   id: 3
                   method: tools/list
-              toolsCall:
-                summary: Call a namespaced tool
+              toolsCallAllow:
+                summary: tools/call — allowed tool (host must be allow-listed when using JWT)
                 value:
                   jsonrpc: "2.0"
                   id: 4
                   method: tools/call
                   params:
                     name: alpha__echo
+                    arguments: {}
+              toolsCallDeny:
+                summary: tools/call — denied tool (SSE delivers error -32003; no upstream forward)
+                description: |
+                  Example when JWT effective allow list includes only `alpha__echo` but the host calls `alpha__other`.
+                  HTTP **202** on POST; SSE `data` line contains `JsonRpcError` with `code: -32003`.
+                value:
+                  jsonrpc: "2.0"
+                  id: 5
+                  method: tools/call
+                  params:
+                    name: alpha__other
                     arguments: {}
               ping:
                 summary: MCP ping (empty result object)
@@ -237,23 +277,71 @@ paths:
           description: Dispatch failure
 
 components:
+  parameters:
+    Traceparent:
+      name: traceparent
+      in: header
+      required: false
+      description: |
+        [W3C Trace Context](https://www.w3.org/TR/trace-context/) `traceparent`. Optional; when set, gateway spans link to this trace.
+      schema:
+        type: string
+        example: 00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01
+    Tracestate:
+      name: tracestate
+      in: header
+      required: false
+      description: Optional `tracestate` vendor data per W3C Trace Context.
+      schema:
+        type: string
+
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
       description: |
-        RS256 JWT when AUTH_MODE=jwt (optional in dev when AUTH_MODE=none).
-        Optional claim **`mcp_tools`**: JSON array of namespaced tool names; merged with **`authorization_details`** (RFC 9396 RAR-style array) when both are present by **intersection**; forwarded to the semantic router and enforced on **`tools/call`** (JSON-RPC **-32003** `PermissionDenied` when denied).
-        Optional **`mcp_tool_groups`**: expands to tool ids via gateway **`policy.tool_groups`** in MCP config YAML.
-        Optional **`authorization_details`**: entries `{ "type": "mcp_tool", "tool_name": "<namespaced>" }` or `{ "type": "mcp_tool", "tool_pattern": "prefix__*" }` (glob).
+        **Algorithm:** RS256 only (gateway validates with **`JWT_PUBLIC_KEY_PEM`** or **`JWT_JWKS_URL`**).
+
+        **Registered claims (validated when configured via env):**
+        - **`iss`**: must match **`JWT_ISS`** when set.
+        - **`aud`**: must include **`JWT_AUD`** when set (string match against claim array).
+        - **`exp`**: required; expired tokens are rejected (**401**).
+
+        **MCP / policy claims (optional):**
+        - **`mcp_tools`**: JSON array of namespaced tool ids (e.g. `["alpha__echo"]`). Merged with RAR-derived tools by **intersection** when both are present. Enforced on **`tools/list`** (subset) and **`tools/call`** (**-32003** on SSE if not allowed).
+        - **`mcp_tool_groups`**: array of group keys resolved against gateway YAML `policy.tool_groups`.
+        - **`authorization_details`**: JSON array of **`AuthorizationDetailsMcpTool`** objects (RFC 9396–style). Non-`mcp_tool` types are ignored by this gateway.
+
+        **Upstream MCP HTTP:** the gateway may inject **`traceparent`** on backend `POST /mcp/rpc`; MCP servers may ignore it.
 
   schemas:
+    AuthorizationDetailsMcpTool:
+      type: object
+      description: |
+        One element of JWT claim **`authorization_details`** for type **`mcp_tool`** (see `internal/policy/rar.go`).
+        Use exactly one of **`tool_name`** (exact namespaced id) or **`tool_pattern`** (glob: `*`, `?`, `[]`, `filepath.Match` semantics).
+        **`tool_name`** and **`tool_pattern`** are mutually exclusive; payloads that set both are rejected when the policy engine parses claims.
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [mcp_tool]
+        tool_name:
+          type: string
+          description: Exact namespaced tool id (e.g. `alpha__echo`). Omit when using `tool_pattern`.
+        tool_pattern:
+          type: string
+          description: Glob pattern (e.g. `alpha__*`). Omit when using `tool_name`.
+      example:
+        type: mcp_tool
+        tool_name: alpha__echo
+
     SseJsonRpcFrame:
       type: string
       description: |
         One SSE event delivered as two lines, then a blank line:
-        `event: jsonrpc` and `data: ` + serialized `JsonRpcResponse` (single line, no literal newlines inside JSON).
+        `event: jsonrpc` and `data: ` + serialized [`JsonRpcResponse`](#/components/schemas/JsonRpcResponse) (single line, no literal newlines inside JSON).
       example: |
         event: jsonrpc
         data: {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","capabilities":{},"serverInfo":{"name":"mcp-gateway"}}}
