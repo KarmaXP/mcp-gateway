@@ -180,6 +180,7 @@ func main() {
 		os.Exit(1)
 	}
 	mpxOpts = append(mpxOpts, multiplex.WithPolicyHolder(polHolder))
+	mpxOpts = append(mpxOpts, multiplex.WithAggregationStrict(cfg.Aggregation.StrictInitialize, cfg.Aggregation.StrictList))
 	mpx, err := multiplex.New(upstreams, mpxOpts...)
 	if err != nil {
 		slog.Error("multiplexer", "err", err)
