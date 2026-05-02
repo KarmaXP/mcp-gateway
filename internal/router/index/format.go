@@ -51,7 +51,7 @@ func ParseToolsListJSON(raw []byte) ([]ToolRow, error) {
 	}
 	out := make([]ToolRow, 0, len(wrap.Tools))
 	for _, t := range wrap.Tools {
-		keys := propertyKeys(t.InputSchema)
+		keys := InputSchemaPropertyKeys(t.InputSchema)
 		out = append(out, ToolRow{
 			Name:        t.Name,
 			Description: t.Description,
@@ -61,7 +61,8 @@ func ParseToolsListJSON(raw []byte) ([]ToolRow, error) {
 	return out, nil
 }
 
-func propertyKeys(schema map[string]any) []string {
+// InputSchemaPropertyKeys returns top-level JSON Schema "properties" keys for embedding/indexing.
+func InputSchemaPropertyKeys(schema map[string]any) []string {
 	if schema == nil {
 		return nil
 	}
@@ -74,4 +75,21 @@ func propertyKeys(schema map[string]any) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+// ToolRowsFromListMaps extracts ToolRow values from decoded tools/list entries (e.g. multiplex merge output).
+// Order matches the input slice. Callers use this to avoid re-parsing tools/list JSON when maps are already available.
+func ToolRowsFromListMaps(tools []map[string]any) []ToolRow {
+	out := make([]ToolRow, 0, len(tools))
+	for _, t := range tools {
+		name, _ := t["name"].(string)
+		desc, _ := t["description"].(string)
+		sch, _ := t["inputSchema"].(map[string]any)
+		out = append(out, ToolRow{
+			Name:        name,
+			Description: desc,
+			ParamKeys:   InputSchemaPropertyKeys(sch),
+		})
+	}
+	return out
 }

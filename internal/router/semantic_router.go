@@ -384,6 +384,16 @@ func BuildIndexedTools(listJSON []byte, upstreamIDForPrefix func(prefix string) 
 	if err != nil {
 		return nil, err
 	}
+	return buildIndexedToolsFromRows(rows, upstreamIDForPrefix)
+}
+
+// BuildIndexedToolsFromMerged builds the semantic-router catalog from merged tools/list maps without
+// re-marshaling or re-parsing list JSON (avoids redundant work on the tools/list hot path).
+func BuildIndexedToolsFromMerged(merged []map[string]any, upstreamIDForPrefix func(prefix string) (string, error)) ([]IndexedTool, error) {
+	return buildIndexedToolsFromRows(index.ToolRowsFromListMaps(merged), upstreamIDForPrefix)
+}
+
+func buildIndexedToolsFromRows(rows []index.ToolRow, upstreamIDForPrefix func(prefix string) (string, error)) ([]IndexedTool, error) {
 	out := make([]IndexedTool, 0, len(rows))
 	for _, r := range rows {
 		prefix, _, err := namespace.Split(r.Name)

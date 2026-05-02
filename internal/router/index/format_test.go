@@ -1,6 +1,7 @@
 package index
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -22,6 +23,23 @@ func TestParseToolsListJSON(t *testing.T) {
 	require.Len(t, rows, 1)
 	require.Equal(t, "p__t", rows[0].Name)
 	require.Contains(t, rows[0].ParamKeys, "x")
+}
+
+func TestToolRowsFromListMapsMatchesParseToolsListJSON(t *testing.T) {
+	raw := []byte(`{"tools":[{"name":"a__one","description":"d1","inputSchema":{"properties":{"z":{},"a":{}}}},{"name":"b__two","description":"","inputSchema":null}]}`)
+	parsed, err := ParseToolsListJSON(raw)
+	require.NoError(t, err)
+	var wrap struct {
+		Tools []map[string]any `json:"tools"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &wrap))
+	fromMaps := ToolRowsFromListMaps(wrap.Tools)
+	require.Len(t, fromMaps, len(parsed))
+	for i := range parsed {
+		require.Equal(t, parsed[i].Name, fromMaps[i].Name, "row %d name", i)
+		require.Equal(t, parsed[i].Description, fromMaps[i].Description, "row %d description", i)
+		require.ElementsMatch(t, parsed[i].ParamKeys, fromMaps[i].ParamKeys, "row %d param keys", i)
+	}
 }
 
 func TestFormatQueryIncludesIntent(t *testing.T) {

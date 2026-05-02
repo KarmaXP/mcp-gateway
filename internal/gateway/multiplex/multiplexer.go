@@ -326,7 +326,7 @@ func (a *Multiplexer) ToolsList(ctx context.Context, hostID json.RawMessage) (*r
 
 	if a.semantic != nil && a.semantic.Enabled() {
 		ver := fmt.Sprintf("%x", sha256.Sum256(outFull))
-		indexed, err := router.BuildIndexedTools(outFull, func(prefix string) (string, error) {
+		indexed, err := router.BuildIndexedToolsFromMerged(merged, func(prefix string) (string, error) {
 			b, ok := a.byPrefix[prefix]
 			if !ok {
 				return "", fmt.Errorf("unknown prefix %q", prefix)
