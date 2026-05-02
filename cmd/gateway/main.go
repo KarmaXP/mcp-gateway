@@ -192,7 +192,7 @@ func main() {
 				slog.Error("policy reload skipped: config load failed", "err", err)
 				continue
 			}
-			polHolder.Store(policy.NewEngine(cfg2.Policy))
+			policy.ReloadEngine(polHolder, cfg2)
 			slog.Info("policy reloaded from config", "policy_version", cfg2.Policy.Version)
 		}
 	}()

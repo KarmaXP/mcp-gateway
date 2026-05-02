@@ -62,3 +62,53 @@ func TestHTTPMiddlewarePolicyIntersectsRARAndMcpTools(t *testing.T) {
 	require.NoError(t, res.Body.Close())
 	require.Equal(t, []string{"alpha__echo"}, got)
 }
+
+func TestHTTPMiddlewarePolicyVersionAfterHolderReload(t *testing.T) {
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	cfg := JWTAuthConfig{Mode: "jwt", Issuer: "iss", Audience: "aud", PublicKeyPEM: rsaPublicPEM(t, &priv.PublicKey)}
+	v, err := NewValidator(cfg)
+	require.NoError(t, err)
+
+	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, TokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   "user-1",
+			Issuer:    "iss",
+			Audience:  jwt.ClaimStrings{"aud"},
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now().Add(-time.Minute)),
+		},
+	})
+	tok.Header["kid"] = "k1"
+	s, err := tok.SignedString(priv)
+	require.NoError(t, err)
+
+	holder := policy.NewHolder(policy.NewEngine(config.PolicySettings{Version: "before"}))
+	var versions []string
+	h := HTTPMiddleware(cfg, v, holder)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		versions = append(versions, hostctx.PolicyVersionFromContext(r.Context()))
+		w.WriteHeader(http.StatusOK)
+	}))
+	ts := httptest.NewServer(h)
+	defer ts.Close()
+
+	req1, _ := http.NewRequest(http.MethodGet, ts.URL+"/mcp/rpc", nil)
+	req1.Header.Set("Authorization", "Bearer "+s)
+	res1, err := ts.Client().Do(req1)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, res1.StatusCode)
+	require.NoError(t, res1.Body.Close())
+
+	policy.ReloadEngine(holder, config.GatewayConfig{
+		Policy: config.PolicySettings{Version: "after"},
+	})
+
+	req2, _ := http.NewRequest(http.MethodGet, ts.URL+"/mcp/rpc", nil)
+	req2.Header.Set("Authorization", "Bearer "+s)
+	res2, err := ts.Client().Do(req2)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, res2.StatusCode)
+	require.NoError(t, res2.Body.Close())
+
+	require.Equal(t, []string{"before", "after"}, versions)
+}

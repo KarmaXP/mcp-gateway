@@ -27,7 +27,6 @@ type AuditSink interface {
 // SlogAuditSink is the default sink: structured slog + policy decision metrics.
 type SlogAuditSink struct{}
 
-// Emit implements AuditSink.
 func (SlogAuditSink) Emit(ctx context.Context, rec AuditRecord) error {
 	if ctx == nil {
 		ctx = context.Background()
@@ -48,8 +47,8 @@ func (SlogAuditSink) Emit(ctx context.Context, rec AuditRecord) error {
 }
 
 var (
-	sinkMu     sync.RWMutex
-	auditSinkI AuditSink = SlogAuditSink{}
+	sinkMu          sync.RWMutex
+	globalAuditSink AuditSink = SlogAuditSink{}
 )
 
 // SetAuditSink swaps the process-wide audit sink (tests, future Kafka/syslog). Nil restores SlogAuditSink.
@@ -57,17 +56,17 @@ func SetAuditSink(s AuditSink) {
 	sinkMu.Lock()
 	defer sinkMu.Unlock()
 	if s == nil {
-		auditSinkI = SlogAuditSink{}
+		globalAuditSink = SlogAuditSink{}
 		return
 	}
-	auditSinkI = s
+	globalAuditSink = s
 }
 
 func currentAuditSink() AuditSink {
 	sinkMu.RLock()
 	defer sinkMu.RUnlock()
-	if auditSinkI == nil {
+	if globalAuditSink == nil {
 		return SlogAuditSink{}
 	}
-	return auditSinkI
+	return globalAuditSink
 }
