@@ -8,7 +8,7 @@ const (
 	RouterTopK = 8
 	RouterScoreMin = 0.35
 	ReindexEmbedBatchSize = 64
-	UpstreamMaxConcurrency int64 = 8
+	UpstreamMaxConcurrency     int64 = 8
 	SessionOutboundChannelSize = 64
 
 	MaxToolArgumentsJSONBytes = 256 << 10
