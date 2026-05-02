@@ -1,4 +1,4 @@
-// Package validate performs boundary checks on MCP tool arguments before JSON Schema validation.
+// Size/shape limits on tools/call JSON before schema validation.
 package validate
 
 import (
@@ -12,14 +12,12 @@ import (
 // ErrArgumentsTooLarge is returned when the raw JSON arguments exceed MaxBytes (use with errors.Is).
 var ErrArgumentsTooLarge = errors.New("validate: arguments exceed max size")
 
-// Limits bounds decoded JSON shape for tools/call arguments (DoS / depth guards).
 type Limits struct {
 	MaxBytes int
 	MaxDepth int
 	MaxKeys  int
 }
 
-// DefaultLimits returns production defaults from internal/defaults.
 func DefaultLimits() Limits {
 	return Limits{
 		MaxBytes: defaults.MaxToolArgumentsJSONBytes,
@@ -28,7 +26,7 @@ func DefaultLimits() Limits {
 	}
 }
 
-// CheckArgumentJSON validates size and rough complexity of JSON arguments without logging contents.
+// Does not log argument bodies.
 func CheckArgumentJSON(raw json.RawMessage, lim Limits) error {
 	if lim.MaxBytes <= 0 {
 		lim = DefaultLimits()
