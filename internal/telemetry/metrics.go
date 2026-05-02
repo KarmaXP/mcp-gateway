@@ -131,7 +131,6 @@ func RecordSemanticRouting(ctx context.Context, dec *router.RoutingDecision, res
 	}
 }
 
-// RecordPolicyDecision records a coarse policy outcome for tools/call authz or session allow-list build (bounded labels).
 func RecordPolicyDecision(ctx context.Context, outcome, reason string) {
 	if !metricsReady.Load() {
 		return
@@ -157,7 +156,6 @@ func normalizePolicyReason(r string) string {
 	}
 }
 
-// RecordJWKSLookup records JWKS cache behavior for a signing-key resolution (bounded result label).
 func RecordJWKSLookup(ctx context.Context, result string) {
 	if !metricsReady.Load() {
 		return
@@ -174,7 +172,6 @@ func RecordJWKSLookup(ctx context.Context, result string) {
 	jwksLookups.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result)))
 }
 
-// RecordToolArgsValidation records limits or JSON Schema validation outcome for tools/call arguments.
 func RecordToolArgsValidation(ctx context.Context, stage, result string) {
 	if !metricsReady.Load() {
 		return
@@ -191,7 +188,6 @@ func RecordToolArgsValidation(ctx context.Context, stage, result string) {
 	))
 }
 
-// RecordRateLimit records whether a request was admitted or rejected by the token-bucket limiter.
 func RecordRateLimit(ctx context.Context, allowed bool) {
 	if !metricsReady.Load() {
 		return
@@ -203,7 +199,6 @@ func RecordRateLimit(ctx context.Context, allowed bool) {
 	rateLimitEvents.Add(ctx, 1, metric.WithAttributes(attribute.String("result", res)))
 }
 
-// RecordPayloadBytesRejected records an oversized input rejection (HTTP body or tool arguments).
 func RecordPayloadBytesRejected(ctx context.Context, reason string) {
 	if !metricsReady.Load() {
 		return
