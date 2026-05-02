@@ -28,7 +28,7 @@ import (
 
 func routerModeActive(cfg config.GatewayConfig) bool {
 	mode := strings.ToLower(strings.TrimSpace(cfg.SemanticRouter.Mode))
-	return mode == "on" || mode == "assist_list"
+	return mode == "on" || mode == "assist_list" || mode == "filter_list"
 }
 
 func preflightQdrant(cfg config.GatewayConfig) {
@@ -57,7 +57,7 @@ func multiplexerOptions(cfg config.GatewayConfig) ([]multiplex.Option, error) {
 	if mode == "" {
 		mode = string(router.ModeOff)
 	}
-	if mode != "on" && mode != "assist_list" {
+	if mode != "on" && mode != "assist_list" && mode != "filter_list" {
 		return opts, nil
 	}
 
@@ -71,7 +71,14 @@ func multiplexerOptions(cfg config.GatewayConfig) ([]multiplex.Option, error) {
 	}
 
 	rcfg := router.DefaultSemanticRouterRuntimeConfig()
-	rcfg.Mode = router.ModeAssistList
+	switch mode {
+	case "on":
+		rcfg.Mode = router.ModeOn
+	case "filter_list":
+		rcfg.Mode = router.ModeFilterList
+	default:
+		rcfg.Mode = router.ModeAssistList
+	}
 	if cfg.SemanticRouter.TopK > 0 {
 		rcfg.TopK = cfg.SemanticRouter.TopK
 	}
@@ -89,7 +96,7 @@ func multiplexerOptions(cfg config.GatewayConfig) ([]multiplex.Option, error) {
 
 	qURL := strings.TrimSpace(os.Getenv("QDRANT_URL"))
 	if qURL == "" {
-		return nil, fmt.Errorf("QDRANT_URL is required when router mode is on or assist_list")
+		return nil, fmt.Errorf("QDRANT_URL is required when router mode is on, assist_list, or filter_list")
 	}
 	st, err := store.NewQdrantVectorStore(qURL, cfg.QdrantCollection(), dim)
 	if err != nil {

@@ -6,7 +6,9 @@ type Mode string
 
 const (
 	ModeOff        Mode = "off"
+	ModeOn         Mode = "on"
 	ModeAssistList Mode = "assist_list"
+	ModeFilterList Mode = "filter_list"
 )
 
 type RoutingOutcome string

@@ -13,6 +13,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/namespace"
@@ -26,7 +27,7 @@ func (a *Multiplexer) ToolsList(ctx context.Context, hostID json.RawMessage) (*r
 	defer span.End()
 
 	allowed := hostctx.AllowedToolNamesFromContext(tctx)
-	if resp, ok := a.tryCachedToolsList(hostID, allowed); ok {
+	if resp, ok := a.tryCachedToolsList(tctx, hostID, allowed); ok {
 		return resp, nil
 	}
 
@@ -42,15 +43,43 @@ func (a *Multiplexer) ToolsList(ctx context.Context, hostID json.RawMessage) (*r
 	a.storeFullToolsListCache(outFull, allowed)
 	a.maybeReindexSemanticCatalog(tctx, merged, outFull)
 
-	toReturn, err := a.toolsListPayloadForClient(merged, outFull, allowed)
+	mergedForList := merged
+	if a.semantic != nil && a.semantic.FilterListActive() {
+		if intent := hostctx.ClientIntentFromContext(tctx); intent != "" {
+			a.catMu.RLock()
+			ver := a.catVer
+			a.catMu.RUnlock()
+			sig := router.RoutingSignal{
+				Method:         "tools/list",
+				IntentText:     intent,
+				AllowedTools:   allowed,
+				CatalogVersion: ver,
+			}
+			rctx, sp := telemetry.StartSpan(tctx, telemetry.SpanSemanticRouter)
+			routeStart := time.Now()
+			keep, useFull := a.semantic.FilterToolsForList(rctx, sig)
+			telemetry.RecordInternalPhase(rctx, "tools/list", defaults.MetricInternalPhaseRouter, time.Since(routeStart))
+			sp.End()
+			if !useFull && len(keep) > 0 {
+				mergedForList = filterMergedByToolNames(merged, keep)
+			}
+		}
+	}
+
+	muxStart := time.Now()
+	toReturn, err := a.toolsListPayloadForClient(mergedForList, allowed)
+	telemetry.RecordInternalPhase(tctx, "tools/list", defaults.MetricInternalPhaseMux, time.Since(muxStart))
 	if err != nil {
 		return rpc.NewError(hostID, errcodes.GatewayInternal, "tools/list policy failed", nil), nil
 	}
 	return rpc.NewResult(hostID, toReturn), nil
 }
 
-func (a *Multiplexer) tryCachedToolsList(hostID json.RawMessage, allowed []string) (*rpc.Response, bool) {
+func (a *Multiplexer) tryCachedToolsList(ctx context.Context, hostID json.RawMessage, allowed []string) (*rpc.Response, bool) {
 	if a.listTTL <= 0 || len(allowed) != 0 {
+		return nil, false
+	}
+	if a.semantic != nil && a.semantic.FilterListActive() && hostctx.ClientIntentFromContext(ctx) != "" {
 		return nil, false
 	}
 	a.mu.RLock()
@@ -187,9 +216,13 @@ func (a *Multiplexer) maybeReindexSemanticCatalog(ctx context.Context, merged []
 	telemetry.SetIndexedCatalogToolCount(int64(len(indexed)))
 }
 
-func (a *Multiplexer) toolsListPayloadForClient(merged []map[string]any, outFull []byte, allowed []string) (json.RawMessage, error) {
+func (a *Multiplexer) toolsListPayloadForClient(merged []map[string]any, allowed []string) (json.RawMessage, error) {
 	if len(allowed) == 0 {
-		return outFull, nil
+		raw, err := json.Marshal(map[string]any{"tools": merged})
+		if err != nil {
+			return nil, fmt.Errorf("multiplex: marshal tools/list: %w", err)
+		}
+		return raw, nil
 	}
 	filtered, err := filterToolsForPolicy(merged, allowed)
 	if err != nil {
@@ -200,4 +233,18 @@ func (a *Multiplexer) toolsListPayloadForClient(merged []map[string]any, outFull
 		return nil, fmt.Errorf("multiplex: marshal filtered tools/list: %w", err)
 	}
 	return filteredRaw, nil
+}
+
+func filterMergedByToolNames(merged []map[string]any, keep map[string]struct{}) []map[string]any {
+	if len(keep) == 0 {
+		return merged
+	}
+	out := make([]map[string]any, 0, len(keep))
+	for _, t := range merged {
+		name, _ := t["name"].(string)
+		if _, ok := keep[name]; ok {
+			out = append(out, t)
+		}
+	}
+	return out
 }

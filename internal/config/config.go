@@ -135,9 +135,9 @@ func (c *GatewayConfig) Validate() error {
 	}
 	if c.SemanticRouter.Mode != "" {
 		switch strings.ToLower(strings.TrimSpace(c.SemanticRouter.Mode)) {
-		case "off", "on", "assist_list":
+		case "off", "on", "assist_list", "filter_list":
 		default:
-			return fmt.Errorf("config: router.mode must be off, on, or assist_list")
+			return fmt.Errorf("config: router.mode must be off, on, assist_list, or filter_list")
 		}
 	}
 	if c.SemanticRouter.HybridAlpha < 0 || c.SemanticRouter.HybridAlpha > 1 {

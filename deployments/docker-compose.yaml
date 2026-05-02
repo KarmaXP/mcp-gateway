@@ -173,7 +173,7 @@ services:
       PORT: "8080" # fixed in-container; map host with HOST_PORT_GATEWAY (ignore host .env PORT)
       EMBED_URL: http://embed:8001
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-      # QDRANT_URL: http://qdrant:6333  # set when ROUTER_MODE=on|assist_list
+      # QDRANT_URL: http://qdrant:6333  # set when ROUTER_MODE=on|assist_list|filter_list
       # MCP_GATEWAY_CONFIG: /path/in/container/gateway.yaml  # mount config + set backends
     ports:
       # Override: HOST_PORT_GATEWAY=18080

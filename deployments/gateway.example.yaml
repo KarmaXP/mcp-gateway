@@ -32,7 +32,7 @@ backends:
   #   max_concurrency: 2
 
 # Semantic router (optional). Env ROUTER_MODE still overrides when set after load.
-# When mode is on or assist_list, set QDRANT_URL (and EMBED_URL) in the environment.
+# When mode is on, assist_list, or filter_list, set QDRANT_URL (and EMBED_URL) in the environment.
 router:
   mode: off
   # top_k: 8
