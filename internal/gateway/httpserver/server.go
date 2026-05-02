@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
@@ -111,6 +112,8 @@ func (s *Server) handleMCPSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r = r.WithContext(telemetry.ContextWithExtractedW3CTrace(r.Context(), r.Header))
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -153,7 +156,7 @@ func mergeWithShutdown(reqCtx, shutdownCtx context.Context) (context.Context, co
 
 func (s *Server) handleMCPRPC(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	rctx := r.Context()
+	rctx := telemetry.ContextWithExtractedW3CTrace(r.Context(), r.Header)
 	var span trace.Span
 	if telemetry.HostRPCStartedFromContext(rctx) {
 		span = trace.SpanFromContext(rctx)
@@ -176,6 +179,7 @@ func (s *Server) handleMCPRPC(w http.ResponseWriter, r *http.Request) {
 		httpErr(fmt.Sprintf("missing %s header", HeaderMCPSessionID), http.StatusBadRequest)
 		return
 	}
+	span.SetAttributes(attribute.String(telemetry.AttrMCPSessionID, sid))
 	sess, err := s.sessions.Get(sid)
 	if err != nil {
 		httpErr("unknown session", http.StatusNotFound)
@@ -203,11 +207,16 @@ func (s *Server) handleMCPRPC(w http.ResponseWriter, r *http.Request) {
 	if method == "" {
 		method = defaults.MetricInternalMethodUnknown
 	}
+	attrs := []attribute.KeyValue{attribute.String(telemetry.AttrMCPMethod, method)}
+	if !req.IsNotification() {
+		attrs = append(attrs, telemetry.AttrJSONRPCID(req.ID))
+	}
+	span.SetAttributes(attrs...)
 	telemetry.RecordInternalPhase(rctx, method, defaults.MetricInternalPhaseParse, time.Since(parseStart))
 
 	ctx := hostctx.WithClientIntent(rctx, r.Header.Get(hostctx.HeaderMCPIntent))
 	if err := sess.Dispatch(ctx, req); err != nil {
-		slog.WarnContext(r.Context(), "dispatch", "err", err)
+		slog.WarnContext(rctx, "dispatch", "err", err)
 		span.RecordError(err)
 		httpErr("dispatch failed", http.StatusInternalServerError)
 		return
