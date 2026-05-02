@@ -1,9 +1,8 @@
-// Package defaults holds tunable defaults shared across the gateway (no I/O).
+// Tunable defaults for the gateway (no I/O).
 package defaults
 
 import "time"
 
-// Vector / semantic routing
 const (
 	VectorDimension = 384
 
@@ -17,14 +16,12 @@ const (
 	SessionOutboundChannelSize = 64
 )
 
-// tools/call argument JSON (pre-schema, boundary validation)
 const (
 	MaxToolArgumentsJSONBytes = 256 << 10
 	MaxToolArgumentsJSONDepth = 32
 	MaxToolArgumentsJSONKeys  = 256
 )
 
-// HTTP read / body limits
 const (
 	MaxMCPRPCBodyBytes         = 1 << 20
 	MaxEmbedHTTPResponseBody   = 1 << 22
@@ -37,7 +34,6 @@ const (
 	DefaultVectorSearchTopK = 8
 )
 
-// MillisecondsPerSecond converts integer latency to float seconds for histograms.
 const MillisecondsPerSecond = 1000.0
 
 var (
@@ -78,10 +74,8 @@ var (
 
 	OTLPMetricExportInterval = 15 * time.Second
 
-	// SSECommentHeartbeat is the interval between keep-alive comment lines on the host SSE stream.
 	SSECommentHeartbeat = 30 * time.Second
 
-	// HTTP rate limit defaults (token bucket; optional via RATE_LIMIT_ENABLED).
 	DefaultRateLimitRPS   = 100
 	DefaultRateLimitBurst = 200
 )

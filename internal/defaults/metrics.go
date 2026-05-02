@@ -1,6 +1,6 @@
 package defaults
 
-// OpenTelemetry metric attribute values — bounded cardinality (O5); no free-text or IDs.
+// OTel metric label values (bounded cardinality; O5).
 
 const (
 	MetricPolicyOutcomeAllow = "allow"
@@ -35,7 +35,6 @@ const (
 	MetricArgsResultFail = "fail"
 )
 
-// Payload / body rejection reasons (bounded; O5).
 const (
 	MetricBytesRejectReasonHTTPBody = "http_body_too_large"
 	MetricBytesRejectReasonToolArgs = "tool_args_too_large"
