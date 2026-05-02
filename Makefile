@@ -34,7 +34,7 @@ help:
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "stop" "Stop the running Gateway process"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test" "Run all unit tests with race detection"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test-cover" "go test -race with coverage report (internal/*)"
-	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test-integration" "go test -tags=integration (Qdrant + embed + OTLP; needs compose)"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test-integration" "go test -tags=integration (JWT policy + optional Qdrant/embed/OTLP; see README)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "smoke" "curl MCP flow against gateway + scripts/smoke_upstream (sets SMOKE_AUTO_START_GATEWAY=1)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "fmt" "gofmt -w . then normalize const/var '=' spacing (gofmt re-aligns; see .ai/rules/go.md)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "lint" "Run golangci-lint + check for column-aligned '=' in Go sources"
@@ -79,12 +79,13 @@ test-cover:
 	@go tool cover -func=bin/coverage.out | tail -n 25
 
 test-integration:
-	@echo "🧪 Integration tests (docker: qdrant, embed, otel-collector recommended)..."
+	@echo "🧪 Integration tests (JWT/RPC always; Qdrant+embed+OTLP when reachable — see README)..."
 	@go vet ./...
 	@QDRANT_URL=$${QDRANT_URL:-http://127.0.0.1:6333} \
 	 EMBED_URL=$${EMBED_URL:-http://127.0.0.1:8001} \
 	 OTEL_EXPORTER_OTLP_ENDPOINT=$${OTEL_EXPORTER_OTLP_ENDPOINT:-http://127.0.0.1:4318} \
 	 go test -tags=integration -race -count=1 \
+		./internal/gateway/httpserver/... \
 		./internal/router/... \
 		./internal/telemetry/...
 

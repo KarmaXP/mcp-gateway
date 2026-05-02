@@ -66,7 +66,15 @@ make test-integration   # needs compose (Qdrant + embed); see Makefile
 make lint
 ```
 
-OpenAPI: [`docs/artifacts/openapi/openapi.yaml`](docs/artifacts/openapi/openapi.yaml).
+OpenAPI: [`docs/artifacts/openapi/openapi.yaml`](docs/artifacts/openapi/openapi.yaml) — documents required headers (`Authorization` when `AUTH_MODE=jwt`), optional `X-MCP-Intent`, W3C **`traceparent` / `tracestate`**, JWT claims (`iss`, `aud`, `exp`, `mcp_tools`, `authorization_details` / RAR), HTTP status semantics vs JSON-RPC errors on SSE, and example **`tools/call`** allow/deny payloads. Gateway error code names match [`internal/gateway/errcodes`](internal/gateway/errcodes/codes.go).
+
+### API contract validation (OpenAPI)
+
+From the repo root, lint the spec with Redocly (no repo dependency; uses [`docs/artifacts/openapi/redocly.yaml`](docs/artifacts/openapi/redocly.yaml)):
+
+```bash
+npx --yes @redocly/cli@1 lint --config docs/artifacts/openapi/redocly.yaml docs/artifacts/openapi/openapi.yaml
+```
 
 ## Configuration highlights
 
@@ -115,7 +123,23 @@ Standard Go layout: `cmd/`, `internal/`, `deployments/`, `docs/`, `scripts/`. Pu
 
 ## Continuous integration
 
-GitHub Actions: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push and pull request: `setup-go` with module cache, `golangci-lint`, unit tests, and a job that starts Qdrant + embed from Compose and runs `-tags=integration` tests.
+GitHub Actions: [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
+- **Every push and pull request:** `golangci-lint`, `go vet ./...`, and `go test -race` (full module).
+- **`main` branch pushes and `workflow_dispatch`:** an **integration** job starts **Qdrant**, **embed**, and **otel-collector** from [`deployments/docker-compose.yaml`](deployments/docker-compose.yaml) and runs `go test -tags=integration -race` for `internal/gateway/httpserver`, `internal/router`, and `internal/telemetry`. Pull requests do not run this job automatically; use **`Actions → CI → Run workflow`** for a manual run, or execute **`make test-integration`** locally (see below).
+
+## Full integration tests locally
+
+`make test-integration` runs `go vet` and integration-tagged tests with defaults aimed at compose-mapped ports (`QDRANT_URL`, `EMBED_URL`, `OTEL_EXPORTER_OTLP_ENDPOINT`).
+
+1. **Dependencies (recommended):** `make docker-up` — brings up Qdrant, embed sidecar, OTel collector (and the rest of the dev stack). Wait until Qdrant (`http://127.0.0.1:6333/healthz`) and embed (`http://127.0.0.1:8001/healthz`) are healthy.
+2. **Run:** `make test-integration`.
+3. **Behavior:**
+   - **`internal/gateway/httpserver`:** JWT **`mcp_tools`** allow-list denial for **`tools/call`** is always exercised (in-process `httptest`; no external services).
+   - **`internal/router`:** semantic routing against live Qdrant + embed runs when both are reachable; if either is down and **`CI` is unset**, the test **skips** with a clear message (on CI, missing deps **fail** the job).
+   - **`internal/telemetry`:** OTLP shutdown test runs when the collector answers at `OTEL_EXPORTER_OTLP_ENDPOINT`; otherwise it **skips**.
+
+Use **`go test -tags=integration -short ./...`** to skip tests that call `testing.Short()` (currently the JWT policy integration test).
 
 ## License
 

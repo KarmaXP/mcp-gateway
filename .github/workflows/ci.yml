@@ -3,6 +3,7 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   lint-and-unit:
@@ -24,6 +25,8 @@ jobs:
           go test -race -count=1 ./...
 
   integration:
+    # Full stack checks (compose). On PRs, run locally with `make test-integration` after `make docker-up`.
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,9 +36,9 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
-      - name: Start Qdrant and embed (compose)
+      - name: Start Qdrant, embed, OTLP collector (compose)
         run: |
-          docker compose -f deployments/docker-compose.yaml up -d qdrant embed
+          docker compose -f deployments/docker-compose.yaml up -d qdrant embed otel-collector
           for i in $(seq 1 90); do
             curl -sfS http://127.0.0.1:6333/healthz && break
             sleep 2
@@ -46,10 +49,19 @@ jobs:
           done
           curl -sfS http://127.0.0.1:6333/healthz
           curl -sfS http://127.0.0.1:8001/healthz
+          for i in $(seq 1 60); do
+            curl -sfS --max-time 2 http://127.0.0.1:4318/ && break
+            sleep 2
+          done
 
       - name: Integration tests
         env:
+          CI: "true"
           QDRANT_URL: http://127.0.0.1:6333
           EMBED_URL: http://127.0.0.1:8001
+          OTEL_EXPORTER_OTLP_ENDPOINT: http://127.0.0.1:4318
         run: |
-          go test -tags=integration -race -count=1 ./internal/router/... ./internal/telemetry/...
+          go test -tags=integration -race -count=1 \
+            ./internal/gateway/httpserver/... \
+            ./internal/router/... \
+            ./internal/telemetry/...
