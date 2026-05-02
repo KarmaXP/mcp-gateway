@@ -17,9 +17,18 @@ import (
 type GatewayConfig struct {
 	Upstreams      []UpstreamDefinition     `yaml:"backends"`
 	SemanticRouter SemanticRouterSettings   `yaml:"router"`
+	Aggregation    AggregationSettings      `yaml:"aggregation"`
 	Policy         PolicySettings           `yaml:"policy"`
 	Qdrant         QdrantSettings           `yaml:"qdrant"`
 	Embedding      EmbeddingServiceSettings `yaml:"embed"`
+}
+
+// AggregationSettings controls partial-failure behavior across backends (R6).
+// Default (all false): omit failed upstreams; session continues if at least one succeeds.
+type AggregationSettings struct {
+	StrictInitialize bool `yaml:"strict_initialize"`
+	// StrictList applies to tools/list, resources/list, and prompts/list.
+	StrictList bool `yaml:"strict_list"`
 }
 
 // RAR merge with JWT allow lists, elevated tools (strict schema), tool groups.
@@ -188,6 +197,12 @@ func (c *GatewayConfig) ApplyEnvOverrides() {
 	}
 	if v := strings.ToLower(strings.TrimSpace(os.Getenv("POLICY_ALLOW_ON_EVAL_FAILURE"))); v == "1" || v == "true" || v == "yes" {
 		c.Policy.AllowOnEvalFailure = true
+	}
+	if v := strings.ToLower(strings.TrimSpace(os.Getenv("AGGREGATION_STRICT_INITIALIZE"))); v == "1" || v == "true" || v == "yes" {
+		c.Aggregation.StrictInitialize = true
+	}
+	if v := strings.ToLower(strings.TrimSpace(os.Getenv("AGGREGATION_STRICT_LIST"))); v == "1" || v == "true" || v == "yes" {
+		c.Aggregation.StrictList = true
 	}
 }
 

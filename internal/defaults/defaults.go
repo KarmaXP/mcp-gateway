@@ -10,6 +10,8 @@ const (
 	ReindexEmbedBatchSize = 64
 	UpstreamMaxConcurrency     int64 = 8
 	SessionOutboundChannelSize = 64
+	// SessionToolHistoryMax is the maximum successful tools/call names kept per SSE session for router context.
+	SessionToolHistoryMax = 8
 
 	MaxToolArgumentsJSONBytes = 256 << 10
 	MaxToolArgumentsJSONDepth = 32
