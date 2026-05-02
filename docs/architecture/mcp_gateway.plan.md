@@ -658,7 +658,7 @@ The **observability engine** provides correlated **distributed traces**, **metri
 | Metric                                      | Type      | Labels                  | Definition                                                                                                                     |
 | ------------------------------------------- | --------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | `mcp_gateway_request_duration_seconds`      | Histogram | `method`, `outcome`     | Total handling time from ingress to response on the stream (includes backends).                                              |
-| `mcp_gateway_internal_duration_seconds`     | Histogram | `method`, `phase`       | Time **only** in gateway process per phase (`parse`, `security`, `router`, `mux`) — basis for < 50 ms p95 budget §6.           |
+| `mcp_gateway_internal_duration_seconds`     | Histogram | `method`, `phase`       | Time **only** in gateway process per phase (`parse`, `security`, `router`, `mux`) — basis for < 50 ms p95 budget §6. (OTel instrument: `mcp.gateway.internal.duration_seconds`.)           |
 | `mcp_gateway_backend_call_duration_seconds` | Histogram | `backend_id`, `outcome` | Time from send to adapter until backend response.                                                                              |
 | `mcp_gateway_requests_total`                | Counter   | `method`, `outcome`     | Request count (`success` / `client_error` / `server_error`).                                                                   |
 
@@ -857,7 +857,7 @@ This subsection records **stack choices already reflected in this repository** v
 
 **Open choices (unchanged until calibration):**
 
-- **`tools/list` mode:** `assist_list` (full list to host, router only on `tools/call`) vs `filter_list` (reduced list) — if `filter_list`, **source of session intent** (header, first message, static config).
+- **`tools/list` mode:** `assist_list` vs **`filter_list`** (intent-filtered subset via `X-MCP-Intent` / `hostctx`; see ADR 0002, `README.md`).
 - **`AllowAutoRename`:** recommended default **conservative `false`**; final policy TBD.
 - **`IntentText`:** standard documented mechanism (HTTP header name, JSON-RPC params field — **must be documented** and versioned).
 - **`topK` and `T_min` threshold** — **TBD** for production (defaults are starting points; measure with live embeddings).
