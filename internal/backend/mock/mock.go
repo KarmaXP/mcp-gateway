@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -25,13 +26,32 @@ type MockUpstream struct {
 
 	InputSchemaByTool map[string]map[string]any
 
+	// Resources / prompts (opt-in; omitted from JSON-RPC by default for backward-compatible tests).
+	OmitResourcesList bool
+	OmitPromptsList   bool
+	ResourceURIs      []string
+	PromptNames       []string
+
+	// Initialize failures (strict aggregation tests).
+	InitTransportErr   error
+	InitJSONRPCMessage string // if set, initialize returns this JSON-RPC error message
+
+	// tools/list failure (strict list tests).
+	ToolsListJSONRPCMessage string
+
 	mu sync.Mutex
 
 	toolsCallInvocations atomic.Uint64
 }
 
 func NewMockUpstream(id, prefix string, toolNames []string) *MockUpstream {
-	return &MockUpstream{id: id, prefix: prefix, toolNames: append([]string(nil), toolNames...)}
+	return &MockUpstream{
+		id:                 id,
+		prefix:             prefix,
+		toolNames:          append([]string(nil), toolNames...),
+		OmitResourcesList:  true,
+		OmitPromptsList:    true,
+	}
 }
 
 func (b *MockUpstream) ID() string     { return b.id }
@@ -59,17 +79,38 @@ func (b *MockUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Respons
 		return b.toolsList(ctx, req)
 	case "tools/call":
 		return b.toolsCall(ctx, req)
+	case "resources/list":
+		return b.resourcesList(ctx, req)
+	case "resources/read":
+		return b.resourcesRead(ctx, req)
+	case "prompts/list":
+		return b.promptsList(ctx, req)
+	case "prompts/get":
+		return b.promptsGet(ctx, req)
 	default:
 		return rpc.NewError(req.ID, errcodes.MethodNotFound, fmt.Sprintf("method not found: %s", req.Method), nil), nil
 	}
 }
 
 func (b *MockUpstream) initialize(_ context.Context, req *rpc.Request) (*rpc.Response, error) {
+	if b.InitTransportErr != nil {
+		return nil, b.InitTransportErr
+	}
+	if msg := strings.TrimSpace(b.InitJSONRPCMessage); msg != "" {
+		return rpc.NewError(req.ID, errcodes.InternalError, msg, nil), nil
+	}
+	caps := map[string]any{
+		"tools": map[string]any{},
+	}
+	if !b.OmitResourcesList {
+		caps["resources"] = map[string]any{}
+	}
+	if !b.OmitPromptsList {
+		caps["prompts"] = map[string]any{}
+	}
 	result := map[string]any{
 		"protocolVersion": mcpwire.MCPProtocolVersion,
-		"capabilities": map[string]any{
-			"tools": map[string]any{},
-		},
+		"capabilities":    caps,
 		"serverInfo": map[string]any{
 			"name": b.id,
 		},
@@ -83,6 +124,9 @@ func (b *MockUpstream) initialize(_ context.Context, req *rpc.Request) (*rpc.Res
 
 func (b *MockUpstream) toolsList(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
 	_ = ctx
+	if msg := strings.TrimSpace(b.ToolsListJSONRPCMessage); msg != "" {
+		return rpc.NewError(req.ID, errcodes.InternalError, msg, nil), nil
+	}
 	tools := make([]map[string]any, 0, len(b.toolNames))
 	for _, n := range b.toolNames {
 		schema := map[string]any{
@@ -157,6 +201,91 @@ func (b *MockUpstream) toolsCall(ctx context.Context, req *rpc.Request) (*rpc.Re
 		"isError": false,
 	}
 	raw, err := json.Marshal(result)
+	if err != nil {
+		return nil, err
+	}
+	return rpc.NewResult(req.ID, raw), nil
+}
+
+func (b *MockUpstream) resourcesList(_ context.Context, req *rpc.Request) (*rpc.Response, error) {
+	if b.OmitResourcesList {
+		return rpc.NewError(req.ID, errcodes.MethodNotFound, "resources not supported", nil), nil
+	}
+	res := make([]map[string]any, 0, len(b.ResourceURIs))
+	for _, u := range b.ResourceURIs {
+		res = append(res, map[string]any{
+			"uri":  u,
+			"name": "res-" + u,
+		})
+	}
+	raw, err := json.Marshal(map[string]any{"resources": res})
+	if err != nil {
+		return nil, err
+	}
+	return rpc.NewResult(req.ID, raw), nil
+}
+
+func (b *MockUpstream) resourcesRead(_ context.Context, req *rpc.Request) (*rpc.Response, error) {
+	if b.OmitResourcesList {
+		return rpc.NewError(req.ID, errcodes.MethodNotFound, "resources not supported", nil), nil
+	}
+	var p struct {
+		URI string `json:"uri"`
+	}
+	if err := json.Unmarshal(req.Params, &p); err != nil || p.URI == "" {
+		return rpc.NewError(req.ID, errcodes.InvalidParams, "uri required", nil), nil
+	}
+	raw, err := json.Marshal(map[string]any{
+		"contents": []map[string]any{{
+			"uri":      p.URI,
+			"mimeType": "text/plain",
+			"text":     fmt.Sprintf("body:%s", p.URI),
+		}},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return rpc.NewResult(req.ID, raw), nil
+}
+
+func (b *MockUpstream) promptsList(_ context.Context, req *rpc.Request) (*rpc.Response, error) {
+	if b.OmitPromptsList {
+		return rpc.NewError(req.ID, errcodes.MethodNotFound, "prompts not supported", nil), nil
+	}
+	ps := make([]map[string]any, 0, len(b.PromptNames))
+	for _, n := range b.PromptNames {
+		ps = append(ps, map[string]any{
+			"name":        n,
+			"description": "mock prompt " + n,
+		})
+	}
+	raw, err := json.Marshal(map[string]any{"prompts": ps})
+	if err != nil {
+		return nil, err
+	}
+	return rpc.NewResult(req.ID, raw), nil
+}
+
+func (b *MockUpstream) promptsGet(_ context.Context, req *rpc.Request) (*rpc.Response, error) {
+	if b.OmitPromptsList {
+		return rpc.NewError(req.ID, errcodes.MethodNotFound, "prompts not supported", nil), nil
+	}
+	var p struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(req.Params, &p); err != nil || p.Name == "" {
+		return rpc.NewError(req.ID, errcodes.InvalidParams, "name required", nil), nil
+	}
+	raw, err := json.Marshal(map[string]any{
+		"description": "mock",
+		"messages": []map[string]any{{
+			"role": "user",
+			"content": map[string]any{
+				"type": "text",
+				"text": fmt.Sprintf("prompt %s", p.Name),
+			},
+		}},
+	})
 	if err != nil {
 		return nil, err
 	}
