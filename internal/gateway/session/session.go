@@ -115,16 +115,8 @@ func (s *Session) Dispatch(reqCtx context.Context, req *rpc.Request) error {
 	ctx, cancel := mergedCancel(s.ctx, reqCtx)
 	defer cancel()
 
-	for _, mw := range s.middlewares {
-		if mw == nil {
-			continue
-		}
-		if err := mw(ctx, req); err != nil {
-			if req.IsNotification() {
-				return err
-			}
-			return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.RequestRejected, err.Error(), nil))
-		}
+	if err := s.runMiddlewares(ctx, req); err != nil {
+		return err
 	}
 
 	if req.IsNotification() {
@@ -143,6 +135,21 @@ func (s *Session) Dispatch(reqCtx context.Context, req *rpc.Request) error {
 	default:
 		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.MethodNotFound, fmt.Sprintf("method not found: %s", req.Method), nil))
 	}
+}
+
+func (s *Session) runMiddlewares(ctx context.Context, req *rpc.Request) error {
+	for _, mw := range s.middlewares {
+		if mw == nil {
+			continue
+		}
+		if err := mw(ctx, req); err != nil {
+			if req.IsNotification() {
+				return err
+			}
+			return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.RequestRejected, err.Error(), nil))
+		}
+	}
+	return nil
 }
 
 func mergedCancel(parent, reqCtx context.Context) (context.Context, context.CancelFunc) {

@@ -84,12 +84,25 @@ func (q *QdrantVectorStore) Upsert(ctx context.Context, records []ToolVectorReco
 	if len(records) == 0 {
 		return nil
 	}
+	if err := q.validateRecordDims(records); err != nil {
+		return err
+	}
+	if err := q.recreateCollection(ctx); err != nil {
+		return err
+	}
+	return q.upsertPointsBatched(ctx, records)
+}
+
+func (q *QdrantVectorStore) validateRecordDims(records []ToolVectorRecord) error {
 	for _, p := range records {
 		if len(p.Vector) != q.dim {
 			return ErrDimensionMismatch
 		}
 	}
+	return nil
+}
 
+func (q *QdrantVectorStore) recreateCollection(ctx context.Context) error {
 	delStatus, _ := q.doJSON(ctx, http.MethodDelete, "/collections/"+q.collection, nil, nil)
 	if delStatus != http.StatusOK && delStatus != http.StatusNotFound {
 		return fmt.Errorf("router/store/qdrant: delete collection: status %d", delStatus)
@@ -107,7 +120,10 @@ func (q *QdrantVectorStore) Upsert(ctx context.Context, records []ToolVectorReco
 	if st != http.StatusOK {
 		return fmt.Errorf("router/store/qdrant: create collection: status %d", st)
 	}
+	return nil
+}
 
+func (q *QdrantVectorStore) upsertPointsBatched(ctx context.Context, records []ToolVectorRecord) error {
 	batch := defaults.ReindexEmbedBatchSize
 	for i := 0; i < len(records); i += batch {
 		j := i + batch
@@ -115,27 +131,34 @@ func (q *QdrantVectorStore) Upsert(ctx context.Context, records []ToolVectorReco
 			j = len(records)
 		}
 		chunk := records[i:j]
-		payloadPoints := make([]map[string]any, 0, len(chunk))
-		for _, p := range chunk {
-			payloadPoints = append(payloadPoints, map[string]any{
-				"id":     pointID(p.ID),
-				"vector": p.Vector,
-				"payload": map[string]string{
-					"tool_name": p.ToolName,
-					"backend":   p.UpstreamID,
-					"version":   p.CatalogVersion,
-				},
-			})
-		}
-		st, err := q.doJSON(ctx, http.MethodPut, "/collections/"+q.collection+"/points?wait=true", map[string]any{
-			"points": payloadPoints,
-		}, nil)
-		if err != nil {
+		if err := q.putPointsChunk(ctx, chunk); err != nil {
 			return err
 		}
-		if st != http.StatusOK {
-			return fmt.Errorf("router/store/qdrant: upsert points: status %d", st)
-		}
+	}
+	return nil
+}
+
+func (q *QdrantVectorStore) putPointsChunk(ctx context.Context, chunk []ToolVectorRecord) error {
+	payloadPoints := make([]map[string]any, 0, len(chunk))
+	for _, p := range chunk {
+		payloadPoints = append(payloadPoints, map[string]any{
+			"id":     pointID(p.ID),
+			"vector": p.Vector,
+			"payload": map[string]string{
+				"tool_name": p.ToolName,
+				"backend":   p.UpstreamID,
+				"version":   p.CatalogVersion,
+			},
+		})
+	}
+	st, err := q.doJSON(ctx, http.MethodPut, "/collections/"+q.collection+"/points?wait=true", map[string]any{
+		"points": payloadPoints,
+	}, nil)
+	if err != nil {
+		return err
+	}
+	if st != http.StatusOK {
+		return fmt.Errorf("router/store/qdrant: upsert points: status %d", st)
 	}
 	return nil
 }

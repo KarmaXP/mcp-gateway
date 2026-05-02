@@ -14,7 +14,6 @@ import (
 
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
-	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/session"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
@@ -119,21 +118,7 @@ func (s *Server) handleMCPSSE(w http.ResponseWriter, r *http.Request) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for {
-			select {
-			case <-connCtx.Done():
-				return
-			case payload, ok := <-sess.Out():
-				if !ok {
-					return
-				}
-				_, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", mcpwire.SSEJSONRPCEvent, payload)
-				if err != nil {
-					return
-				}
-				fl.Flush()
-			}
-		}
+		writeMCPSSEResponseLoop(connCtx, fl, w, sess)
 	}()
 
 	<-connCtx.Done()

@@ -1,14 +1,11 @@
 package router
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"sort"
-	"strings"
 	"sync"
-	"time"
 
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/namespace"
@@ -81,211 +78,6 @@ func (sr *SemanticRouter) CatalogVersion() string {
 	return sr.catalogVer
 }
 
-func (sr *SemanticRouter) Reindex(ctx context.Context, version string, tools []IndexedTool) error {
-	if sr == nil || !sr.Enabled() {
-		return nil
-	}
-	if sr.embedder == nil || sr.st == nil {
-		return fmt.Errorf("router: embedder or store nil: %w", errNilDeps)
-	}
-	if version == "" {
-		return fmt.Errorf("router: empty catalog version")
-	}
-
-	docs := make([]string, len(tools))
-	records := make([]store.ToolVectorRecord, 0, len(tools))
-	for i, ent := range tools {
-		docs[i] = index.FormatDocument(ent.ToolRow)
-	}
-
-	batch := defaults.ReindexEmbedBatchSize
-	all := make([][]float32, 0, len(tools))
-	for i := 0; i < len(docs); i += batch {
-		j := i + batch
-		if j > len(docs) {
-			j = len(docs)
-		}
-		chunk := docs[i:j]
-		embCtx, cancel := context.WithTimeout(ctx, sr.cfg.EmbedTimeout)
-		vecs, err := sr.embedder.Embed(embCtx, chunk)
-		cancel()
-		if err != nil {
-			return fmt.Errorf("router: embed batch: %w", err)
-		}
-		all = append(all, vecs...)
-	}
-	if len(all) != len(tools) {
-		return fmt.Errorf("router: embed count mismatch")
-	}
-
-	for i, ent := range tools {
-		v := all[i]
-		if len(v) != sr.dim {
-			return fmt.Errorf("router: vector dim %d want %d", len(v), sr.dim)
-		}
-		store.L2Normalize(v)
-		id := fmt.Sprintf("%s::%s", version, ent.ToolRow.Name)
-		records = append(records, store.ToolVectorRecord{
-			ID:             id,
-			Vector:         v,
-			ToolName:       ent.ToolRow.Name,
-			UpstreamID:     ent.UpstreamID,
-			CatalogVersion: version,
-		})
-	}
-
-	if err := sr.st.Upsert(ctx, records); err != nil {
-		return fmt.Errorf("router: upsert: %w", err)
-	}
-
-	sr.mu.Lock()
-	sr.catalogVer = version
-	sr.catalog = make(map[string]struct{}, len(tools))
-	sr.upstreamByTool = make(map[string]string, len(tools))
-	sr.toolDoc = make(map[string]string, len(tools))
-	for i, ent := range tools {
-		sr.catalog[ent.ToolRow.Name] = struct{}{}
-		sr.upstreamByTool[ent.ToolRow.Name] = ent.UpstreamID
-		sr.toolDoc[ent.ToolRow.Name] = docs[i]
-	}
-	sr.mu.Unlock()
-
-	slog.InfoContext(ctx, "router catalog reindexed", "catalog_version", version, "tools", len(tools))
-	return nil
-}
-
-func (sr *SemanticRouter) ResolveToolsCall(ctx context.Context, sig RoutingSignal) (string, *RoutingDecision, error) {
-	if sr == nil || !sr.Enabled() {
-		return sig.ToolName, &RoutingDecision{FallbackLayer: "none", Outcome: OutcomeNone}, nil
-	}
-	start := time.Now()
-	dec := &RoutingDecision{FallbackLayer: "vector"}
-
-	if sig.CatalogVersion != "" && sr.CatalogVersion() != "" && sig.CatalogVersion != sr.CatalogVersion() {
-		dec.Outcome = OutcomeMissStaleCatalog
-		dec.LatencyMS = time.Since(start).Milliseconds()
-		return "", dec, fmt.Errorf("%w: client %q vs server %q", ErrStaleCatalog, sig.CatalogVersion, sr.CatalogVersion())
-	}
-
-	allowed := append([]string(nil), sig.AllowedTools...)
-	sr.mu.RLock()
-	rl := sr.rules
-	sr.mu.RUnlock()
-	if rl != nil {
-		allowed = rl.NarrowAllowed(sig.IntentText, allowed, sr.listCatalog())
-	}
-
-	toolForExact := sig.ToolName
-	if rl != nil {
-		if c := rl.CanonicalAlias(sig.ToolName); c != "" {
-			toolForExact = c
-		}
-	}
-
-	filter := store.VectorSearchFilter{CatalogVersion: sr.CatalogVersion(), AllowedToolNames: allowed}
-
-	if toolForExact != "" && sr.exactInCatalog(toolForExact) && sr.allowed(toolForExact, allowed) {
-		uid := sr.upstreamID(toolForExact)
-		dec.UpstreamID = uid
-		dec.ToolNameNamespaced = toolForExact
-		dec.Confidence = exactMatchConfidence
-		if rl != nil && strings.TrimSpace(sig.ToolName) != "" && toolForExact != sig.ToolName {
-			dec.FallbackLayer = "rules"
-			dec.Outcome = OutcomeRulesAlias
-			dec.Candidates = []ScoredTool{{Name: toolForExact, Score: exactMatchConfidence, Source: "rules"}}
-		} else {
-			dec.FallbackLayer = "exact"
-			dec.Outcome = OutcomeExact
-			dec.Candidates = []ScoredTool{{Name: toolForExact, Score: exactMatchConfidence, Source: "exact"}}
-		}
-		dec.LatencyMS = time.Since(start).Milliseconds()
-		slog.InfoContext(ctx, "router decision", "layer", dec.FallbackLayer, "tool", toolForExact, "latency_ms", dec.LatencyMS)
-		return toolForExact, dec, nil
-	}
-
-	qtext := index.FormatQuery(sig.ToolName, sig.IntentText, jsonKeys(sig.ArgumentsJSON))
-	embCtx, cancel := context.WithTimeout(ctx, sr.cfg.EmbedTimeout)
-	vecs, err := sr.embedder.Embed(embCtx, []string{qtext})
-	cancel()
-	if err != nil {
-		slog.WarnContext(ctx, "router embed failed, degraded exact-only", "err", err)
-		if toolForExact != "" && sr.exactInCatalog(toolForExact) && sr.allowed(toolForExact, allowed) {
-			dec.ToolNameNamespaced = toolForExact
-			dec.UpstreamID = sr.upstreamID(toolForExact)
-			dec.FallbackLayer = "degraded_exact"
-			dec.Outcome = OutcomeDegradedExact
-			dec.LatencyMS = time.Since(start).Milliseconds()
-			return toolForExact, dec, nil
-		}
-		dec.Outcome = OutcomeMissDegradedNoExact
-		dec.LatencyMS = time.Since(start).Milliseconds()
-		return "", dec, fmt.Errorf("%w: %w", ErrDegradedNoExact, err)
-	}
-	if len(vecs) != singleQueryEmbeddingCount || len(vecs[0]) != sr.dim {
-		dec.Outcome = OutcomeMissInvalidEmbedding
-		dec.LatencyMS = time.Since(start).Milliseconds()
-		return "", dec, fmt.Errorf("%w", ErrInvalidEmbedding)
-	}
-	qv := vecs[0]
-	store.L2Normalize(qv)
-
-	qCtx, qCancel := context.WithTimeout(ctx, sr.cfg.QueryTimeout)
-	results, err := sr.st.Query(qCtx, qv, sr.cfg.TopK, filter)
-	qCancel()
-	if err != nil {
-		dec.Outcome = OutcomeMissStoreError
-		dec.LatencyMS = time.Since(start).Milliseconds()
-		return "", dec, fmt.Errorf("router: store query: %w", err)
-	}
-	if sr.cfg.HybridAlpha > 0 && len(results) > 0 {
-		results = sr.hybridRerank(qtext, results)
-	}
-	src := "vector"
-	if sr.cfg.HybridAlpha > 0 {
-		src = "bm25_hybrid"
-	}
-	for _, r := range results {
-		dec.Candidates = append(dec.Candidates, ScoredTool{Name: r.ToolName, Score: r.Score, Source: src})
-	}
-	if len(results) == 0 {
-		dec.Outcome = OutcomeMissNoCandidates
-		dec.LatencyMS = time.Since(start).Milliseconds()
-		slog.InfoContext(ctx, "router decision", "layer", "vector", "outcome", "no_candidates", "latency_ms", dec.LatencyMS)
-		return "", dec, fmt.Errorf("%w", ErrNoCandidates)
-	}
-
-	top := results[0]
-	dec.ToolNameNamespaced = top.ToolName
-	dec.UpstreamID = top.UpstreamID
-	dec.Confidence = top.Score
-
-	if top.Score < sr.cfg.ScoreMin {
-		dec.Outcome = OutcomeMissBelowThreshold
-		dec.LatencyMS = time.Since(start).Milliseconds()
-		slog.InfoContext(ctx, "router decision", "layer", "vector", "outcome", "below_threshold", "top", top.Score, "latency_ms", dec.LatencyMS)
-		return "", dec, fmt.Errorf("%w: got %.4f min %.4f", ErrBelowThreshold, top.Score, sr.cfg.ScoreMin)
-	}
-	if len(results) > 1 && results[1].Score >= sr.cfg.ScoreMin && (results[0].Score-results[1].Score) < ambiguityScoreDeltaThreshold {
-		dec.Outcome = OutcomeMissAmbiguous
-		dec.LatencyMS = time.Since(start).Milliseconds()
-		slog.InfoContext(ctx, "router decision", "layer", "vector", "outcome", "ambiguous", "latency_ms", dec.LatencyMS)
-		return "", dec, fmt.Errorf("%w", ErrAmbiguous)
-	}
-
-	if !sr.cfg.AllowAutoRename && sig.ToolName != "" && top.ToolName != sig.ToolName {
-		dec.Outcome = OutcomeMissRenameDisallowed
-		dec.LatencyMS = time.Since(start).Milliseconds()
-		slog.InfoContext(ctx, "router decision", "layer", "vector", "outcome", "rename_disallowed", "requested", sig.ToolName, "winner", top.ToolName)
-		return "", dec, fmt.Errorf("%w: requested %q best %q", ErrRenameDisallowed, sig.ToolName, top.ToolName)
-	}
-
-	dec.FallbackLayer = "vector"
-	dec.Outcome = OutcomeVectorHit
-	dec.LatencyMS = time.Since(start).Milliseconds()
-	slog.InfoContext(ctx, "router decision", "layer", "vector", "tool", top.ToolName, "score", top.Score, "latency_ms", dec.LatencyMS, "signal", summarizeSignal(sig))
-	return top.ToolName, dec, nil
-}
-
 func (sr *SemanticRouter) listCatalog() []string {
 	sr.mu.RLock()
 	defer sr.mu.RUnlock()
@@ -305,7 +97,15 @@ func (sr *SemanticRouter) hybridRerank(query string, results []store.VectorSearc
 	if sr == nil || sr.cfg.HybridAlpha <= 0 || len(results) == 0 {
 		return results
 	}
+	docs := sr.toolDocStringsForHits(results)
+	vecScores := vectorScoresFromHits(results)
+	weights := bm25.RerankWeights(query, docs, vecScores, sr.cfg.HybridAlpha)
+	return reorderHitsByWeights(results, weights)
+}
+
+func (sr *SemanticRouter) toolDocStringsForHits(results []store.VectorSearchHit) []string {
 	sr.mu.RLock()
+	defer sr.mu.RUnlock()
 	docs := make([]string, len(results))
 	for i, r := range results {
 		if d, ok := sr.toolDoc[r.ToolName]; ok {
@@ -314,12 +114,18 @@ func (sr *SemanticRouter) hybridRerank(query string, results []store.VectorSearc
 			docs[i] = r.ToolName
 		}
 	}
-	sr.mu.RUnlock()
+	return docs
+}
+
+func vectorScoresFromHits(results []store.VectorSearchHit) []float64 {
 	vecScores := make([]float64, len(results))
 	for i, r := range results {
 		vecScores[i] = r.Score
 	}
-	weights := bm25.RerankWeights(query, docs, vecScores, sr.cfg.HybridAlpha)
+	return vecScores
+}
+
+func reorderHitsByWeights(results []store.VectorSearchHit, weights []float64) []store.VectorSearchHit {
 	pairs := make([]hybridPair, len(results))
 	for i := range results {
 		pairs[i] = hybridPair{res: results[i], w: weights[i]}
