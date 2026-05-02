@@ -6,7 +6,7 @@ func TestStableCodes(t *testing.T) {
 	if MethodNotFound != -32601 || InvalidParams != -32602 {
 		t.Fatal("standard JSON-RPC codes drifted")
 	}
-	if GatewayInternal != -32000 || HandshakeIncomplete != -32001 || RequestRejected != -32002 || PermissionDenied != -32003 || ToolRoutingAmbiguous != -32004 {
+	if GatewayInternal != -32000 || HandshakeIncomplete != -32001 || RequestRejected != -32002 || PermissionDenied != -32003 || ToolRoutingAmbiguous != -32004 || StrictAggregationFailed != -32005 {
 		t.Fatal("gateway application codes drifted")
 	}
 }
