@@ -12,6 +12,9 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
+	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
 )
 
 type Validator struct {
@@ -65,11 +68,6 @@ func parseRSAPublicKey(pemStr string) (*rsa.PublicKey, error) {
 	return rsaKey, nil
 }
 
-type registeredWithTools struct {
-	jwt.RegisteredClaims
-	McpTools []string `json:"mcp_tools,omitempty"`
-}
-
 func (v *Validator) keyFunc(ctx context.Context) jwt.Keyfunc {
 	return func(t *jwt.Token) (interface{}, error) {
 		if v.pemKey != nil {
@@ -107,8 +105,9 @@ func (v *Validator) Validate(ctx context.Context, token string) error {
 	return v.checkIssAud(&claims)
 }
 
-func (v *Validator) ValidateWithAllowedTools(ctx context.Context, token string) ([]string, error) {
-	var claims registeredWithTools
+// ParseTokenClaims validates the JWT and returns typed claims for policy evaluation.
+func (v *Validator) ParseTokenClaims(ctx context.Context, token string) (*TokenClaims, error) {
+	var claims TokenClaims
 	_, err := v.parser.ParseWithClaims(token, &claims, v.keyFunc(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("auth: jwt: %w", err)
@@ -116,7 +115,15 @@ func (v *Validator) ValidateWithAllowedTools(ctx context.Context, token string) 
 	if err := v.checkIssAud(&claims.RegisteredClaims); err != nil {
 		return nil, err
 	}
-	return normalizeMcpToolNames(claims.McpTools), nil
+	return &claims, nil
+}
+
+func (v *Validator) ValidateWithAllowedTools(ctx context.Context, token string) ([]string, error) {
+	c, err := v.ParseTokenClaims(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	return c.NormalizedMcpTools(), nil
 }
 
 func normalizeMcpToolNames(in []string) []string {
@@ -144,20 +151,29 @@ func (v *Validator) keyFromJWKS(ctx context.Context, t *jwt.Token) (interface{},
 
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	if v.jwksSet == nil || time.Now().After(v.jwksExpires) {
+	neededRefresh := v.jwksSet == nil || time.Now().After(v.jwksExpires)
+	if neededRefresh {
 		set, err := jwk.Fetch(ctx, v.cfg.JWKSURL)
 		if err != nil {
+			telemetry.RecordJWKSLookup(ctx, defaults.MetricJWKSResultErrorFetch)
 			return nil, fmt.Errorf("auth: jwks fetch: %w", err)
 		}
 		v.jwksSet = set
 		v.jwksExpires = time.Now().Add(v.cfg.JWKSCacheTTL)
 	}
 	if kid == "" {
+		telemetry.RecordJWKSLookup(ctx, defaults.MetricJWKSResultErrorMissingKid)
 		return nil, fmt.Errorf("auth: jwt: missing kid (required for JWKS)")
 	}
 	key, ok := v.jwksSet.LookupKeyID(kid)
 	if !ok {
+		telemetry.RecordJWKSLookup(ctx, defaults.MetricJWKSResultErrorUnknownKid)
 		return nil, fmt.Errorf("auth: jwks: unknown kid %q", kid)
+	}
+	if neededRefresh {
+		telemetry.RecordJWKSLookup(ctx, defaults.MetricJWKSResultRefresh)
+	} else {
+		telemetry.RecordJWKSLookup(ctx, defaults.MetricJWKSResultHit)
 	}
 	return publicKeyFromJWK(key)
 }

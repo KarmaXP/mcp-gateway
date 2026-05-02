@@ -111,6 +111,32 @@ func TestValidator_TableDriven(t *testing.T) {
 	}
 }
 
+func TestValidator_RejectsAlgNone(t *testing.T) {
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	pubPEM := rsaPubPEM(t, &priv.PublicKey)
+	cfg := JWTAuthConfig{
+		Mode:         "jwt",
+		Issuer:       "https://issuer.example",
+		Audience:     "mcp-aud",
+		PublicKeyPEM: pubPEM,
+	}
+	v, err := NewValidator(cfg)
+	require.NoError(t, err)
+	ctx := context.Background()
+
+	tok := jwt.NewWithClaims(jwt.SigningMethodNone, jwt.RegisteredClaims{
+		Issuer:    cfg.Issuer,
+		Audience:  jwt.ClaimStrings{cfg.Audience},
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+		IssuedAt:  jwt.NewNumericDate(time.Now().Add(-time.Minute)),
+	})
+	s, err := tok.SignedString(jwt.UnsafeAllowNoneSignatureType)
+	require.NoError(t, err)
+
+	require.Error(t, v.Validate(ctx, s))
+}
+
 func TestValidator_ValidateWithAllowedTools(t *testing.T) {
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
@@ -125,7 +151,7 @@ func TestValidator_ValidateWithAllowedTools(t *testing.T) {
 	require.NoError(t, err)
 	ctx := context.Background()
 
-	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, registeredWithTools{
+	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, TokenClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    cfg.Issuer,
 			Audience:  jwt.ClaimStrings{cfg.Audience},
@@ -142,7 +168,7 @@ func TestValidator_ValidateWithAllowedTools(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"k8s__logs", "prom__q"}, tools)
 
-	emptyTok := jwt.NewWithClaims(jwt.SigningMethodRS256, registeredWithTools{
+	emptyTok := jwt.NewWithClaims(jwt.SigningMethodRS256, TokenClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    cfg.Issuer,
 			Audience:  jwt.ClaimStrings{cfg.Audience},

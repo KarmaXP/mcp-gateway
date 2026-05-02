@@ -32,7 +32,7 @@ func TestHTTPMiddlewareInjectsAllowedToolsFromJWT(t *testing.T) {
 	v, err := NewValidator(cfg)
 	require.NoError(t, err)
 
-	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, registeredWithTools{
+	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, TokenClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    "iss",
 			Audience:  jwt.ClaimStrings{"aud"},
@@ -46,7 +46,7 @@ func TestHTTPMiddlewareInjectsAllowedToolsFromJWT(t *testing.T) {
 	require.NoError(t, err)
 
 	var got []string
-	h := HTTPMiddleware(cfg, v)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := HTTPMiddleware(cfg, v, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got = hostctx.AllowedToolNamesFromContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -81,7 +81,7 @@ func TestHTTPMiddlewareJWTAcceptsValidToken(t *testing.T) {
 	require.NoError(t, err)
 
 	var hit bool
-	h := HTTPMiddleware(cfg, v)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := HTTPMiddleware(cfg, v, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hit = true
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -104,7 +104,7 @@ func TestHTTPMiddlewareRejectsMissingBearer(t *testing.T) {
 	v, err := NewValidator(cfg)
 	require.NoError(t, err)
 
-	h := HTTPMiddleware(cfg, v)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	h := HTTPMiddleware(cfg, v, nil)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("should not reach handler")
 	}))
 	ts := httptest.NewServer(h)
@@ -118,7 +118,7 @@ func TestHTTPMiddlewareRejectsMissingBearer(t *testing.T) {
 
 func TestHTTPMiddlewareNoneModePassesThrough(t *testing.T) {
 	cfg := JWTAuthConfig{Mode: "none"}
-	h := HTTPMiddleware(cfg, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := HTTPMiddleware(cfg, nil, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	}))
 	ts := httptest.NewServer(h)
@@ -140,7 +140,7 @@ func TestHTTPMiddlewareSkipsConfiguredPrefixes(t *testing.T) {
 	}
 	v, err := NewValidator(cfg)
 	require.NoError(t, err)
-	h := HTTPMiddleware(cfg, v)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	h := HTTPMiddleware(cfg, v, nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	}))
 	ts := httptest.NewServer(h)
@@ -158,7 +158,7 @@ func TestHTTPMiddlewareRejectsNonBearerScheme(t *testing.T) {
 	cfg := JWTAuthConfig{Mode: "jwt", PublicKeyPEM: rsaPublicPEM(t, &priv.PublicKey)}
 	v, err := NewValidator(cfg)
 	require.NoError(t, err)
-	h := HTTPMiddleware(cfg, v)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	h := HTTPMiddleware(cfg, v, nil)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("handler reached")
 	}))
 	ts := httptest.NewServer(h)
@@ -178,7 +178,7 @@ func TestHTTPMiddlewareRejectsEmptyBearerToken(t *testing.T) {
 	cfg := JWTAuthConfig{Mode: "jwt", PublicKeyPEM: rsaPublicPEM(t, &priv.PublicKey)}
 	v, err := NewValidator(cfg)
 	require.NoError(t, err)
-	h := HTTPMiddleware(cfg, v)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	h := HTTPMiddleware(cfg, v, nil)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("handler reached")
 	}))
 	ts := httptest.NewServer(h)
@@ -194,7 +194,7 @@ func TestHTTPMiddlewareRejectsEmptyBearerToken(t *testing.T) {
 
 func TestHTTPMiddlewareRejectsNilValidatorInJWTMode(t *testing.T) {
 	cfg := JWTAuthConfig{Mode: "jwt"}
-	h := HTTPMiddleware(cfg, nil)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	h := HTTPMiddleware(cfg, nil, nil)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("handler reached")
 	}))
 	ts := httptest.NewServer(h)

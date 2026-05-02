@@ -4,13 +4,16 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
+	"github.com/KarmaXP/mcp-gateway/internal/policy"
+	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
 )
 
 // Prefix length for "bearer " (Authorization header scheme, case-insensitive check on a lowercased copy).
 const bearerAuthSchemeLowerLen = 7
 
-func HTTPMiddleware(cfg JWTAuthConfig, v *Validator) func(http.Handler) http.Handler {
+func HTTPMiddleware(cfg JWTAuthConfig, v *Validator, pol *policy.Engine) func(http.Handler) http.Handler {
 	if cfg.Mode == "" || cfg.Mode == "none" {
 		return func(next http.Handler) http.Handler { return next }
 	}
@@ -36,13 +39,32 @@ func HTTPMiddleware(cfg JWTAuthConfig, v *Validator) func(http.Handler) http.Han
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
-			tools, err := v.ValidateWithAllowedTools(r.Context(), tok)
+			claims, err := v.ParseTokenClaims(r.Context(), tok)
 			if err != nil {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
+			tools, err := effectiveAllowList(pol, claims)
+			if err != nil {
+				telemetry.RecordPolicyDecision(r.Context(), defaults.MetricPolicyOutcomeDeny, defaults.MetricPolicyReasonPolicyEvalFailed)
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
 			ctx := hostctx.WithAllowedToolNames(r.Context(), tools)
+			if sub := claims.Subject(); sub != "" {
+				ctx = hostctx.WithSubjectID(ctx, sub)
+			}
+			if pol != nil {
+				ctx = hostctx.WithPolicyVersion(ctx, pol.Version())
+			}
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+func effectiveAllowList(pol *policy.Engine, claims *TokenClaims) ([]string, error) {
+	if pol == nil {
+		return claims.NormalizedMcpTools(), nil
+	}
+	return pol.EffectiveAllowList(claims)
 }
