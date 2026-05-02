@@ -10,7 +10,8 @@ linters:
     - misspell
     - unconvert
     - unused
-    - gofmt
+    # gofmt linter disabled: gofmt column-aligns '=' in grouped const/var; this repo uses
+    # single space before '=' (see Makefile fmt + scripts/normalize-go-eq-spacing.sh).
     - bodyclose
     - mnd
 

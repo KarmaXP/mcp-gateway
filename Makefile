@@ -17,7 +17,7 @@ CYAN    := \033[36m
 RESET   := \033[0m
 
 .DEFAULT_GOAL := help
-.PHONY: help build run stop test test-cover test-integration smoke lint clean tidy \
+.PHONY: help build run stop test test-cover test-integration smoke fmt lint clean tidy \
         docker-build docker-up docker-up-full docker-down docker-logs docker-clean
 
 # Help: sectioned list of targets (descriptions are defined here only)
@@ -36,7 +36,8 @@ help:
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test-cover" "go test -race with coverage report (internal/*)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test-integration" "go test -tags=integration (Qdrant + embed + OTLP; needs compose)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "smoke" "curl MCP flow against gateway + scripts/smoke_upstream (sets SMOKE_AUTO_START_GATEWAY=1)"
-	@printf "  $(CYAN)%-20s$(RESET) %s\n" "lint" "Run golangci-lint (install via go run if missing)"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "fmt" "gofmt -w . then normalize const/var '=' spacing (gofmt re-aligns; see .ai/rules/go.md)"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "lint" "Run golangci-lint + check for column-aligned '=' in Go sources"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "tidy" "Clean up and verify Go modules"
 	@printf "\n"
 	@printf "$(BLUE)▶ MCP Gateway (Docker Compose)$(RESET)\n"
@@ -92,9 +93,17 @@ smoke:
 	@chmod +x scripts/smoke_test.sh
 	@SMOKE_AUTO_START_GATEWAY=1 bash scripts/smoke_test.sh
 
+fmt:
+	@echo "📝 gofmt + normalize '=' spacing in const/var blocks..."
+	@gofmt -w .
+	@chmod +x scripts/normalize-go-eq-spacing.sh
+	@./scripts/normalize-go-eq-spacing.sh
+
 lint:
 	@echo "🔍 golangci-lint..."
 	@go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8 run ./...
+	@chmod +x scripts/check-go-eq-spacing.sh
+	@./scripts/check-go-eq-spacing.sh
 
 tidy:
 	@echo "📦 Tidying Go modules..."
