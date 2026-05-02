@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	"golang.org/x/sync/semaphore"
 
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
@@ -231,6 +233,7 @@ func (c *HTTPMCPUpstream) postRPC(ctx context.Context, req *rpc.Request) error {
 	hreq.Header.Set("Content-Type", "application/json")
 	hreq.Header.Set(mcpwire.HeaderMCPSessionID, c.sessID)
 	c.setAuth(hreq)
+	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(hreq.Header))
 	resp, err := c.client.Do(hreq)
 	if err != nil {
 		return err
