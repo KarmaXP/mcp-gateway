@@ -70,7 +70,6 @@ func TestLimiterKeyUsesSubjectWhenPresent(t *testing.T) {
 	})
 	h := HTTPMiddleware(cfg)(inner)
 
-	// Simulate JWT middleware having attached subject on the same-process request (HTTP does not ship Go context).
 	reqA := httptest.NewRequest(http.MethodGet, "/mcp/rpc", nil)
 	reqA = reqA.WithContext(hostctx.WithSubjectID(context.Background(), "user-a"))
 	recA := httptest.NewRecorder()

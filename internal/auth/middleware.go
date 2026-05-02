@@ -10,8 +10,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
 )
 
-// Prefix length for "bearer " (Authorization header scheme, case-insensitive check on a lowercased copy).
-const bearerAuthSchemeLowerLen = 7
+const bearerAuthSchemeLowerLen = 7 // len("bearer ") after strings.ToLower on Authorization
 
 func HTTPMiddleware(cfg JWTAuthConfig, v *Validator, pol *policy.Holder) func(http.Handler) http.Handler {
 	if cfg.Mode == "" || cfg.Mode == "none" {

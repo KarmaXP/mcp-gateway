@@ -9,7 +9,6 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
 )
 
-// JWTAuthConfig drives bearer JWT validation on MCP HTTP routes (AUTH_MODE, JWT_* env).
 type JWTAuthConfig struct {
 	Mode string
 

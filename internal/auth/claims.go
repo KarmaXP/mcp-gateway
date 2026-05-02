@@ -7,7 +7,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// TokenClaims is the JWT claim set used for MCP authorization (AuthN + inputs to policy).
+// MCP-facing JWT claims (AuthN + inputs to policy.Engine).
 type TokenClaims struct {
 	jwt.RegisteredClaims
 	McpTools             []string        `json:"mcp_tools,omitempty"`
@@ -16,7 +16,6 @@ type TokenClaims struct {
 	AuthorizationDetails json.RawMessage `json:"authorization_details,omitempty"`
 }
 
-// Subject returns the JWT sub claim (for audit hashing only; do not log raw in production paths).
 func (c *TokenClaims) Subject() string {
 	if c == nil {
 		return ""
@@ -24,7 +23,6 @@ func (c *TokenClaims) Subject() string {
 	return strings.TrimSpace(c.RegisteredClaims.Subject)
 }
 
-// NormalizedMcpTools returns trimmed, deduped mcp_tools claim entries.
 func (c *TokenClaims) NormalizedMcpTools() []string {
 	if c == nil {
 		return nil
@@ -32,7 +30,6 @@ func (c *TokenClaims) NormalizedMcpTools() []string {
 	return normalizeMcpToolNames(c.McpTools)
 }
 
-// NormalizedToolGroups returns trimmed mcp_tool_groups claim entries.
 func (c *TokenClaims) NormalizedToolGroups() []string {
 	if c == nil || len(c.McpToolGroups) == 0 {
 		return nil
@@ -50,7 +47,7 @@ func (c *TokenClaims) NormalizedToolGroups() []string {
 	return out
 }
 
-// RawAuthorizationDetails returns RFC 9396 authorization_details JSON (RAR).
+// RFC 9396 authorization_details (RAR) as raw JSON.
 func (c *TokenClaims) RawAuthorizationDetails() json.RawMessage {
 	if c == nil {
 		return nil

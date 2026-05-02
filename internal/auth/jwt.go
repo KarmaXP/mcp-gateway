@@ -105,7 +105,6 @@ func (v *Validator) Validate(ctx context.Context, token string) error {
 	return v.checkIssAud(&claims)
 }
 
-// ParseTokenClaims validates the JWT and returns typed claims for policy evaluation.
 func (v *Validator) ParseTokenClaims(ctx context.Context, token string) (*TokenClaims, error) {
 	var claims TokenClaims
 	_, err := v.parser.ParseWithClaims(token, &claims, v.keyFunc(ctx))

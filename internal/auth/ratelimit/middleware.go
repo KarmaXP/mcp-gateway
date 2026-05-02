@@ -13,9 +13,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
 )
 
-// HTTPMiddleware returns a no-op handler when cfg.Enabled is false.
-// When enabled, applies a per-key token bucket after auth: JWT subject from hostctx (set by auth middleware on r.WithContext), else RemoteAddr.
-// Skips the same path prefixes as health checks (caller should list mcpwire paths only for MCP).
+// Per-subject (or RemoteAddr) token bucket when cfg.Enabled.
 func HTTPMiddleware(cfg Config) func(http.Handler) http.Handler {
 	if !cfg.Enabled {
 		return func(next http.Handler) http.Handler { return next }
