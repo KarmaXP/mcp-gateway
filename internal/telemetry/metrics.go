@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync/atomic"
+	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -14,15 +15,16 @@ import (
 )
 
 var (
-	metricsReady atomic.Bool
+	metricsReady        atomic.Bool
 	indexedCatalogTools atomic.Int64
-	semanticOutcomes metric.Int64Counter
-	semanticDuration metric.Float64Histogram
-	policyDecisions metric.Int64Counter
-	jwksLookups metric.Int64Counter
-	toolArgsValidation metric.Int64Counter
-	rateLimitEvents metric.Int64Counter
-	payloadBytesReject metric.Int64Counter
+	semanticOutcomes    metric.Int64Counter
+	semanticDuration    metric.Float64Histogram
+	policyDecisions     metric.Int64Counter
+	jwksLookups         metric.Int64Counter
+	toolArgsValidation  metric.Int64Counter
+	rateLimitEvents     metric.Int64Counter
+	payloadBytesReject  metric.Int64Counter
+	internalDuration    metric.Float64Histogram
 )
 
 func registerInstruments() error {
@@ -65,6 +67,14 @@ func registerInstruments() error {
 		metric.WithDescription("Rejected oversized payloads: HTTP RPC body vs tools/call arguments (bounded reason)"))
 	if err != nil {
 		return fmt.Errorf("telemetry: payload bytes rejected counter: %w", err)
+	}
+
+	internalDuration, err = m.Float64Histogram("mcp.gateway.internal.duration_seconds",
+		metric.WithDescription("Time inside the gateway process per phase (excludes upstream MCP backend I/O); basis for §6 p95 budget"),
+		metric.WithUnit("s"),
+	)
+	if err != nil {
+		return fmt.Errorf("telemetry: internal duration histogram: %w", err)
 	}
 
 	g, err := m.Int64ObservableGauge("mcp.gateway.active_sse_sessions",
@@ -197,6 +207,29 @@ func RecordRateLimit(ctx context.Context, allowed bool) {
 		res = defaults.MetricRateLimitAllowed
 	}
 	rateLimitEvents.Add(ctx, 1, metric.WithAttributes(attribute.String("result", res)))
+}
+
+// RecordInternalPhase records gateway-only wall time for a phase (parse, security, router, mux).
+// Method should be the JSON-RPC method when known; use defaults.MetricInternalMethodUnknown for pre-parse work.
+func RecordInternalPhase(ctx context.Context, method, phase string, d time.Duration) {
+	if !metricsReady.Load() || d < 0 {
+		return
+	}
+	if method == "" {
+		method = defaults.MetricInternalMethodUnknown
+	}
+	switch phase {
+	case defaults.MetricInternalPhaseParse,
+		defaults.MetricInternalPhaseSecurity,
+		defaults.MetricInternalPhaseRouter,
+		defaults.MetricInternalPhaseMux:
+	default:
+		phase = defaults.MetricInternalPhaseMux
+	}
+	internalDuration.Record(ctx, d.Seconds(), metric.WithAttributes(
+		attribute.String("method", method),
+		attribute.String("phase", phase),
+	))
 }
 
 func RecordPayloadBytesRejected(ctx context.Context, reason string) {

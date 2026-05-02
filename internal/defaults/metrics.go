@@ -28,4 +28,11 @@ const (
 
 	MetricBytesRejectReasonHTTPBody = "http_body_too_large"
 	MetricBytesRejectReasonToolArgs = "tool_args_too_large"
+
+	// Internal hop histogram (§3.D): phases and pre-parse method label.
+	MetricInternalMethodUnknown = "unknown"
+	MetricInternalPhaseParse = "parse"
+	MetricInternalPhaseSecurity = "security"
+	MetricInternalPhaseRouter = "router"
+	MetricInternalPhaseMux = "mux"
 )
