@@ -17,7 +17,8 @@ info:
        named event **`jsonrpc`** (`event: jsonrpc`) and one **`data:`** line containing a single-line JSON
        object matching `JsonRpcResponse` (no literal newlines inside the JSON).
     4. **Handshake** — After `initialize` (response on SSE), send notification `notifications/initialized`
-       (or `initialized`) with no `id` before calling `tools/list` or `tools/call`; otherwise the gateway
+       (or `initialized`) with no `id` before calling multiplexed methods such as **`tools/list`**, **`tools/call`**,
+       **`resources/list`**, **`resources/read`**, **`prompts/list`**, or **`prompts/get`**; otherwise the gateway
        returns error code **-32001** (`HandshakeIncomplete`) on the SSE stream.
     5. **Shutdown** — Closing the SSE connection cancels in-flight work tied to that session; the gateway
        merges process shutdown context so SIGTERM drains streams cleanly.
@@ -59,8 +60,9 @@ info:
     | -32002 | `RequestRejected` | Session middleware rejected the request (e.g. handshake guard). |
     | -32003 | `PermissionDenied` | Authenticated principal is not allowed to invoke the requested tool (`tools/call`). |
     | -32004 | `ToolRoutingAmbiguous` | Semantic router could not pick a unique tool (threshold, ambiguity, rename policy). |
+    | -32005 | `StrictAggregationFailed` | Strict backend aggregation: `initialize` or a list RPC (`tools/list`, `resources/list`, `prompts/list`) failed on any upstream while **`aggregation.strict_*`** is enabled in config. |
 
-    Other bands in `-32005..-32099` remain reserved for future gateway use.
+    Values in `-32006..-32099` are reserved for future gateway use.
   version: 0.1.0
   license:
     name: MIT
@@ -401,8 +403,9 @@ components:
             - **-32002** — `RequestRejected`
             - **-32003** — `PermissionDenied`
             - **-32004** — `ToolRoutingAmbiguous`
+            - **-32005** — `StrictAggregationFailed`
 
-            Values in `-32005..-32099` are reserved for future gateway use.
+            Values in `-32006..-32099` are reserved for future gateway use.
         message:
           type: string
         data:

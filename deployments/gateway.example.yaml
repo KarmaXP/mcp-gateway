@@ -6,6 +6,12 @@
 #
 # Optional: auth_token or auth_token_env for HTTP Bearer on upstream requests.
 
+# Optional: fail-closed backend aggregation (default omits failed upstreams for initialize + list RPCs).
+# aggregation:
+#   strict_initialize: false
+#   strict_list: false
+# Env: AGGREGATION_STRICT_INITIALIZE=1, AGGREGATION_STRICT_LIST=1
+
 # Gateway policy (RAR merge, tool groups, elevated tools requiring JSON Schema — see internal/policy).
 # policy:
 #   version: "2026-05-01"
