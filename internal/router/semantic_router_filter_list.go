@@ -10,20 +10,13 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 )
 
-// FilterListActive reports whether tools/list should apply intent-based filtering (ROUTER_MODE=filter_list).
+// FilterListActive is true when router.mode is filter_list (intent-based tools/list subsetting).
 func (sr *SemanticRouter) FilterListActive() bool {
 	return sr != nil && sr.cfg.Mode == ModeFilterList
 }
 
-// FilterToolsForList returns namespaced tool names to keep in tools/list when FilterListActive and intent is set.
-//
-// Empty intent (no X-MCP-Intent on the RPC): returns useFull=true — the gateway serves the same merged catalog as
-// assist_list after JWT/RAR allow-list filtering only (no vector subset). We do not reuse intent from earlier
-// requests; each tools/list is scoped to the current request context.
-//
-// Embed/vector failures, stale catalog vs sig.CatalogVersion, empty vector results, or no indexed catalog yet:
-// degrades to useFull=true so hosts still receive a usable list. AllowedTools are always enforced in the vector
-// store filter (plan §3.B S1); callers must still apply JWT/RAR allow-list to the merged tools.
+// FilterToolsForList ranks tools by intent and returns names to keep, or useFull=true to serve the merged catalog
+// (after allow-list only). Degrades to full list on empty intent, stale catalog version, embed/query errors, or no hits.
 func (sr *SemanticRouter) FilterToolsForList(ctx context.Context, sig RoutingSignal) (keepNames map[string]struct{}, useFull bool) {
 	if sr == nil || !sr.FilterListActive() {
 		return nil, true

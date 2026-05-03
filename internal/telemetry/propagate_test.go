@@ -13,6 +13,11 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+func TestContextWithExtractedW3CTraceNilHeaderSafe(t *testing.T) {
+	base := ContextWithExtractedW3CTrace(context.Background(), nil)
+	require.NotNil(t, base)
+}
+
 func TestContextWithExtractedW3CTraceChildSharesRemoteTraceID(t *testing.T) {
 	rec := tracetest.NewSpanRecorder()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(rec))

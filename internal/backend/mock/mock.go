@@ -39,6 +39,10 @@ type MockUpstream struct {
 	// tools/list failure (strict list tests).
 	ToolsListJSONRPCMessage string
 
+	// resources/list and prompts/list failures (strict list tests).
+	ResourcesListJSONRPCMessage string
+	PromptsListJSONRPCMessage   string
+
 	mu sync.Mutex
 
 	toolsCallInvocations atomic.Uint64
@@ -211,6 +215,9 @@ func (b *MockUpstream) resourcesList(_ context.Context, req *rpc.Request) (*rpc.
 	if b.OmitResourcesList {
 		return rpc.NewError(req.ID, errcodes.MethodNotFound, "resources not supported", nil), nil
 	}
+	if msg := strings.TrimSpace(b.ResourcesListJSONRPCMessage); msg != "" {
+		return rpc.NewError(req.ID, errcodes.InternalError, msg, nil), nil
+	}
 	res := make([]map[string]any, 0, len(b.ResourceURIs))
 	for _, u := range b.ResourceURIs {
 		res = append(res, map[string]any{
@@ -251,6 +258,9 @@ func (b *MockUpstream) resourcesRead(_ context.Context, req *rpc.Request) (*rpc.
 func (b *MockUpstream) promptsList(_ context.Context, req *rpc.Request) (*rpc.Response, error) {
 	if b.OmitPromptsList {
 		return rpc.NewError(req.ID, errcodes.MethodNotFound, "prompts not supported", nil), nil
+	}
+	if msg := strings.TrimSpace(b.PromptsListJSONRPCMessage); msg != "" {
+		return rpc.NewError(req.ID, errcodes.InternalError, msg, nil), nil
 	}
 	ps := make([]map[string]any, 0, len(b.PromptNames))
 	for _, n := range b.PromptNames {
