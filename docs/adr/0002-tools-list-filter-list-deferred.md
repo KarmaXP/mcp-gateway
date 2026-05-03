@@ -2,7 +2,7 @@
 
 ## Status
 
-Superseded — **`filter_list` is implemented** behind `router.mode: filter_list` / `ROUTER_MODE=filter_list` (see `README.md`, `internal/router/semantic_router_filter_list.go`, `internal/gateway/multiplex/tools_list.go`).
+Superseded — **`filter_list` is implemented** behind `router.mode: filter_list` / `ROUTER_MODE=filter_list` (see `docs/DEVELOPER.md`, `internal/router/semantic_router_filter_list.go`, `internal/gateway/multiplex/tools_list.go`).
 
 ## Context
 

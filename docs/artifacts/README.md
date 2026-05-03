@@ -1,5 +1,7 @@
 # API and observability artifacts
 
+Operator and build details: **[DEVELOPER.md](../DEVELOPER.md)**.
+
 | Path | Purpose |
 |------|---------|
 | `openapi/openapi.yaml` | Host HTTP API (health, SSE, JSON-RPC POST) |

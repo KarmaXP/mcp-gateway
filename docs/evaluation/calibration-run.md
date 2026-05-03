@@ -42,4 +42,4 @@ The application registers `mcp.gateway.internal.duration_seconds`. After OTel �
 ## References
 
 - `docs/architecture/mcp_gateway.plan.md` — §3.B modes (`filter_list`), §3.D metrics, §6 latency budget.
-- `README.md` — `ROUTER_MODE`, observability, integration tests.
+- `docs/DEVELOPER.md` — `ROUTER_MODE`, observability, integration tests.

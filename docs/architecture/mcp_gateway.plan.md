@@ -239,7 +239,7 @@ flowchart TB
 - `tools/list` returns a stable ordered union (convention: order by configured prefix, then native name).
 - `tools/call` for tool `pref__tool` hits only the correct backend and the mock receives name `tool`.
 - Unit tests for **prefix/strip mapping** and **preserved `id`** in responses.
-- Document the exact SSE format used (event name, JSON data) in exported comments or developer README.
+- Document the exact SSE format used (event name, JSON data) in exported comments or `docs/DEVELOPER.md` / OpenAPI.
 
 ### B. Semantic router — P1 (high)
 
@@ -590,7 +590,7 @@ Common Go ecosystem libraries (implementation reference, not prescriptive): `git
 - Tool not consented → `PERMISSION_DENIED` without forward; audit event emitted.
 - `tools/list` for a test subject returns **only** the authorized subset against a larger merged catalog.
 - Unit cases: 3+ schemas (valid, wrong type, extra field with `additionalProperties: false`) for an example tool.
-- OpenAPI/Swagger or security README: required headers, expected claims, example RAR `authorization_details` for two tools.
+- OpenAPI/Swagger or `docs/DEVELOPER.md`: required headers, expected claims, example RAR `authorization_details` for two tools.
 
 ### D. Observability engine — P2 (medium)
 
@@ -758,7 +758,7 @@ This subsection records **stack choices already reflected in this repository** v
 | **Language** | **Go 1.26** — concurrency, static binary, ecosystem (JWT, OTLP, Qdrant HTTP). | Pin policy in `go.mod`, CI matrix. |
 | **Vector store** | **Qdrant** — HNSW, **metadata filters during ANN** (policy in-index); **HTTP API client** in gateway (`internal/router/store/qdrant.go`); **cosine** distance; **384 dimensions** aligned with embeddings. | Collection naming / rotation, HNSW tuning, auth/TLS in non-local deploys, persistence strategy (see §4.1 residual). |
 | **Embeddings** | **Local ONNX Runtime**, model **all-MiniLM-L6-v2**; **384-d**, **L2-normalised** outputs; service **`embed:8001`**; image build bakes ONNX (no runtime download). | Indexed text template version, batch/rate limits, optional embedding cache, multilingual needs (§4.4 residual). |
-| **Host ↔ gateway transport** | **HTTP POST** (agent requests) + **SSE** (async responses); **JSON-RPC 2.0**; MCP **reference transport** for interoperability. | Normative MCP spec revision pinned in README/bibliography; TLS termination; body size limits, heartbeats, backpressure (§4.2 residual). |
+| **Host ↔ gateway transport** | **HTTP POST** (agent requests) + **SSE** (async responses); **JSON-RPC 2.0**; MCP **reference transport** for interoperability. | Normative MCP spec revision pinned in `docs/DEVELOPER.md` / bibliography; TLS termination; body size limits, heartbeats, backpressure (§4.2 residual). |
 | **Trace backend** | **Grafana Tempo** (OTLP); **metrics_generator** RED → Prometheus; exemplars for trace–metric correlation. | Sampling ratios, retention, attribute redaction details (§4.3 residual). |
 | **Metrics / OTel topology** | **Prometheus** + **OpenTelemetry Collector** as **sidecar** (gateway → OTLP → Collector → Tempo + Prometheus scrape). | OTLP gRPC vs HTTP from gateway to Collector; prod sampling (§4.3 residual). |
 | **AuthN (design-time)** | **JWT Bearer** with **JWKS**; validate `iss`, `aud`, `exp`. **Phases 1–2** run with **`AUTH_MODE=none`** (dev-only; not for public exposure). | Concrete IdP URLs, key rotation ops, rate limits, mTLS vs JWT for mesh (§4.6 residual). |
@@ -766,7 +766,7 @@ This subsection records **stack choices already reflected in this repository** v
 | **Router hyperparameters** | This plan includes a comparison framework; **table marks `topK`, `T_min`, `AllowAutoRename`, BM25 hybrid as TBD** pending phase-2 calibration on synthetic catalog (≥20 tools). | All numeric thresholds and `config.example.yaml` final values (§4.5). |
 | **Orchestrator behaviour** | Plan §3.A defers low-level detail to the repo. **Repo:** multiplexor implements **`__` namespacing**, **host `id` preservation**, **partial backend omit on `initialize` / list (R6)**, **application error codes** (`internal/gateway/errcodes`). | Per-backend concurrency caps, strict vs omit policy flag, OpenAPI for HTTP surface, operational timeouts in config (§4.7 residual). |
 
-**§4.11 checklist:** Items **1–4** and the **trace/metrics/embeddings** narrative are reflected in deployment scaffolding and this plan. Item **5** (router hyperparameters) has **structure + TBD** numeric values. Item **6** is **partially** closed (JWT direction + `AUTH_MODE=none`); **RAR canonical JSON remains open**. Item **7** is **partially** closed (**Go 1.26**); **MCP spec revision / dependency table** still to pin in README and `go.mod`.
+**§4.11 checklist:** Items **1–4** and the **trace/metrics/embeddings** narrative are reflected in deployment scaffolding and this plan. Item **5** (router hyperparameters) has **structure + TBD** numeric values. Item **6** is **partially** closed (JWT direction + `AUTH_MODE=none`); **RAR canonical JSON remains open**. Item **7** is **partially** closed (**Go 1.26**); **MCP spec revision / dependency table** still to pin in `docs/DEVELOPER.md` and `go.mod`.
 
 ---
 
@@ -785,7 +785,7 @@ This subsection records **stack choices already reflected in this repository** v
 
 **Alternatives to capture in a comparative table:** pgvector, ChromaDB — conclusion aligned with **Qdrant** for this work.
 
-**Residual operational choices** (architecture core choice fixed; tune in implementation / README):
+**Residual operational choices** (architecture core choice fixed; tune in implementation / `docs/DEVELOPER.md`):
 
 - **Client:** gateway implementation uses Qdrant’s **REST API** over HTTP; a future revision may add gRPC for latency-sensitive deployments.
 - **Distance / similarity:** **Cosine** fixed in this design (aligned with L2-normalised ONNX outputs §4.4); only revisit if embedding model changes.
@@ -806,7 +806,7 @@ This subsection records **stack choices already reflected in this repository** v
 
 **Residual / implementation choices:**
 
-- **Normative MCP revision:** version/commit or date of MCP spec and **Streamable HTTP / SSE** transport assumed by the project (fix in `go.mod` / README and bibliography).
+- **Normative MCP revision:** version/commit or date of MCP spec and **Streamable HTTP / SSE** transport assumed by the project (fix in `go.mod` / `docs/DEVELOPER.md` and bibliography).
 - **Concrete HTTP surface of the gateway:** the plan states the pattern generically; **repo implements** `GET /mcp/sse`, `POST /mcp/rpc`, session header **`Mcp-Session-Id`** (document in OpenAPI when added).
 - **SSE format:** event names (`event:`), `data` field structure (raw JSON vs envelope), **heartbeats** and read/write timeouts.
 - **TLS:** termination at ingress vs TLS in the binary; certificate policy academic vs corporate.
@@ -857,7 +857,7 @@ This subsection records **stack choices already reflected in this repository** v
 
 **Open choices (unchanged until calibration):**
 
-- **`tools/list` mode:** `assist_list` vs **`filter_list`** (intent-filtered subset via `X-MCP-Intent` / `hostctx`; see ADR 0002, `README.md`).
+- **`tools/list` mode:** `assist_list` vs **`filter_list`** (intent-filtered subset via `X-MCP-Intent` / `hostctx`; see ADR 0002, `docs/DEVELOPER.md`).
 - **`AllowAutoRename`:** recommended default **conservative `false`**; final policy TBD.
 - **`IntentText`:** standard documented mechanism (HTTP header name, JSON-RPC params field — **must be documented** and versioned).
 - **`topK` and `T_min` threshold** — **TBD** for production (defaults are starting points; measure with live embeddings).
@@ -973,7 +973,7 @@ To justify the work before the committee, the final document should include at l
 | 4 | Embeddings decision | **Done** — ONNX + MiniLM | `deployments/embed/` service |
 | 5 | Router hyperparams | **Partial** — table exists, values **TBD** | Await phase 2 + `config.example.yaml` |
 | 6 | RAR + AuthN | **Partial** — JWT direction + `AUTH_MODE=none`; **RAR JSON open** | Phase 3 |
-| 7 | Go + spec versions | **Partial** — **Go 1.26** stated; MCP revision still to pin in README/`go.mod` comment | `go.mod` 1.26.1 |
+| 7 | Go + spec versions | **Partial** — **Go 1.26** stated; MCP revision still to pin in `docs/DEVELOPER.md` / `go.mod` comment | `go.mod` 1.26.1 |
 
 Items **5–7** remain **open** until design and implementation close the remaining rows; items **1–4** are **closed** in this plan and reflected in deployment scaffolding.
 

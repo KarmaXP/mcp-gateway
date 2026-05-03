@@ -172,7 +172,7 @@ paths:
         `tools/list`, `tools/call`. Other methods receive a JSON-RPC error on the SSE stream.
 
         Optional header **`X-MCP-Intent`**: free-text session or user intent; forwarded to the semantic router for
-        **`tools/call`** and, when `ROUTER_MODE=filter_list`, for **`tools/list`** subsetting (see README).
+        **`tools/call`** and, when `ROUTER_MODE=filter_list`, for **`tools/list`** subsetting (see `docs/DEVELOPER.md`).
 
         When **`AUTH_MODE=jwt`**, optional claims **`mcp_tools`**, **`authorization_details`**, and **`mcp_tool_groups`**
         filter **`tools/list`** and reject **`tools/call`** outside the effective allow list (**-32003** on SSE); see `bearerAuth` and schema **`AuthorizationDetailsMcpTool`**.
