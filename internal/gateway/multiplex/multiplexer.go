@@ -58,8 +58,9 @@ type Multiplexer struct {
 	schemaMu       sync.RWMutex
 	toolValidators map[string]*jsonschema.Schema
 
-	strictInit bool
-	strictList bool
+	strictInit            bool
+	strictList            bool
+	reportPartialFailures bool
 }
 
 type Option func(*Multiplexer)
@@ -110,6 +111,10 @@ func WithAggregationStrict(strictInitialize, strictList bool) Option {
 		a.strictInit = strictInitialize
 		a.strictList = strictList
 	}
+}
+
+func WithReportPartialFailures(report bool) Option {
+	return func(a *Multiplexer) { a.reportPartialFailures = report }
 }
 
 func New(upstreams []backend.Upstream, opts ...Option) (*Multiplexer, error) {
@@ -167,6 +172,7 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 	results := make([]json.RawMessage, len(a.upstreams))
 	var mu sync.Mutex
 	var strictFailed bool
+	var initFailures []PartialFailure
 
 	g, ctx := errgroup.WithContext(tctx)
 	for i, b := range a.upstreams {
@@ -183,6 +189,10 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 					mu.Lock()
 					strictFailed = true
 					mu.Unlock()
+				} else {
+					mu.Lock()
+					initFailures = append(initFailures, PartialFailure{BackendID: b.ID(), Reason: classifyCallFailure(err)})
+					mu.Unlock()
 				}
 				return nil
 			}
@@ -191,6 +201,10 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 				if a.strictInit {
 					mu.Lock()
 					strictFailed = true
+					mu.Unlock()
+				} else {
+					mu.Lock()
+					initFailures = append(initFailures, PartialFailure{BackendID: b.ID(), Reason: PartialFailureJSONRPC})
 					mu.Unlock()
 				}
 				return nil
@@ -211,10 +225,16 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 		return rpc.NewError(hostID, errcodes.StrictAggregationFailed, "gateway: strict initialize: one or more upstreams failed", nil), nil
 	}
 
-	merged, err := mergeInitializeResults(results, a.upstreams)
+	merged, mergeFailures, err := mergeInitializeResults(results, a.upstreams)
 	if err != nil {
 		span.SetStatus(codes.Error, "all upstreams failed initialize")
 		return rpc.NewError(hostID, errcodes.GatewayInternal, "gateway: all upstreams failed initialize", nil), nil
+	}
+	if a.reportPartialFailures {
+		allFailures := append(append([]PartialFailure(nil), initFailures...), mergeFailures...)
+		if len(allFailures) > 0 {
+			attachInitPartialFailures(merged, allFailures)
+		}
 	}
 	raw, err := json.Marshal(merged)
 	if err != nil {
@@ -239,7 +259,7 @@ func hostParams() json.RawMessage {
 	return b
 }
 
-func mergeInitializeResults(results []json.RawMessage, upstreams []backend.Upstream) (map[string]any, error) {
+func mergeInitializeResults(results []json.RawMessage, upstreams []backend.Upstream) (map[string]any, []PartialFailure, error) {
 	merged := map[string]any{
 		"protocolVersion": mcpwire.MCPProtocolVersion,
 		"capabilities":    map[string]any{},
@@ -254,6 +274,7 @@ func mergeInitializeResults(results []json.RawMessage, upstreams []backend.Upstr
 	capRoot := merged["capabilities"].(map[string]any)
 	backendsList := merged["serverInfo"].(map[string]any)["extras"].(map[string]any)["backends"].([]string)
 
+	var mergeFailures []PartialFailure
 	anyOK := false
 	for i, b := range upstreams {
 		if len(results[i]) == 0 {
@@ -262,6 +283,7 @@ func mergeInitializeResults(results []json.RawMessage, upstreams []backend.Upstr
 		var one map[string]any
 		if err := json.Unmarshal(results[i], &one); err != nil {
 			slog.Warn("initialize merge: skip backend", "backend_id", b.ID(), "err", err)
+			mergeFailures = append(mergeFailures, PartialFailure{BackendID: b.ID(), Reason: PartialFailureOmitted})
 			continue
 		}
 		anyOK = true
@@ -272,10 +294,10 @@ func mergeInitializeResults(results []json.RawMessage, upstreams []backend.Upstr
 		backendsList = append(backendsList, b.ID())
 	}
 	if !anyOK {
-		return nil, errNoUpstreamsResponded
+		return nil, nil, errNoUpstreamsResponded
 	}
 	merged["serverInfo"].(map[string]any)["extras"].(map[string]any)["backends"] = backendsList
-	return merged, nil
+	return merged, mergeFailures, nil
 }
 
 func shallowMerge(dst map[string]any, src any) {
@@ -302,6 +324,10 @@ func cloneMap(m map[string]any) map[string]any {
 		out[k] = v
 	}
 	return out
+}
+
+func (a *Multiplexer) InvalidateToolCache() {
+	a.invalidateToolCache()
 }
 
 func (a *Multiplexer) invalidateToolCache() {

@@ -171,6 +171,12 @@ paths:
         Supported methods (Phase 1–2 baseline): `initialize`, `ping`, `notifications/initialized` (or `initialized`),
         `tools/list`, `tools/call`. Other methods receive a JSON-RPC error on the SSE stream.
 
+        When **`aggregation.report_partial_failures`** is enabled, aggregated **`initialize`** and list RPC results
+        may include **`extras.partial_failures`**: an array of `{ "backend_id", "reason" }` entries for upstreams omitted
+        from the merge (stable reason codes only: `transport_error`, `jsonrpc_error`, `timeout`, `omitted`). On
+        **`initialize`**, this lives under **`result.serverInfo.extras`**; on **`tools/list`** (and other list RPCs),
+        under top-level **`result.extras`** alongside the list payload.
+
         Optional header **`X-MCP-Intent`**: free-text session or user intent; forwarded to the semantic router for
         **`tools/call`** and, when `ROUTER_MODE=filter_list`, for **`tools/list`** subsetting (see `docs/DEVELOPER.md`).
 

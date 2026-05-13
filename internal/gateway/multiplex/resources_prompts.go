@@ -27,13 +27,17 @@ func (a *Multiplexer) ResourcesList(ctx context.Context, hostID json.RawMessage)
 		attribute.String(telemetry.AttrMCPMethod, "resources/list"),
 		telemetry.AttrJSONRPCID(hostID),
 	)
-	per, anyFail := a.listResourcesFromEachUpstream(tctx)
+	per, failures, anyFail := a.listResourcesFromEachUpstream(tctx)
 	if a.strictList && anyFail {
 		span.SetStatus(codes.Error, "strict resources/list")
 		return rpc.NewError(hostID, errcodes.StrictAggregationFailed, "resources/list: strict aggregation: one or more upstreams failed", nil), nil
 	}
 	merged := mergeNamespacedResources(a.upstreams, per)
-	raw, err := json.Marshal(map[string]any{"resources": merged})
+	payload := map[string]any{"resources": merged}
+	if a.reportPartialFailures && len(failures) > 0 {
+		attachListExtrasPartialFailures(payload, failures)
+	}
+	raw, err := json.Marshal(payload)
 	if err != nil {
 		span.SetStatus(codes.Error, "marshal resources/list")
 		return nil, fmt.Errorf("multiplex: marshal resources/list: %w", err)
@@ -75,13 +79,17 @@ func (a *Multiplexer) PromptsList(ctx context.Context, hostID json.RawMessage) (
 		attribute.String(telemetry.AttrMCPMethod, "prompts/list"),
 		telemetry.AttrJSONRPCID(hostID),
 	)
-	per, anyFail := a.listPromptsFromEachUpstream(tctx)
+	per, failures, anyFail := a.listPromptsFromEachUpstream(tctx)
 	if a.strictList && anyFail {
 		span.SetStatus(codes.Error, "strict prompts/list")
 		return rpc.NewError(hostID, errcodes.StrictAggregationFailed, "prompts/list: strict aggregation: one or more upstreams failed", nil), nil
 	}
 	merged := mergeNamespacedPrompts(a.upstreams, per)
-	raw, err := json.Marshal(map[string]any{"prompts": merged})
+	payload := map[string]any{"prompts": merged}
+	if a.reportPartialFailures && len(failures) > 0 {
+		attachListExtrasPartialFailures(payload, failures)
+	}
+	raw, err := json.Marshal(payload)
 	if err != nil {
 		span.SetStatus(codes.Error, "marshal prompts/list")
 		return nil, fmt.Errorf("multiplex: marshal prompts/list: %w", err)
@@ -172,11 +180,11 @@ func parsePromptsGetParams(hostID, params json.RawMessage) (namespacedName strin
 	return p.Name, p.Arguments, nil
 }
 
-func (a *Multiplexer) listResourcesFromEachUpstream(ctx context.Context) ([][]map[string]any, bool) {
+func (a *Multiplexer) listResourcesFromEachUpstream(ctx context.Context) ([][]map[string]any, []PartialFailure, bool) {
 	return a.fanoutListMethod(ctx, "resources/list", a.callUpstreamResourcesList)
 }
 
-func (a *Multiplexer) callUpstreamResourcesList(ctx context.Context, b backend.Upstream) ([]map[string]any, bool) {
+func (a *Multiplexer) callUpstreamResourcesList(ctx context.Context, b backend.Upstream) ([]map[string]any, *PartialFailure) {
 	callCtx, cancel := context.WithTimeout(ctx, a.listTimeout)
 	defer cancel()
 	subID := json.RawMessage(fmt.Sprintf(`"gw-reslist-%s"`, b.ID()))
@@ -184,30 +192,30 @@ func (a *Multiplexer) callUpstreamResourcesList(ctx context.Context, b backend.U
 	resp, err := b.Call(callCtx, req)
 	if err != nil {
 		slog.Warn("resources/list backend failed", "backend_id", b.ID(), "err", err)
-		return nil, false
+		return nil, &PartialFailure{BackendID: b.ID(), Reason: classifyCallFailure(err)}
 	}
 	if resp.Error != nil {
 		if resp.Error.Code == errcodes.MethodNotFound {
-			return []map[string]any{}, true
+			return []map[string]any{}, nil
 		}
 		slog.Warn("resources/list jsonrpc error", "backend_id", b.ID(), "message", resp.Error.Message)
-		return nil, false
+		return nil, &PartialFailure{BackendID: b.ID(), Reason: PartialFailureJSONRPC}
 	}
 	var body struct {
 		Resources []map[string]any `json:"resources"`
 	}
 	if err := json.Unmarshal(resp.Result, &body); err != nil {
 		slog.Warn("resources/list decode", "backend_id", b.ID(), "err", err)
-		return nil, false
+		return nil, &PartialFailure{BackendID: b.ID(), Reason: PartialFailureOmitted}
 	}
-	return body.Resources, true
+	return body.Resources, nil
 }
 
-func (a *Multiplexer) listPromptsFromEachUpstream(ctx context.Context) ([][]map[string]any, bool) {
+func (a *Multiplexer) listPromptsFromEachUpstream(ctx context.Context) ([][]map[string]any, []PartialFailure, bool) {
 	return a.fanoutListMethod(ctx, "prompts/list", a.callUpstreamPromptsList)
 }
 
-func (a *Multiplexer) callUpstreamPromptsList(ctx context.Context, b backend.Upstream) ([]map[string]any, bool) {
+func (a *Multiplexer) callUpstreamPromptsList(ctx context.Context, b backend.Upstream) ([]map[string]any, *PartialFailure) {
 	callCtx, cancel := context.WithTimeout(ctx, a.listTimeout)
 	defer cancel()
 	subID := json.RawMessage(fmt.Sprintf(`"gw-prlist-%s"`, b.ID()))
@@ -215,40 +223,42 @@ func (a *Multiplexer) callUpstreamPromptsList(ctx context.Context, b backend.Ups
 	resp, err := b.Call(callCtx, req)
 	if err != nil {
 		slog.Warn("prompts/list backend failed", "backend_id", b.ID(), "err", err)
-		return nil, false
+		return nil, &PartialFailure{BackendID: b.ID(), Reason: classifyCallFailure(err)}
 	}
 	if resp.Error != nil {
 		if resp.Error.Code == errcodes.MethodNotFound {
-			return []map[string]any{}, true
+			return []map[string]any{}, nil
 		}
 		slog.Warn("prompts/list jsonrpc error", "backend_id", b.ID(), "message", resp.Error.Message)
-		return nil, false
+		return nil, &PartialFailure{BackendID: b.ID(), Reason: PartialFailureJSONRPC}
 	}
 	var body struct {
 		Prompts []map[string]any `json:"prompts"`
 	}
 	if err := json.Unmarshal(resp.Result, &body); err != nil {
 		slog.Warn("prompts/list decode", "backend_id", b.ID(), "err", err)
-		return nil, false
+		return nil, &PartialFailure{BackendID: b.ID(), Reason: PartialFailureOmitted}
 	}
-	return body.Prompts, true
+	return body.Prompts, nil
 }
 
-type listFetchFunc func(context.Context, backend.Upstream) ([]map[string]any, bool)
+type listFetchFunc func(context.Context, backend.Upstream) ([]map[string]any, *PartialFailure)
 
-func (a *Multiplexer) fanoutListMethod(ctx context.Context, method string, fetch listFetchFunc) ([][]map[string]any, bool) {
+func (a *Multiplexer) fanoutListMethod(ctx context.Context, method string, fetch listFetchFunc) ([][]map[string]any, []PartialFailure, bool) {
 	n := len(a.upstreams)
 	results := make([][]map[string]any, n)
+	var failures []PartialFailure
 	var anyFail bool
 	g, gctx := errgroup.WithContext(ctx)
 	var mu sync.Mutex
 	for i, b := range a.upstreams {
 		i, b := i, b
 		g.Go(func() error {
-			items, ok := fetch(gctx, b)
+			items, fail := fetch(gctx, b)
 			mu.Lock()
-			if !ok {
+			if fail != nil {
 				anyFail = true
+				failures = append(failures, *fail)
 			}
 			results[i] = items
 			mu.Unlock()
@@ -258,7 +268,7 @@ func (a *Multiplexer) fanoutListMethod(ctx context.Context, method string, fetch
 	if err := g.Wait(); err != nil {
 		slog.Warn("list fanout", "method", method, "err", err)
 	}
-	return results, anyFail
+	return results, failures, anyFail
 }
 
 func mergeNamespacedResources(upstreams []backend.Upstream, perUpstream [][]map[string]any) []map[string]any {

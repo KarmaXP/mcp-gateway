@@ -26,6 +26,8 @@ type GatewayConfig struct {
 type AggregationSettings struct {
 	StrictInitialize        bool   `yaml:"strict_initialize"`
 	StrictList              bool   `yaml:"strict_list"`
+	ReportPartialFailures   bool   `yaml:"report_partial_failures"`
+	ForwardToolsListChanged bool   `yaml:"forward_tools_list_changed"`
 	InitTimeout             string `yaml:"init_timeout"`
 	ListTimeout             string `yaml:"list_timeout"`
 	CallTimeout             string `yaml:"call_timeout"`
@@ -204,6 +206,16 @@ func (c *GatewayConfig) ApplyEnvOverrides() {
 	if v := strings.ToLower(strings.TrimSpace(os.Getenv("AGGREGATION_STRICT_LIST"))); v == "1" || v == "true" || v == "yes" {
 		c.Aggregation.StrictList = true
 	}
+	if v := strings.ToLower(strings.TrimSpace(os.Getenv("AGGREGATION_FORWARD_TOOLS_LIST_CHANGED"))); v == "1" || v == "true" || v == "yes" {
+		c.Aggregation.ForwardToolsListChanged = true
+	}
+	if v := strings.ToLower(strings.TrimSpace(os.Getenv("AGGREGATION_REPORT_PARTIAL_FAILURES"))); v == "1" || v == "true" || v == "yes" {
+		c.Aggregation.ReportPartialFailures = true
+	}
+}
+
+func (c *GatewayConfig) ForwardToolsListChanged() bool {
+	return c != nil && c.Aggregation.ForwardToolsListChanged
 }
 
 func (c *GatewayConfig) RouterEmbedTimeout() time.Duration {

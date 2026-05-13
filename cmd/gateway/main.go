@@ -186,6 +186,7 @@ func main() {
 	}
 	mpxOpts = append(mpxOpts, multiplex.WithPolicyHolder(polHolder))
 	mpxOpts = append(mpxOpts, multiplex.WithAggregationStrict(cfg.Aggregation.StrictInitialize, cfg.Aggregation.StrictList))
+	mpxOpts = append(mpxOpts, multiplex.WithReportPartialFailures(cfg.Aggregation.ReportPartialFailures))
 	mpx, err := multiplex.New(upstreams, mpxOpts...)
 	if err != nil {
 		slog.Error("multiplexer", "err", err)

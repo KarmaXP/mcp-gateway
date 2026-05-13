@@ -38,7 +38,7 @@ func (a *Multiplexer) ToolsList(ctx context.Context, hostID json.RawMessage) (*r
 		return resp, nil
 	}
 
-	merged, err := a.fetchAndMergeUpstreamTools(tctx)
+	merged, listFailures, err := a.fetchAndMergeUpstreamTools(tctx)
 	if err != nil {
 		span.SetStatus(codes.Error, "tools/list upstream strict")
 		return rpc.NewError(hostID, errcodes.StrictAggregationFailed, "tools/list: strict aggregation: one or more upstreams failed", nil), nil
@@ -79,7 +79,7 @@ func (a *Multiplexer) ToolsList(ctx context.Context, hostID json.RawMessage) (*r
 	}
 
 	muxStart := time.Now()
-	toReturn, err := a.toolsListPayloadForClient(mergedForList, allowed)
+	toReturn, err := a.toolsListPayloadForClient(mergedForList, allowed, listFailures)
 	telemetry.RecordInternalPhase(tctx, "tools/list", defaults.MetricInternalPhaseMux, time.Since(muxStart))
 	if err != nil {
 		span.SetStatus(codes.Error, "tools/list policy")
@@ -110,17 +110,18 @@ func (a *Multiplexer) tryCachedToolsList(ctx context.Context, hostID json.RawMes
 	return rpc.NewResult(hostID, cachedCopy), true
 }
 
-func (a *Multiplexer) fetchAndMergeUpstreamTools(ctx context.Context) ([]map[string]any, error) {
-	perUpstream, anyFail := a.listToolsFromEachUpstream(ctx)
+func (a *Multiplexer) fetchAndMergeUpstreamTools(ctx context.Context) ([]map[string]any, []PartialFailure, error) {
+	perUpstream, failures, anyFail := a.listToolsFromEachUpstream(ctx)
 	if a.strictList && anyFail {
-		return nil, fmt.Errorf("tools/list: upstream failure")
+		return nil, nil, fmt.Errorf("tools/list: upstream failure")
 	}
-	return mergeNamespacedToolList(a.upstreams, perUpstream), nil
+	return mergeNamespacedToolList(a.upstreams, perUpstream), failures, nil
 }
 
-func (a *Multiplexer) listToolsFromEachUpstream(ctx context.Context) ([][]map[string]any, bool) {
+func (a *Multiplexer) listToolsFromEachUpstream(ctx context.Context) ([][]map[string]any, []PartialFailure, bool) {
 	n := len(a.upstreams)
 	results := make([][]map[string]any, n)
+	var failures []PartialFailure
 	var anyFail bool
 	g, gctx := errgroup.WithContext(ctx)
 	var mu sync.Mutex
@@ -128,10 +129,11 @@ func (a *Multiplexer) listToolsFromEachUpstream(ctx context.Context) ([][]map[st
 	for i, b := range a.upstreams {
 		i, b := i, b
 		g.Go(func() error {
-			tools, ok := a.callUpstreamToolsList(gctx, b)
+			tools, fail := a.callUpstreamToolsList(gctx, b)
 			mu.Lock()
-			if !ok {
+			if fail != nil {
 				anyFail = true
+				failures = append(failures, *fail)
 			}
 			results[i] = tools
 			mu.Unlock()
@@ -141,10 +143,10 @@ func (a *Multiplexer) listToolsFromEachUpstream(ctx context.Context) ([][]map[st
 	if err := g.Wait(); err != nil {
 		slog.Warn("tools/list upstream group", "err", err)
 	}
-	return results, anyFail
+	return results, failures, anyFail
 }
 
-func (a *Multiplexer) callUpstreamToolsList(ctx context.Context, b backend.Upstream) ([]map[string]any, bool) {
+func (a *Multiplexer) callUpstreamToolsList(ctx context.Context, b backend.Upstream) ([]map[string]any, *PartialFailure) {
 	callCtx, cancel := context.WithTimeout(ctx, a.listTimeout)
 	defer cancel()
 	subID := json.RawMessage(fmt.Sprintf(`"gw-list-%s"`, b.ID()))
@@ -152,20 +154,20 @@ func (a *Multiplexer) callUpstreamToolsList(ctx context.Context, b backend.Upstr
 	resp, err := b.Call(callCtx, req)
 	if err != nil {
 		slog.Warn("tools/list backend failed", "backend_id", b.ID(), "err", err)
-		return nil, false
+		return nil, &PartialFailure{BackendID: b.ID(), Reason: classifyCallFailure(err)}
 	}
 	if resp.Error != nil {
 		slog.Warn("tools/list jsonrpc error", "backend_id", b.ID(), "message", resp.Error.Message)
-		return nil, false
+		return nil, &PartialFailure{BackendID: b.ID(), Reason: PartialFailureJSONRPC}
 	}
 	var body struct {
 		Tools []map[string]any `json:"tools"`
 	}
 	if err := json.Unmarshal(resp.Result, &body); err != nil {
 		slog.Warn("tools/list decode", "backend_id", b.ID(), "err", err)
-		return nil, false
+		return nil, &PartialFailure{BackendID: b.ID(), Reason: PartialFailureOmitted}
 	}
-	return body.Tools, true
+	return body.Tools, nil
 }
 
 func mergeNamespacedToolList(upstreams []backend.Upstream, perUpstream [][]map[string]any) []map[string]any {
@@ -237,23 +239,25 @@ func (a *Multiplexer) maybeReindexSemanticCatalog(ctx context.Context, merged []
 	telemetry.SetIndexedCatalogToolCount(int64(len(indexed)))
 }
 
-func (a *Multiplexer) toolsListPayloadForClient(merged []map[string]any, allowed []string) (json.RawMessage, error) {
+func (a *Multiplexer) toolsListPayloadForClient(merged []map[string]any, allowed []string, failures []PartialFailure) (json.RawMessage, error) {
+	var payload map[string]any
 	if len(allowed) == 0 {
-		raw, err := json.Marshal(map[string]any{"tools": merged})
+		payload = map[string]any{"tools": merged}
+	} else {
+		filtered, err := filterToolsForPolicy(merged, allowed)
 		if err != nil {
-			return nil, fmt.Errorf("multiplex: marshal tools/list: %w", err)
+			return nil, fmt.Errorf("multiplex: tools/list policy: %w", err)
 		}
-		return raw, nil
+		payload = map[string]any{"tools": filtered}
 	}
-	filtered, err := filterToolsForPolicy(merged, allowed)
+	if a.reportPartialFailures && len(failures) > 0 {
+		attachListExtrasPartialFailures(payload, failures)
+	}
+	raw, err := json.Marshal(payload)
 	if err != nil {
-		return nil, fmt.Errorf("multiplex: tools/list policy: %w", err)
+		return nil, fmt.Errorf("multiplex: marshal tools/list: %w", err)
 	}
-	filteredRaw, err := json.Marshal(map[string]any{"tools": filtered})
-	if err != nil {
-		return nil, fmt.Errorf("multiplex: marshal filtered tools/list: %w", err)
-	}
-	return filteredRaw, nil
+	return raw, nil
 }
 
 func filterMergedByToolNames(merged []map[string]any, keep map[string]struct{}) []map[string]any {

@@ -13,6 +13,7 @@
 #   init_timeout: 5s
 #   list_timeout: 10s
 #   call_timeout: 60s
+#   report_partial_failures: false
 # Env: AGGREGATION_STRICT_INITIALIZE=1, AGGREGATION_STRICT_LIST=1
 
 # Gateway policy (RAR merge, tool groups, elevated tools requiring JSON Schema — see internal/policy).
