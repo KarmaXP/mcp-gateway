@@ -23,12 +23,12 @@ type GatewayConfig struct {
 	Embedding      EmbeddingServiceSettings `yaml:"embed"`
 }
 
-// AggregationSettings controls partial-failure behavior across backends (R6).
-// Default (all false): omit failed upstreams; session continues if at least one succeeds.
 type AggregationSettings struct {
-	StrictInitialize bool `yaml:"strict_initialize"`
-	// StrictList applies to tools/list, resources/list, and prompts/list.
-	StrictList bool `yaml:"strict_list"`
+	StrictInitialize        bool   `yaml:"strict_initialize"`
+	StrictList              bool   `yaml:"strict_list"`
+	InitTimeout             string `yaml:"init_timeout"`
+	ListTimeout             string `yaml:"list_timeout"`
+	CallTimeout             string `yaml:"call_timeout"`
 }
 
 // RAR merge with JWT allow lists, elevated tools (strict schema), tool groups.
@@ -224,6 +224,36 @@ func (c *GatewayConfig) RouterQueryTimeout() time.Duration {
 		return d
 	}
 	return defaults.RouterQueryTimeout
+}
+
+func (c *GatewayConfig) AggregationInitTimeout() time.Duration {
+	if c == nil {
+		return defaults.MultiplexInitTimeout
+	}
+	if d, err := parseDurationString(c.Aggregation.InitTimeout); err == nil && d > 0 {
+		return d
+	}
+	return defaults.MultiplexInitTimeout
+}
+
+func (c *GatewayConfig) AggregationListTimeout() time.Duration {
+	if c == nil {
+		return defaults.MultiplexListTimeout
+	}
+	if d, err := parseDurationString(c.Aggregation.ListTimeout); err == nil && d > 0 {
+		return d
+	}
+	return defaults.MultiplexListTimeout
+}
+
+func (c *GatewayConfig) AggregationCallTimeout() time.Duration {
+	if c == nil {
+		return defaults.MultiplexCallTimeout
+	}
+	if d, err := parseDurationString(c.Aggregation.CallTimeout); err == nil && d > 0 {
+		return d
+	}
+	return defaults.MultiplexCallTimeout
 }
 
 func parseDurationString(s string) (time.Duration, error) {

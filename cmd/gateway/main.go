@@ -52,7 +52,12 @@ func preflightQdrant(cfg config.GatewayConfig) {
 }
 
 func multiplexerOptions(cfg config.GatewayConfig) ([]multiplex.Option, error) {
-	opts := []multiplex.Option{multiplex.WithListTTL(0)}
+	opts := []multiplex.Option{
+		multiplex.WithListTTL(0),
+		multiplex.WithInitTimeout(cfg.AggregationInitTimeout()),
+		multiplex.WithListTimeout(cfg.AggregationListTimeout()),
+		multiplex.WithCallTimeout(cfg.AggregationCallTimeout()),
+	}
 	mode := strings.ToLower(strings.TrimSpace(cfg.SemanticRouter.Mode))
 	if mode == "" {
 		mode = string(router.ModeOff)

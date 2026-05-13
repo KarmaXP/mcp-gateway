@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -86,4 +87,44 @@ func TestQdrantCollectionDefault(t *testing.T) {
 	require.Equal(t, defaults.DefaultQdrantCollectionName, c.QdrantCollection())
 	c.Qdrant.Collection = "custom"
 	require.Equal(t, "custom", c.QdrantCollection())
+}
+
+func TestAggregationTimeoutsFromYAML(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "g.yaml")
+	err := os.WriteFile(p, []byte(`
+backends:
+  - id: one
+    prefix: a
+    url: http://example.invalid:9
+aggregation:
+  init_timeout: 3s
+  list_timeout: 7s
+  call_timeout: 90s
+`), 0o644)
+	require.NoError(t, err)
+	t.Setenv("MCP_GATEWAY_CONFIG", p)
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, 3*time.Second, cfg.AggregationInitTimeout())
+	require.Equal(t, 7*time.Second, cfg.AggregationListTimeout())
+	require.Equal(t, 90*time.Second, cfg.AggregationCallTimeout())
+}
+
+func TestAggregationTimeoutsDefault(t *testing.T) {
+	var c GatewayConfig
+	require.Equal(t, defaults.MultiplexInitTimeout, c.AggregationInitTimeout())
+	require.Equal(t, defaults.MultiplexListTimeout, c.AggregationListTimeout())
+	require.Equal(t, defaults.MultiplexCallTimeout, c.AggregationCallTimeout())
+}
+
+func TestAggregationTimeoutsIgnoreInvalid(t *testing.T) {
+	c := GatewayConfig{Aggregation: AggregationSettings{
+		InitTimeout: "not-a-duration",
+		ListTimeout: "0s",
+		CallTimeout: "",
+	}}
+	require.Equal(t, defaults.MultiplexInitTimeout, c.AggregationInitTimeout())
+	require.Equal(t, defaults.MultiplexListTimeout, c.AggregationListTimeout())
+	require.Equal(t, defaults.MultiplexCallTimeout, c.AggregationCallTimeout())
 }
