@@ -50,11 +50,11 @@ type MockUpstream struct {
 
 func NewMockUpstream(id, prefix string, toolNames []string) *MockUpstream {
 	return &MockUpstream{
-		id:                 id,
-		prefix:             prefix,
-		toolNames:          append([]string(nil), toolNames...),
-		OmitResourcesList:  true,
-		OmitPromptsList:    true,
+		id:                id,
+		prefix:            prefix,
+		toolNames:         append([]string(nil), toolNames...),
+		OmitResourcesList: true,
+		OmitPromptsList:   true,
 	}
 }
 

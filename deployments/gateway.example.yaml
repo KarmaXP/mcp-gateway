@@ -13,6 +13,7 @@
 #   init_timeout: 5s
 #   list_timeout: 10s
 #   call_timeout: 60s
+#   list_cache_ttl: 30s
 #   report_partial_failures: false
 #   forward_tools_list_changed: false
 # Env: AGGREGATION_STRICT_INITIALIZE=1, AGGREGATION_STRICT_LIST=1
