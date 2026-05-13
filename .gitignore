@@ -20,6 +20,7 @@ vendor/
 # Logs and temporary files
 *.log
 tmp/
+improvements.md
 
 # OS specific files
 .DS_Store
