@@ -16,6 +16,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/config"
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/httpserver"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/orchestrator"
 	"github.com/KarmaXP/mcp-gateway/internal/policy"
@@ -23,6 +24,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/router/embed"
 	"github.com/KarmaXP/mcp-gateway/internal/router/rules"
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
+	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
 )
 
@@ -53,7 +55,7 @@ func preflightQdrant(cfg config.GatewayConfig) {
 
 func multiplexerOptions(cfg config.GatewayConfig) ([]multiplex.Option, error) {
 	opts := []multiplex.Option{
-		multiplex.WithListTTL(0),
+		multiplex.WithListTTL(cfg.AggregationListCacheTTL()),
 		multiplex.WithInitTimeout(cfg.AggregationInitTimeout()),
 		multiplex.WithListTimeout(cfg.AggregationListTimeout()),
 		multiplex.WithCallTimeout(cfg.AggregationCallTimeout()),
@@ -196,6 +198,17 @@ func main() {
 	httpOpts := orchestrator.HTTPServerOptions(defaults.DefaultTelemetryServiceName, authCfg, validator, polHolder, ratelimit.FromEnvironment())
 	httpOpts = append(httpOpts, httpserver.WithShutdownContext(rootCtx))
 	srv := httpserver.New(mpx, addr, httpOpts...)
+
+	if cfg.ForwardToolsListChanged() {
+		backend.RegisterNotificationHandlers(upstreams, func(req *rpc.Request) {
+			if req == nil || !mcpwire.IsToolsListChangedNotification(req.Method) {
+				return
+			}
+			mpx.InvalidateToolCache()
+			srv.BroadcastNotification(req)
+		})
+		slog.Info("upstream tools/list_changed forwarding enabled")
+	}
 
 	go func() {
 		ch := make(chan os.Signal, 1)

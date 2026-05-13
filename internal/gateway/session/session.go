@@ -62,6 +62,21 @@ func (sm *SessionManager) Remove(id string) {
 	sm.mu.Unlock()
 }
 
+func (sm *SessionManager) BroadcastNotification(req *rpc.Request) {
+	if req == nil {
+		return
+	}
+	sm.mu.RLock()
+	sessions := make([]*Session, 0, len(sm.sessions))
+	for _, s := range sm.sessions {
+		sessions = append(sessions, s)
+	}
+	sm.mu.RUnlock()
+	for _, s := range sessions {
+		_ = s.EnqueueNotification(req)
+	}
+}
+
 type Session struct {
 	id     string
 	ctx    context.Context
@@ -131,6 +146,27 @@ func (s *Session) EnqueueResponse(resp *rpc.Response) error {
 	b, err := resp.Marshal()
 	if err != nil {
 		return fmt.Errorf("session: marshal response: %w", err)
+	}
+	select {
+	case <-s.ctx.Done():
+		return s.ctx.Err()
+	case s.out <- b:
+	}
+	return nil
+}
+
+func (s *Session) EnqueueNotification(req *rpc.Request) error {
+	if req == nil {
+		return nil
+	}
+	notify := &rpc.Request{
+		JSONRPC: rpc.JSONRPCVersion,
+		Method:  req.Method,
+		Params:  req.Params,
+	}
+	b, err := rpc.MarshalRequest(notify)
+	if err != nil {
+		return fmt.Errorf("session: marshal notification: %w", err)
 	}
 	select {
 	case <-s.ctx.Done():

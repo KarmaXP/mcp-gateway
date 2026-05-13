@@ -43,6 +43,9 @@ type HTTPMCPUpstream struct {
 
 	pendMu  sync.Mutex
 	pending map[string]chan *rpc.Response
+
+	onNotifMu sync.Mutex
+	onNotif   func(*rpc.Request)
 }
 
 func NewHTTPMCPUpstream(lifecycle context.Context, id, prefix, baseURL string, maxConcurrency int64, bearerToken string) (*HTTPMCPUpstream, func(), error) {
@@ -74,6 +77,12 @@ func NewHTTPMCPUpstream(lifecycle context.Context, id, prefix, baseURL string, m
 
 func (c *HTTPMCPUpstream) ID() string     { return c.id }
 func (c *HTTPMCPUpstream) Prefix() string { return c.prefix }
+
+func (c *HTTPMCPUpstream) SetOnNotification(fn func(*rpc.Request)) {
+	c.onNotifMu.Lock()
+	c.onNotif = fn
+	c.onNotifMu.Unlock()
+}
 
 func (c *HTTPMCPUpstream) sseURL() string { return c.base + mcpwire.PathMCPSSE }
 func (c *HTTPMCPUpstream) rpcURL() string { return c.base + mcpwire.PathMCPRPC }
@@ -194,23 +203,33 @@ func (c *HTTPMCPUpstream) readSSE(body io.Reader, ctx context.Context) {
 
 func (c *HTTPMCPUpstream) dispatch(raw []byte) {
 	resp, err := rpc.ParseResponse(raw)
-	if err != nil {
+	if err == nil {
+		key := idKey(resp.ID)
+		if key == "" {
+			return
+		}
+		c.pendMu.Lock()
+		ch := c.pending[key]
+		delete(c.pending, key)
+		c.pendMu.Unlock()
+		if ch == nil {
+			return
+		}
+		select {
+		case ch <- resp:
+		default:
+		}
 		return
 	}
-	key := idKey(resp.ID)
-	if key == "" {
+	req, err := rpc.ParseRequest(raw)
+	if err != nil || !req.IsNotification() {
 		return
 	}
-	c.pendMu.Lock()
-	ch := c.pending[key]
-	delete(c.pending, key)
-	c.pendMu.Unlock()
-	if ch == nil {
-		return
-	}
-	select {
-	case ch <- resp:
-	default:
+	c.onNotifMu.Lock()
+	fn := c.onNotif
+	c.onNotifMu.Unlock()
+	if fn != nil {
+		fn(req)
 	}
 }
 

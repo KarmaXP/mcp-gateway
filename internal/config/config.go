@@ -31,6 +31,7 @@ type AggregationSettings struct {
 	InitTimeout             string `yaml:"init_timeout"`
 	ListTimeout             string `yaml:"list_timeout"`
 	CallTimeout             string `yaml:"call_timeout"`
+	ListCacheTTL            string `yaml:"list_cache_ttl"`
 }
 
 // RAR merge with JWT allow lists, elevated tools (strict schema), tool groups.
@@ -266,6 +267,16 @@ func (c *GatewayConfig) AggregationCallTimeout() time.Duration {
 		return d
 	}
 	return defaults.MultiplexCallTimeout
+}
+
+func (c *GatewayConfig) AggregationListCacheTTL() time.Duration {
+	if c == nil {
+		return 0
+	}
+	if d, err := parseDurationString(c.Aggregation.ListCacheTTL); err == nil && d > 0 {
+		return d
+	}
+	return 0
 }
 
 func parseDurationString(s string) (time.Duration, error) {

@@ -9,4 +9,11 @@ const (
 	SSEEventLinePrefix = "event:"
 	SSEDataLinePrefix = "data:"
 	SSEJSONRPCEvent = "jsonrpc"
+
+	NotificationToolsListChanged = "notifications/tools/list_changed"
+	LegacyToolsListChanged = "tools/list_changed"
 )
+
+func IsToolsListChangedNotification(method string) bool {
+	return method == NotificationToolsListChanged || method == LegacyToolsListChanged
+}

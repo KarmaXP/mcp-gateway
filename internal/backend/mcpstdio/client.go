@@ -43,6 +43,9 @@ type StdioMCPUpstream struct {
 	pendMu  sync.Mutex
 	pending map[string]chan *rpc.Response
 	readWG  sync.WaitGroup
+
+	onNotifMu sync.Mutex
+	onNotif   func(*rpc.Request)
 }
 
 func NewStdioMCPUpstream(lifecycle context.Context, id, prefix string, command, extraEnv []string, maxConcurrency int64) (*StdioMCPUpstream, func(), error) {
@@ -69,6 +72,12 @@ func NewStdioMCPUpstream(lifecycle context.Context, id, prefix string, command, 
 
 func (c *StdioMCPUpstream) ID() string     { return c.id }
 func (c *StdioMCPUpstream) Prefix() string { return c.prefix }
+
+func (c *StdioMCPUpstream) SetOnNotification(fn func(*rpc.Request)) {
+	c.onNotifMu.Lock()
+	c.onNotif = fn
+	c.onNotifMu.Unlock()
+}
 
 func (c *StdioMCPUpstream) ensure(ctx context.Context) error {
 	c.startOnce.Do(func() { c.startErr = c.startLocked() })
@@ -114,25 +123,39 @@ func (c *StdioMCPUpstream) readLoop() {
 		if len(line) == 0 {
 			continue
 		}
-		resp, err := rpc.ParseResponse(line)
-		if err != nil {
-			continue
-		}
+		c.dispatch(line)
+	}
+}
+
+func (c *StdioMCPUpstream) dispatch(raw []byte) {
+	resp, err := rpc.ParseResponse(raw)
+	if err == nil {
 		key := idKey(resp.ID)
 		if key == "" {
-			continue
+			return
 		}
 		c.pendMu.Lock()
 		ch := c.pending[key]
 		delete(c.pending, key)
 		c.pendMu.Unlock()
 		if ch == nil {
-			continue
+			return
 		}
 		select {
 		case ch <- resp:
 		default:
 		}
+		return
+	}
+	req, err := rpc.ParseRequest(raw)
+	if err != nil || !req.IsNotification() {
+		return
+	}
+	c.onNotifMu.Lock()
+	fn := c.onNotif
+	c.onNotifMu.Unlock()
+	if fn != nil {
+		fn(req)
 	}
 }
 

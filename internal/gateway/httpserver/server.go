@@ -235,6 +235,10 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 func (s *Server) Addr() string { return s.addr }
 
+func (s *Server) BroadcastNotification(req *rpc.Request) {
+	s.sessions.BroadcastNotification(req)
+}
+
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.handler.ServeHTTP(w, r)
 }
