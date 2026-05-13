@@ -206,14 +206,18 @@ func mergedCancel(parent, reqCtx context.Context) (context.Context, context.Canc
 }
 
 func (s *Session) handleNotification(ctx context.Context, req *rpc.Request) error {
-	_ = ctx
 	switch req.Method {
 	case "notifications/initialized", "initialized":
+		var notifyUpstreams bool
 		s.mu.Lock()
 		if s.initCompleted {
 			s.ready = true
+			notifyUpstreams = true
 		}
 		s.mu.Unlock()
+		if notifyUpstreams {
+			s.multiplexer.NotifyHostInitialized(ctx)
+		}
 		return nil
 	default:
 		return nil
