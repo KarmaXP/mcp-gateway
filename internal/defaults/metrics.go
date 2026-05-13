@@ -13,6 +13,7 @@ const (
 
 	MetricJWKSResultHit = "hit"
 	MetricJWKSResultRefresh = "refresh"
+	MetricJWKSResultRefreshUnknownKid = "refresh_unknown_kid"
 	MetricJWKSResultErrorFetch = "error_fetch"
 	MetricJWKSResultErrorMissingKid = "error_missing_kid"
 	MetricJWKSResultErrorUnknownKid = "error_unknown_kid"

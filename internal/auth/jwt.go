@@ -150,31 +150,52 @@ func (v *Validator) keyFromJWKS(ctx context.Context, t *jwt.Token) (interface{},
 
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	neededRefresh := v.jwksSet == nil || time.Now().After(v.jwksExpires)
-	if neededRefresh {
-		set, err := jwk.Fetch(ctx, v.cfg.JWKSURL)
-		if err != nil {
-			telemetry.RecordJWKSLookup(ctx, defaults.MetricJWKSResultErrorFetch)
-			return nil, fmt.Errorf("auth: jwks fetch: %w", err)
+
+	ttlExpired := v.jwksSet == nil || time.Now().After(v.jwksExpires)
+	if ttlExpired {
+		if err := v.fetchJWKSLocked(ctx); err != nil {
+			return nil, err
 		}
-		v.jwksSet = set
-		v.jwksExpires = time.Now().Add(v.cfg.JWKSCacheTTL)
 	}
 	if kid == "" {
 		telemetry.RecordJWKSLookup(ctx, defaults.MetricJWKSResultErrorMissingKid)
 		return nil, fmt.Errorf("auth: jwt: missing kid (required for JWKS)")
 	}
+
 	key, ok := v.jwksSet.LookupKeyID(kid)
+	unknownKidRefresh := false
+	if !ok && !ttlExpired {
+		if err := v.fetchJWKSLocked(ctx); err != nil {
+			return nil, err
+		}
+		unknownKidRefresh = true
+		key, ok = v.jwksSet.LookupKeyID(kid)
+	}
 	if !ok {
 		telemetry.RecordJWKSLookup(ctx, defaults.MetricJWKSResultErrorUnknownKid)
 		return nil, fmt.Errorf("auth: jwks: unknown kid %q", kid)
 	}
-	if neededRefresh {
-		telemetry.RecordJWKSLookup(ctx, defaults.MetricJWKSResultRefresh)
-	} else {
-		telemetry.RecordJWKSLookup(ctx, defaults.MetricJWKSResultHit)
+
+	lookupResult := defaults.MetricJWKSResultHit
+	switch {
+	case ttlExpired:
+		lookupResult = defaults.MetricJWKSResultRefresh
+	case unknownKidRefresh:
+		lookupResult = defaults.MetricJWKSResultRefreshUnknownKid
 	}
+	telemetry.RecordJWKSLookup(ctx, lookupResult)
 	return publicKeyFromJWK(key)
+}
+
+func (v *Validator) fetchJWKSLocked(ctx context.Context) error {
+	set, err := jwk.Fetch(ctx, v.cfg.JWKSURL)
+	if err != nil {
+		telemetry.RecordJWKSLookup(ctx, defaults.MetricJWKSResultErrorFetch)
+		return fmt.Errorf("auth: jwks fetch: %w", err)
+	}
+	v.jwksSet = set
+	v.jwksExpires = time.Now().Add(v.cfg.JWKSCacheTTL)
+	return nil
 }
 
 func publicKeyFromJWK(key jwk.Key) (interface{}, error) {

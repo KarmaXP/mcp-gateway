@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -87,4 +88,73 @@ func TestValidator_JWKSMissingKid(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Error(t, v.Validate(context.Background(), signed))
+}
+
+func TestValidator_JWKSUnknownKidForcesRefresh(t *testing.T) {
+	privA, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	privB, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	keyA, err := jwk.FromRaw(privA.PublicKey)
+	require.NoError(t, err)
+	require.NoError(t, keyA.Set(jwk.KeyIDKey, "key-a"))
+
+	keyB, err := jwk.FromRaw(privB.PublicKey)
+	require.NoError(t, err)
+	require.NoError(t, keyB.Set(jwk.KeyIDKey, "key-b"))
+
+	setA := jwk.NewSet()
+	require.NoError(t, setA.AddKey(keyA))
+	bodyA, err := json.Marshal(setA)
+	require.NoError(t, err)
+
+	setB := jwk.NewSet()
+	require.NoError(t, setB.AddKey(keyB))
+	bodyB, err := json.Marshal(setB)
+	require.NoError(t, err)
+
+	var fetches atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		n := fetches.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		if n == 1 {
+			_, _ = w.Write(bodyA)
+			return
+		}
+		_, _ = w.Write(bodyB)
+	}))
+	defer srv.Close()
+
+	cfg := JWTAuthConfig{
+		Mode:         "jwt",
+		Issuer:       "iss",
+		Audience:     "aud",
+		JWKSURL:      srv.URL,
+		JWKSCacheTTL: time.Hour,
+	}
+	v, err := NewValidator(cfg)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	claims := jwt.RegisteredClaims{
+		Issuer:    cfg.Issuer,
+		Audience:  jwt.ClaimStrings{cfg.Audience},
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+		IssuedAt:  jwt.NewNumericDate(time.Now().Add(-time.Minute)),
+	}
+
+	tokA := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	tokA.Header["kid"] = "key-a"
+	signedA, err := tokA.SignedString(privA)
+	require.NoError(t, err)
+	require.NoError(t, v.Validate(ctx, signedA))
+	require.Equal(t, int32(1), fetches.Load())
+
+	tokB := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	tokB.Header["kid"] = "key-b"
+	signedB, err := tokB.SignedString(privB)
+	require.NoError(t, err)
+	require.NoError(t, v.Validate(ctx, signedB))
+	require.Equal(t, int32(2), fetches.Load())
 }

@@ -173,6 +173,7 @@ func RecordJWKSLookup(ctx context.Context, result string) {
 	switch result {
 	case defaults.MetricJWKSResultHit,
 		defaults.MetricJWKSResultRefresh,
+		defaults.MetricJWKSResultRefreshUnknownKid,
 		defaults.MetricJWKSResultErrorFetch,
 		defaults.MetricJWKSResultErrorMissingKid,
 		defaults.MetricJWKSResultErrorUnknownKid:
