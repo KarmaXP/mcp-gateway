@@ -14,6 +14,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -29,26 +30,36 @@ const (
 	exitStatusInvalidUsage = 2
 )
 
+type devTokenClaims struct {
+	jwt.RegisteredClaims
+	MCPTools []string `json:"mcp_tools,omitempty"`
+}
+
 func main() {
 	iss := flag.String("issuer", "https://dev.local", "")
 	aud := flag.String("audience", defaults.DefaultTelemetryServiceName, "")
 	keyPath := flag.String("key", "", "path to RSA private key PEM")
 	kid := flag.String("kid", "dev-1", "")
+	mcpTools := flag.String("mcp-tools", "", "optional comma-separated namespaced tool allow-list for claim mcp_tools")
 	flag.Parse()
 	if *keyPath == "" {
 		fmt.Fprintln(os.Stderr, "-key required")
 		os.Exit(exitStatusInvalidUsage)
 	}
+	tools := parseCSVList(*mcpTools)
 	priv, err := loadRSAPrivateKey(*keyPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(exitStatusGeneralError)
 	}
-	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.RegisteredClaims{
-		Issuer:    *iss,
-		Audience:  jwt.ClaimStrings{*aud},
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(devJWTTokenTTL)),
-		IssuedAt:  jwt.NewNumericDate(time.Now().Add(devJWTIssuedSkew)),
+	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, devTokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    *iss,
+			Audience:  jwt.ClaimStrings{*aud},
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(devJWTTokenTTL)),
+			IssuedAt:  jwt.NewNumericDate(time.Now().Add(devJWTIssuedSkew)),
+		},
+		MCPTools: tools,
 	})
 	tok.Header["kid"] = *kid
 	s, err := tok.SignedString(priv)
@@ -81,4 +92,19 @@ func loadRSAPrivateKey(path string) (*rsa.PrivateKey, error) {
 		return rk, nil
 	}
 	return k, nil
+}
+
+func parseCSVList(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		v := strings.TrimSpace(part)
+		if v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }
