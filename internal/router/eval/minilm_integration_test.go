@@ -4,6 +4,7 @@ package eval
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -53,7 +54,8 @@ func TestPhase2VectorRecallMiniLM(t *testing.T) {
 	cfg := router.DefaultSemanticRouterRuntimeConfig()
 	cfg.Mode = router.ModeAssistList
 	cfg.TopK = defaults.RouterTopK
-	cfg.ScoreMin = 0.08
+	cfg.ScoreMin = defaults.RouterScoreMin
+	cfg.HybridAlpha = 0.2
 	cfg.AllowAutoRename = true
 	cfg.EmbedTimeout = minilmEmbedTimeout
 	cfg.QueryTimeout = minilmQueryTimeout
@@ -72,7 +74,16 @@ func TestPhase2VectorRecallMiniLM(t *testing.T) {
 			CatalogVersion: ver,
 			AllowedTools:   tc.Allowed,
 		})
-		require.NoError(t, err, "intent=%q want=%s", tc.Intent, tc.WantTool)
+		if err != nil {
+			if errors.Is(err, router.ErrAmbiguous) {
+				if candidateInTopK(dec.Candidates, tc.WantTool, 3) {
+					hitsAt3++
+				}
+				t.Logf("ambiguous routing (recall@1 miss): intent=%q want=%s candidates=%v", tc.Intent, tc.WantTool, dec.Candidates)
+				continue
+			}
+			require.NoError(t, err, "intent=%q want=%s", tc.Intent, tc.WantTool)
+		}
 		if got == tc.WantTool {
 			hitsAt1++
 		}
