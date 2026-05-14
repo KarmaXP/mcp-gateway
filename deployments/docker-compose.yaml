@@ -171,10 +171,14 @@ services:
       - ../.env
     environment:
       PORT: "8080" # fixed in-container; map host with HOST_PORT_GATEWAY (ignore host .env PORT)
+      AUTH_MODE: "${AUTH_MODE:-none}"
+      MCP_GATEWAY_CONFIG: /etc/mcp-gateway/gateway.yaml
+      ROUTER_MODE: "${ROUTER_MODE:-assist_list}"
+      QDRANT_URL: http://qdrant:6333
       EMBED_URL: http://embed:8001
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-      # QDRANT_URL: http://qdrant:6333  # set when ROUTER_MODE=on|assist_list|filter_list
-      # MCP_GATEWAY_CONFIG: /path/in/container/gateway.yaml  # mount config + set backends
+    volumes:
+      - ./gateway.example.yaml:/etc/mcp-gateway/gateway.yaml:ro
     ports:
       # Override: HOST_PORT_GATEWAY=18080
       - "${HOST_PORT_GATEWAY:-8080}:8080"
@@ -188,7 +192,7 @@ services:
       otel-collector:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz >/dev/null && wget -qO- http://localhost:8080/readyz >/dev/null || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
