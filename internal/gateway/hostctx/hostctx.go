@@ -8,6 +8,9 @@ import (
 // Optional natural-language hint for semantic routing (HTTP header name).
 const HeaderMCPIntent = "X-MCP-Intent"
 
+// Optional host-provided LLM token usage metadata for this RPC ingress request.
+const HeaderAgentTokensUsed = "X-Agent-Tokens-Used"
+
 type clientIntentKey struct{}
 
 func WithClientIntent(ctx context.Context, intent string) context.Context {

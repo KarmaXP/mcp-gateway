@@ -16,6 +16,7 @@ const (
 	AttrMCPSessionID = "mcp.session.id"
 	AttrMCPBackendID = "mcp.backend.id"
 	AttrMCPToolName = "mcp.tool.name"
+	AttrMCPAgentTokensUsed = "mcp.agent.tokens_used"
 )
 
 // AttrJSONRPCID truncates raw JSON-RPC id for span export (bounded size).

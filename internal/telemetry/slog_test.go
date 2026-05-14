@@ -18,6 +18,7 @@ func TestTraceHandlerAddsTraceID(t *testing.T) {
 	tr := tp.Tracer("t")
 	ctx, span := tr.Start(context.Background(), "req")
 	tid := span.SpanContext().TraceID().String()
+	sid := span.SpanContext().SpanID().String()
 
 	var buf bytes.Buffer
 	h := TraceHandler(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -28,6 +29,7 @@ func TestTraceHandlerAddsTraceID(t *testing.T) {
 	var row map[string]any
 	require.NoError(t, json.Unmarshal(buf.Bytes(), &row))
 	require.Equal(t, tid, row["trace_id"])
+	require.Equal(t, sid, row["span_id"])
 	require.Equal(t, "hello", row["msg"])
 }
 
@@ -40,6 +42,8 @@ func TestTraceHandlerWithoutSpanNoTraceID(t *testing.T) {
 	require.NoError(t, json.Unmarshal(buf.Bytes(), &row))
 	_, ok := row["trace_id"]
 	require.False(t, ok)
+	_, ok = row["span_id"]
+	require.False(t, ok)
 }
 
 func TestTraceHandlerWithAttrsAndGroupStillAddsTraceID(t *testing.T) {
@@ -48,6 +52,7 @@ func TestTraceHandlerWithAttrsAndGroupStillAddsTraceID(t *testing.T) {
 	tr := tp.Tracer("t")
 	ctx, span := tr.Start(context.Background(), "r")
 	tid := span.SpanContext().TraceID().String()
+	sid := span.SpanContext().SpanID().String()
 
 	var buf bytes.Buffer
 	inner := slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})
@@ -59,6 +64,7 @@ func TestTraceHandlerWithAttrsAndGroupStillAddsTraceID(t *testing.T) {
 	var row map[string]any
 	require.NoError(t, json.Unmarshal(buf.Bytes(), &row))
 	require.Equal(t, tid, row["trace_id"])
+	require.Equal(t, sid, row["span_id"])
 	require.Equal(t, "wrapped", row["msg"])
 	require.Equal(t, "u", row["svc"])
 }

@@ -22,6 +22,7 @@ func (t traceHandler) Enabled(ctx context.Context, level slog.Level) bool {
 func (t traceHandler) Handle(ctx context.Context, r slog.Record) error {
 	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() {
 		r.AddAttrs(slog.String("trace_id", sc.TraceID().String()))
+		r.AddAttrs(slog.String("span_id", sc.SpanID().String()))
 	}
 	return t.inner.Handle(ctx, r)
 }
