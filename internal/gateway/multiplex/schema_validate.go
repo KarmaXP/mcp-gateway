@@ -58,6 +58,10 @@ func compileToolValidator(namespacedName string, schemaJSON json.RawMessage) (*j
 
 func (a *Multiplexer) replaceToolSchemasFromMerged(merged []map[string]any) {
 	out := make(map[string]*jsonschema.Schema)
+	var pol *policy.Engine
+	if a.policyHolder != nil {
+		pol = a.policyHolder.Load()
+	}
 	for _, t := range merged {
 		name, _ := t["name"].(string)
 		if name == "" {
@@ -66,6 +70,9 @@ func (a *Multiplexer) replaceToolSchemasFromMerged(merged []map[string]any) {
 		sch, ok := t["inputSchema"]
 		if !ok || sch == nil {
 			continue
+		}
+		if pol != nil && pol.HardenSchemas() && pol.RequiresStrictSchema(name) {
+			sch = hardenObjectSchemasForValidation(sch)
 		}
 		raw, err := json.Marshal(sch)
 		if err != nil || len(raw) == 0 || string(raw) == jsonNullLiteral {
@@ -81,6 +88,65 @@ func (a *Multiplexer) replaceToolSchemasFromMerged(merged []map[string]any) {
 	a.schemaMu.Lock()
 	a.toolValidators = out
 	a.schemaMu.Unlock()
+}
+
+func hardenObjectSchemasForValidation(v any) any {
+	cp := cloneJSONLikeValue(v)
+	hardenObjectSchemas(cp)
+	return cp
+}
+
+func cloneJSONLikeValue(v any) any {
+	switch x := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for k, vv := range x {
+			out[k] = cloneJSONLikeValue(vv)
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i := range x {
+			out[i] = cloneJSONLikeValue(x[i])
+		}
+		return out
+	default:
+		return v
+	}
+}
+
+func hardenObjectSchemas(v any) {
+	switch x := v.(type) {
+	case map[string]any:
+		if isObjectSchema(x) {
+			x["additionalProperties"] = false
+		}
+		for _, vv := range x {
+			hardenObjectSchemas(vv)
+		}
+	case []any:
+		for _, vv := range x {
+			hardenObjectSchemas(vv)
+		}
+	}
+}
+
+func isObjectSchema(doc map[string]any) bool {
+	t, ok := doc["type"]
+	if !ok {
+		return false
+	}
+	switch tt := t.(type) {
+	case string:
+		return tt == "object"
+	case []any:
+		for _, entry := range tt {
+			if s, ok := entry.(string); ok && s == "object" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (a *Multiplexer) refreshToolSchemasFromListJSON(raw json.RawMessage) {

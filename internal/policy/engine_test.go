@@ -89,3 +89,10 @@ func TestEngine_RequiresStrictSchema(t *testing.T) {
 	require.True(t, e.RequiresStrictSchema("a__danger"))
 	require.False(t, e.RequiresStrictSchema("a__safe"))
 }
+
+func TestEngine_HardenSchemas(t *testing.T) {
+	e := NewEngine(config.PolicySettings{
+		HardenSchemas: true,
+	})
+	require.True(t, e.HardenSchemas())
+}

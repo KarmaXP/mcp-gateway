@@ -97,3 +97,75 @@ func TestToolsCallElevatedToolRequiresSchema(t *testing.T) {
 	require.NotNil(t, resp.Error)
 	require.Equal(t, errcodes.InvalidParams, resp.Error.Code)
 }
+
+func TestToolsCallHardensElevatedObjectSchemas(t *testing.T) {
+	inputSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"msg": map[string]any{"type": "string"},
+		},
+		"required": []any{"msg"},
+	}
+	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
+	b1.InputSchemaByTool = map[string]map[string]any{
+		"echo": inputSchema,
+	}
+	pol := policy.NewEngine(config.PolicySettings{
+		Version:       "t",
+		HardenSchemas: true,
+		ElevatedTools: []string{"alpha__echo"},
+	})
+	a, err := New([]backend.Upstream{b1}, WithListTTL(0), WithPolicyEngine(pol))
+	require.NoError(t, err)
+	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
+	_, _ = a.ToolsList(context.Background(), json.RawMessage(`2`))
+
+	_, mutated := inputSchema["additionalProperties"]
+	require.False(t, mutated, "source upstream schema should not be mutated")
+
+	params, _ := json.Marshal(map[string]any{
+		"name": "alpha__echo",
+		"arguments": map[string]any{
+			"msg":   "hi",
+			"extra": "nope",
+		},
+	})
+	resp, err := a.ToolsCall(context.Background(), json.RawMessage(`3`), params)
+	require.NoError(t, err)
+	require.NotNil(t, resp.Error)
+	require.Equal(t, errcodes.InvalidParams, resp.Error.Code)
+}
+
+func TestToolsCallDoesNotHardenSchemaWhenPolicyDisabled(t *testing.T) {
+	inputSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"msg": map[string]any{"type": "string"},
+		},
+		"required": []any{"msg"},
+	}
+	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
+	b1.InputSchemaByTool = map[string]map[string]any{
+		"echo": inputSchema,
+	}
+	pol := policy.NewEngine(config.PolicySettings{
+		Version:       "t",
+		HardenSchemas: false,
+		ElevatedTools: []string{"alpha__echo"},
+	})
+	a, err := New([]backend.Upstream{b1}, WithListTTL(0), WithPolicyEngine(pol))
+	require.NoError(t, err)
+	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
+	_, _ = a.ToolsList(context.Background(), json.RawMessage(`2`))
+
+	params, _ := json.Marshal(map[string]any{
+		"name": "alpha__echo",
+		"arguments": map[string]any{
+			"msg":   "hi",
+			"extra": "allowed-when-not-hardened",
+		},
+	})
+	resp, err := a.ToolsCall(context.Background(), json.RawMessage(`3`), params)
+	require.NoError(t, err)
+	require.Nil(t, resp.Error)
+}

@@ -112,3 +112,77 @@ func TestHTTPMiddlewarePolicyVersionAfterHolderReload(t *testing.T) {
 
 	require.Equal(t, []string{"before", "after"}, versions)
 }
+
+func TestHTTPMiddlewarePolicyAllowOnEvalFailureControlsRARDegradation(t *testing.T) {
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	cfg := JWTAuthConfig{Mode: "jwt", Issuer: "iss", Audience: "aud", PublicKeyPEM: rsaPublicPEM(t, &priv.PublicKey)}
+	v, err := NewValidator(cfg)
+	require.NoError(t, err)
+
+	malformedRAR, err := json.Marshal([]map[string]any{
+		{
+			"type":         "mcp_tool",
+			"tool_name":    "alpha__echo",
+			"tool_pattern": "alpha__*",
+		},
+	})
+	require.NoError(t, err)
+	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, TokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   "user-1",
+			Issuer:    "iss",
+			Audience:  jwt.ClaimStrings{"aud"},
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now().Add(-time.Minute)),
+		},
+		McpTools:             []string{"alpha__echo", "beta__view"},
+		AuthorizationDetails: malformedRAR,
+	})
+	tok.Header["kid"] = "k1"
+	s, err := tok.SignedString(priv)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name               string
+		allowOnEvalFailure bool
+		wantStatus         int
+		wantAllowedTools   []string
+	}{
+		{
+			name:               "fail closed when disabled",
+			allowOnEvalFailure: false,
+			wantStatus:         http.StatusUnauthorized,
+		},
+		{
+			name:               "degrade to JWT tools when enabled",
+			allowOnEvalFailure: true,
+			wantStatus:         http.StatusOK,
+			wantAllowedTools:   []string{"alpha__echo", "beta__view"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			holder := policy.NewHolder(policy.NewEngine(config.PolicySettings{
+				Version:            "v-test",
+				AllowOnEvalFailure: tc.allowOnEvalFailure,
+			}))
+			var got []string
+			h := HTTPMiddleware(cfg, v, holder)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				got = hostctx.AllowedToolNamesFromContext(r.Context())
+				w.WriteHeader(http.StatusOK)
+			}))
+			ts := httptest.NewServer(h)
+			defer ts.Close()
+
+			req, _ := http.NewRequest(http.MethodGet, ts.URL+"/mcp/rpc", nil)
+			req.Header.Set("Authorization", "Bearer "+s)
+			res, err := ts.Client().Do(req)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantStatus, res.StatusCode)
+			require.NoError(t, res.Body.Close())
+			require.Equal(t, tc.wantAllowedTools, got)
+		})
+	}
+}

@@ -13,6 +13,7 @@ type Engine struct {
 	elevated        map[string]struct{}
 	toolGroups      map[string][]string
 	allowOnEvalFail bool
+	hardenSchemas   bool
 }
 
 func NewEngine(s config.PolicySettings) *Engine {
@@ -49,6 +50,7 @@ func NewEngine(s config.PolicySettings) *Engine {
 		elevated:        e,
 		toolGroups:      groups,
 		allowOnEvalFail: s.AllowOnEvalFailure,
+		hardenSchemas:   s.HardenSchemas,
 	}
 }
 
@@ -57,6 +59,10 @@ func (e *Engine) Version() string {
 		return ""
 	}
 	return e.version
+}
+
+func (e *Engine) HardenSchemas() bool {
+	return e != nil && e.hardenSchemas
 }
 
 // SEC3: elevated tools must have a compiled input schema.
