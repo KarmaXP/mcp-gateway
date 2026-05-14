@@ -5,15 +5,20 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
@@ -21,7 +26,18 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
 )
+
+type mockReadinessChecker struct {
+	err    error
+	called bool
+}
+
+func (m *mockReadinessChecker) CheckReadiness(_ context.Context) error {
+	m.called = true
+	return m.err
+}
 
 func TestServerAddrAsHandlerAndMiddleware(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
@@ -58,6 +74,42 @@ func TestHealthEndpoints(t *testing.T) {
 		require.Equal(t, http.StatusOK, res.StatusCode)
 		require.NoError(t, res.Body.Close())
 	}
+}
+
+func TestReadyzUsesReadinessChecker(t *testing.T) {
+	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
+	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
+	require.NoError(t, err)
+
+	t.Run("returns ok when checker succeeds", func(t *testing.T) {
+		checker := &mockReadinessChecker{}
+		srv := New(agg, "", WithReadinessChecker(checker))
+		ts := httptest.NewServer(srv)
+		defer ts.Close()
+
+		res, err := http.Get(ts.URL + PathReadyz)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, res.StatusCode)
+		require.True(t, checker.called)
+		require.NoError(t, res.Body.Close())
+	})
+
+	t.Run("returns service unavailable when checker fails", func(t *testing.T) {
+		checker := &mockReadinessChecker{err: errors.New("qdrant unreachable")}
+		srv := New(agg, "", WithReadinessChecker(checker))
+		ts := httptest.NewServer(srv)
+		defer ts.Close()
+
+		res, err := http.Get(ts.URL + PathReadyz)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusServiceUnavailable, res.StatusCode)
+		body, err := io.ReadAll(res.Body)
+		require.NoError(t, err)
+		require.Contains(t, string(body), "not ready")
+		require.Contains(t, string(body), "qdrant unreachable")
+		require.True(t, checker.called)
+		require.NoError(t, res.Body.Close())
+	})
 }
 
 func TestPostRPCMissingSessionHeader(t *testing.T) {
@@ -285,4 +337,112 @@ func TestMCPPingOverHTTP(t *testing.T) {
 	}
 	cancelSSE()
 	wg.Wait()
+}
+
+func TestParseAgentTokensUsedHeader(t *testing.T) {
+	maxInt := uint64(^uint(0) >> 1)
+	tooLargeForInt := strconv.FormatUint(maxInt+1, 10)
+	tests := []struct {
+		name string
+		raw  string
+		want int
+		ok   bool
+	}{
+		{name: "empty", raw: "", want: 0, ok: false},
+		{name: "whitespace", raw: "   ", want: 0, ok: false},
+		{name: "invalid text", raw: "abc", want: 0, ok: false},
+		{name: "negative", raw: "-1", want: 0, ok: false},
+		{name: "overflow", raw: tooLargeForInt, want: 0, ok: false},
+		{name: "zero", raw: "0", want: 0, ok: true},
+		{name: "valid integer", raw: "123", want: 123, ok: true},
+		{name: "trimmed integer", raw: " 42 ", want: 42, ok: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := parseAgentTokensUsedHeader(tc.raw)
+			require.Equal(t, tc.ok, ok)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestPostRPCAgentTokensUsedSpanAttribute(t *testing.T) {
+	overflow := strconv.FormatUint(uint64(^uint(0)>>1)+1, 10)
+	tests := []struct {
+		name      string
+		headerVal string
+		wantSet   bool
+		wantValue int64
+	}{
+		{name: "valid positive integer", headerVal: "123", wantSet: true, wantValue: 123},
+		{name: "valid with spaces", headerVal: " 7 ", wantSet: true, wantValue: 7},
+		{name: "empty ignored", headerVal: "", wantSet: false},
+		{name: "invalid ignored", headerVal: "abc", wantSet: false},
+		{name: "negative ignored", headerVal: "-1", wantSet: false},
+		{name: "overflow ignored", headerVal: overflow, wantSet: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			hostSpanAttrs := postRPCWithAgentTokensUsedAndCollectHostSpanAttrs(t, tc.headerVal)
+			v, ok := hostSpanAttrs[telemetry.AttrMCPAgentTokensUsed]
+			require.Equal(t, tc.wantSet, ok)
+			if tc.wantSet {
+				require.Equal(t, tc.wantValue, v)
+			}
+		})
+	}
+}
+
+func postRPCWithAgentTokensUsedAndCollectHostSpanAttrs(t *testing.T, agentTokensUsed string) map[string]any {
+	t.Helper()
+	rec := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(rec))
+	prevTP := otel.GetTracerProvider()
+	otel.SetTracerProvider(tp)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(prevTP)
+		_ = tp.Shutdown(context.Background())
+	})
+
+	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
+	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
+	require.NoError(t, err)
+	srv := New(agg, "")
+	ts := httptest.NewServer(srv)
+	defer ts.Close()
+
+	ctx, cancelSSE := context.WithCancel(context.Background())
+	defer cancelSSE()
+	client := ts.Client()
+	sseReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+PathMCPSSE, nil)
+	sseResp, err := client.Do(sseReq)
+	require.NoError(t, err)
+	sid := sseResp.Header.Get(HeaderMCPSessionID)
+	require.NotEmpty(t, sid)
+	go func() { _, _ = io.Copy(io.Discard, sseResp.Body) }()
+	defer sseResp.Body.Close()
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+PathMCPRPC, strings.NewReader(`{"jsonrpc":"2.0","id":99,"method":"ping"}`))
+	req.Header.Set(HeaderMCPSessionID, sid)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(hostctx.HeaderAgentTokensUsed, agentTokensUsed)
+	res, err := client.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusAccepted, res.StatusCode)
+	require.NoError(t, res.Body.Close())
+
+	cancelSSE()
+
+	var hostSpanAttrs map[string]any
+	for _, s := range rec.Ended() {
+		if s.Name() != telemetry.SpanMCPHostRequest {
+			continue
+		}
+		hostSpanAttrs = make(map[string]any, len(s.Attributes()))
+		for _, kv := range s.Attributes() {
+			hostSpanAttrs[string(kv.Key)] = kv.Value.AsInterface()
+		}
+	}
+	require.NotNil(t, hostSpanAttrs)
+	return hostSpanAttrs
 }

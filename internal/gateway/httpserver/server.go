@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -29,6 +30,7 @@ type Server struct {
 	sessions   *session.SessionManager
 	mux        *http.ServeMux
 	middleware []func(http.Handler) http.Handler
+	readiness  ReadinessChecker
 
 	shutdownCtx context.Context
 
@@ -40,6 +42,10 @@ type Server struct {
 }
 
 type Option func(*Server)
+
+type ReadinessChecker interface {
+	CheckReadiness(ctx context.Context) error
+}
 
 func WithHTTPMiddleware(mw func(http.Handler) http.Handler) Option {
 	return func(s *Server) {
@@ -56,6 +62,12 @@ func WithShutdownContext(ctx context.Context) Option {
 func WithSSEHeartbeatInterval(d time.Duration) Option {
 	return func(s *Server) {
 		s.sseHeartbeat = d
+	}
+}
+
+func WithReadinessChecker(checker ReadinessChecker) Option {
+	return func(s *Server) {
+		s.readiness = checker
 	}
 }
 
@@ -101,6 +113,13 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
+	if s.readiness != nil {
+		if err := s.readiness.CheckReadiness(r.Context()); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte("not ready: " + err.Error()))
+			return
+		}
+	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("ok"))
 }
@@ -180,6 +199,9 @@ func (s *Server) handleMCPRPC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	span.SetAttributes(attribute.String(telemetry.AttrMCPSessionID, sid))
+	if tokensUsed, ok := parseAgentTokensUsedHeader(r.Header.Get(hostctx.HeaderAgentTokensUsed)); ok {
+		span.SetAttributes(attribute.Int(telemetry.AttrMCPAgentTokensUsed, tokensUsed))
+	}
 	sess, err := s.sessions.Get(sid)
 	if err != nil {
 		httpErr("unknown session", http.StatusNotFound)
@@ -251,4 +273,19 @@ func isRequestBodyTooLargeError(err error) bool {
 	}
 	msg := err.Error()
 	return strings.Contains(msg, "request body too large") || strings.Contains(msg, "http: request body too large")
+}
+
+func parseAgentTokensUsedHeader(raw string) (int, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, false
+	}
+	v, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || v < 0 {
+		return 0, false
+	}
+	if int64(int(v)) != v {
+		return 0, false
+	}
+	return int(v), true
 }
