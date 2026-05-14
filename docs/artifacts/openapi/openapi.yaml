@@ -28,7 +28,58 @@ info:
 
     When `AUTH_MODE=jwt`, **`GET /mcp/sse`** and **`POST /mcp/rpc`** require `Authorization: Bearer <JWT>` (health routes are skipped by default).
 
-    Optional headers (all routes): **`traceparent`** / **`tracestate`** (W3C Trace Context). When `traceparent` is present, the gateway continues the distributed trace for OTel spans. Omitted headers are safe.
+    Optional headers (all routes): **`traceparent`** / **`tracestate`** (W3C Trace Context). `POST /mcp/rpc` also accepts optional **`X-MCP-Intent`** and **`X-Agent-Tokens-Used`** metadata headers. Omitted headers are safe.
+
+    ### MCP method scope (supported vs out-of-scope)
+
+    | MCP method / group | Status | Gateway behavior |
+    |---|---|---|
+    | `initialize` | Supported | Aggregated backend negotiation. |
+    | `notifications/initialized` / `initialized` | Supported | Required handshake notification. |
+    | `ping` | Supported | Standard utility RPC behavior. |
+    | `tools/list`, `tools/call` | Supported | Aggregated/routed with JWT+RAR allow-list enforcement on tools only. |
+    | `resources/list`, `resources/read` | Supported | Pass-through after AuthN (no JWT/RAR allow-list filtering in this phase). |
+    | `prompts/list`, `prompts/get` | Supported | Pass-through after AuthN (no JWT/RAR allow-list filtering in this phase). |
+    | `notifications/tools/list_changed` | Supported (optional) | Forwarded when `aggregation.forward_tools_list_changed=true`; triggers tools-cache invalidation + router reindex and SSE fan-out for tools catalog updates. |
+    | `notifications/resources/list_changed`, `notifications/prompts/list_changed` | Out of scope (forward side-effects) | No guaranteed forwarding side-effects (cache/reindex/SSE) in this phase. |
+    | Other MCP methods | Out of scope | Returned as JSON-RPC `MethodNotFound` (`-32601`). |
+
+    ### Configuration reference (ingress and aggregation)
+
+    The gateway reads YAML from `gateway.yaml` (or `MCP_GATEWAY_CONFIG`) and applies env overrides after load.
+    The options below affect HTTP/MCP ingress behavior for `GET /mcp/sse` and `POST /mcp/rpc`.
+
+    | YAML key | Env var(s) | Type | Behavior / notes |
+    |---|---|---|---|
+    | `gateway.allowed_origins` | `GATEWAY_ALLOWED_ORIGINS` (comma-separated) | `[]string` | Optional exact-match allow list for non-empty `Origin` request header. Empty/unset disables Origin checks. If configured and `Origin` does not match any allowed value, ingress rejects with **403**. Requests without `Origin` remain allowed. |
+    | `rate_limit.enabled` | `RATE_LIMIT_ENABLED` | `bool` | Enables per-subject token-bucket limiting on `POST /mcp/rpc`. Rejections return **429**. |
+    | `rate_limit.rps` | `RATE_LIMIT_RPS` | `float` | Sustained token refill rate used when rate limiting is enabled. |
+    | `rate_limit.burst` | `RATE_LIMIT_BURST` | `int` | Token bucket burst size used when rate limiting is enabled. |
+
+    | YAML key | Env var(s) | Type | Behavior / notes |
+    |---|---|---|---|
+    | `aggregation.init_timeout` | _(none)_ | duration string | Timeout for aggregated `initialize` fan-out/merge. |
+    | `aggregation.list_timeout` | _(none)_ | duration string | Timeout for aggregated list RPCs (`tools/list`, `resources/list`, `prompts/list`). |
+    | `aggregation.call_timeout` | _(none)_ | duration string | Timeout for proxied call-style RPCs (for example `tools/call`). |
+    | `aggregation.list_cache_ttl` | _(none)_ | duration string | TTL for list-result caching; `<=0` disables cache. |
+    | `aggregation.max_in_flight` | _(none)_ | `int` | Optional global cap for concurrent upstream multiplexed RPCs across all backends (`0` disables the cap). |
+    | `aggregation.report_partial_failures` | `AGGREGATION_REPORT_PARTIAL_FAILURES` | `bool` | When enabled, successful aggregated `initialize`/list results include `extras.partial_failures` entries for omitted upstreams. |
+    | `aggregation.forward_tools_list_changed` | `AGGREGATION_FORWARD_TOOLS_LIST_CHANGED` | `bool` | Forwards upstream `notifications/tools/list_changed` events; tools-only side-effects: cache invalidation, router reindex trigger, and host SSE catalog notifications. |
+    | `aggregation.strict_initialize` | `AGGREGATION_STRICT_INITIALIZE` | `bool` | Fail-closed aggregation for `initialize`: any upstream failure turns the request into gateway JSON-RPC error `-32005` (`StrictAggregationFailed`). |
+    | `aggregation.strict_list` | `AGGREGATION_STRICT_LIST` | `bool` | Fail-closed aggregation for list RPCs: any upstream failure turns the request into gateway JSON-RPC error `-32005` (`StrictAggregationFailed`). |
+
+    | YAML key | Env var(s) | Type | Behavior / notes |
+    |---|---|---|---|
+    | `policy.allow_on_eval_failure` | `POLICY_ALLOW_ON_EVAL_FAILURE` | `bool` | Opt-in degradation for malformed/unparseable JWT `authorization_details` (RAR): when true, policy evaluation falls back to JWT-only claims (`mcp_tools` / `mcp_tool_groups`) instead of rejecting. Default behavior is fail-closed. |
+    | `policy.harden_schemas` | `POLICY_HARDEN_SCHEMAS` | `bool` | Enforces stricter schema checks in policy evaluation paths (defense-in-depth for tool-call argument validation). |
+    | `policy.max_argument_bytes` | _(none)_ | `int` | Maximum serialized argument bytes accepted by policy argument validator. |
+    | `policy.max_argument_depth` | _(none)_ | `int` | Maximum nested object/array depth accepted by policy argument validator. |
+    | `policy.max_argument_keys` | _(none)_ | `int` | Maximum number of object keys accepted by policy argument validator. |
+    | `policy.audit_sink` | `POLICY_AUDIT_SINK` | `string` | Audit sink backend: `slog` (default) or `syslog`. |
+    | `policy.audit_syslog_network` | `POLICY_AUDIT_SYSLOG_NETWORK` | `string` | Syslog network for audit records (`udp` default when sink is `syslog`). |
+    | `policy.audit_syslog_address` | `POLICY_AUDIT_SYSLOG_ADDRESS` | `string` | Required syslog destination address when `policy.audit_sink=syslog`. |
+
+    JWT mode (`AUTH_MODE=jwt`) requirements and rate-limit **429** semantics are summarized in the HTTP status table below.
 
     ### HTTP status vs transport errors (ingress)
 
@@ -40,6 +91,7 @@ info:
     | **202** | `POST /mcp/rpc` accepted; for requests with `id`, see SSE `event: jsonrpc`. |
     | **400** | Missing session header, unreadable body, or invalid JSON-RPC envelope. |
     | **401** | JWT missing/invalid, or JWT claims could not be merged with policy (fail-closed). |
+    | **403** | `Origin` rejected by configured allow list (`gateway.allowed_origins` / `GATEWAY_ALLOWED_ORIGINS`). |
     | **404** | Unknown `Mcp-Session-Id`. |
     | **413** | Request body over gateway limit. |
     | **429** | Rate limited (when enabled). |
@@ -168,8 +220,9 @@ paths:
         when accepted. For **requests** (`id` present), the server returns `202 Accepted` immediately; the
         JSON-RPC **response** is delivered on the open SSE connection for the same session.
 
-        Supported methods (Phase 1–2 baseline): `initialize`, `ping`, `notifications/initialized` (or `initialized`),
-        `tools/list`, `tools/call`. Other methods receive a JSON-RPC error on the SSE stream.
+        Supported multiplexed methods include `initialize`, `ping`, `notifications/initialized` (or `initialized`),
+        `tools/list`, `tools/call`, `resources/list`, `resources/read`, `prompts/list`, and `prompts/get`.
+        Unsupported methods receive a JSON-RPC error on the SSE stream.
 
         When **`aggregation.report_partial_failures`** is enabled, aggregated **`initialize`** and list RPC results
         may include **`extras.partial_failures`**: an array of `{ "backend_id", "reason" }` entries for upstreams omitted
@@ -179,6 +232,9 @@ paths:
 
         Optional header **`X-MCP-Intent`**: free-text session or user intent; forwarded to the semantic router for
         **`tools/call`** and, when `ROUTER_MODE=filter_list`, for **`tools/list`** subsetting (see `docs/DEVELOPER.md`).
+
+        Optional header **`X-Agent-Tokens-Used`**: non-negative integer token count from the host/agent for this RPC;
+        used only as span metadata (`mcp.agent.tokens_used`) when valid.
 
         When **`AUTH_MODE=jwt`**, optional claims **`mcp_tools`**, **`authorization_details`**, and **`mcp_tool_groups`**
         filter **`tools/list`** and reject **`tools/call`** outside the effective allow list (**-32003** on SSE); see `bearerAuth` and schema **`AuthorizationDetailsMcpTool`**.
@@ -204,6 +260,16 @@ paths:
           schema:
             type: string
             example: List pods in the production namespace
+        - name: X-Agent-Tokens-Used
+          in: header
+          required: false
+          description: |
+            Optional non-negative integer token usage metadata for this RPC from the host/agent.
+            Invalid or empty values are ignored by ingress.
+          schema:
+            type: integer
+            minimum: 0
+            example: 1234
       requestBody:
         required: true
         content:
@@ -310,6 +376,7 @@ components:
       bearerFormat: JWT
       description: |
         **Algorithm:** RS256 only (gateway validates with **`JWT_PUBLIC_KEY_PEM`** or **`JWT_JWKS_URL`**).
+        JWKS retrieval/lookup failures are fail-closed in JWT mode (401); no JWKS-unavailable bypass flag is supported.
 
         **Registered claims (validated when configured via env):**
         - **`iss`**: must match **`JWT_ISS`** when set.

@@ -666,8 +666,8 @@ The **observability engine** provides correlated **distributed traces**, **metri
 **Token usage:**
 
 - The gateway does **not** observe LLM token usage by itself. Documented options to pair with upstream telemetry:
-  - **Optional metadata:** agreed HTTP header, e.g. `X-Agent-Tokens-Used: 1234`, read in the handler and recorded as `ai.tokens.used` on the root span or child `mcp.agent.metadata` **if** the host sends it.
-  - **No header:** omit token metrics or emit request counts without metadata (instrumentation quality trade-off).
+  - **Optional metadata:** agreed HTTP header, e.g. `X-Agent-Tokens-Used: 1234`, read in the handler and recorded as span attribute `mcp.agent.tokens_used` on `mcp.host.request` **if** the host sends it with a valid non-negative integer.
+  - **No header:** omit token metadata (instrumentation quality trade-off).
 
 #### D.3 Data flow
 
@@ -762,11 +762,11 @@ This subsection records **stack choices already reflected in this repository** v
 | **Trace backend** | **Grafana Tempo** (OTLP); **metrics_generator** RED → Prometheus; exemplars for trace–metric correlation. | Sampling ratios, retention, attribute redaction details (§4.3 residual). |
 | **Metrics / OTel topology** | **Prometheus** + **OpenTelemetry Collector** as **sidecar** (gateway → OTLP → Collector → Tempo + Prometheus scrape). | OTLP gRPC vs HTTP from gateway to Collector; prod sampling (§4.3 residual). |
 | **AuthN (design-time)** | **JWT Bearer** with **JWKS**; validate `iss`, `aud`, `exp`. **Phases 1–2** run with **`AUTH_MODE=none`** (dev-only; not for public exposure). | Concrete IdP URLs, key rotation ops, rate limits, mTLS vs JWT for mesh (§4.6 residual). |
-| **AuthZ / RAR** | **RAR (RFC 9396)** considered for per-tool consent; this plan states canonical **`authorization_details` for `mcp_tool`** cannot be fixed until **MCP client validation (phase 3)**. | Exact JSON schema for RAR object, glob rules, mapping to namespaced tools (§4.6). |
+| **AuthZ / RAR** | **Closed** — canonical RAR `authorization_details` for **`type: "mcp_tool"`** is fixed in **[ADR 0003](../adr/0003-security-rar-jwt-merge-failmode.md)** and OpenAPI schema **`AuthorizationDetailsMcpTool`** (`docs/artifacts/openapi/openapi.yaml`), aligned with `internal/policy/rar.go` (`tool_name`/`tool_pattern` exclusivity, non-`mcp_tool` ignored, glob via `filepath.Match`). | IdP-side issuance UX/policy remains deployment-specific; gateway contract is fixed (§4.6). |
 | **Router hyperparameters** | This plan includes a comparison framework; **table marks `topK`, `T_min`, `AllowAutoRename`, BM25 hybrid as TBD** pending phase-2 calibration on synthetic catalog (≥20 tools). | All numeric thresholds and `config.example.yaml` final values (§4.5). |
-| **Orchestrator behaviour** | Plan §3.A defers low-level detail to the repo. **Repo:** multiplexor implements **`__` namespacing**, **host `id` preservation**, **partial backend omit on `initialize` / list (R6)**, **application error codes** (`internal/gateway/errcodes`). | Per-backend concurrency caps, strict vs omit policy flag, OpenAPI for HTTP surface, operational timeouts in config (§4.7 residual). |
+| **Orchestrator behaviour** | Plan §3.A defers low-level detail to the repo. **Repo:** multiplexor implements **`__` namespacing**, **host `id` preservation**, **partial backend omit on `initialize` / list (R6)**, **optional strict mode flags** (`aggregation.strict_initialize`, `aggregation.strict_list`), **operational timeouts from YAML** (`aggregation.init_timeout`, `list_timeout`, `call_timeout`), **per-backend concurrency caps** (`max_concurrency`), and **application error codes** (`internal/gateway/errcodes`). | Global multiplex semaphore policy (§4.7 residual). |
 
-**§4.11 checklist:** Items **1–4** and the **trace/metrics/embeddings** narrative are reflected in deployment scaffolding and this plan. Item **5** (router hyperparameters) has **structure + TBD** numeric values. Item **6** is **partially** closed (JWT direction + `AUTH_MODE=none`); **RAR canonical JSON remains open**. Item **7** is **partially** closed (**Go 1.26**); **MCP spec revision / dependency table** still to pin in `docs/DEVELOPER.md` and `go.mod`.
+**§4.11 checklist:** Items **1–4** and the **trace/metrics/embeddings** narrative are reflected in deployment scaffolding and this plan. Item **5** (router hyperparameters) has **structure + TBD** numeric values. Item **6** is **closed** (JWT direction plus canonical RAR shape in ADR 0003 + OpenAPI `AuthorizationDetailsMcpTool`). Item **7** is **partially** closed: `docs/DEVELOPER.md` now pins MCP protocol revision `2024-11-05` and includes a consolidated direct dependency table from `go.mod`; remaining work is routine dependency/version maintenance.
 
 ---
 
@@ -806,7 +806,7 @@ This subsection records **stack choices already reflected in this repository** v
 
 **Residual / implementation choices:**
 
-- **Normative MCP revision:** version/commit or date of MCP spec and **Streamable HTTP / SSE** transport assumed by the project (fix in `go.mod` / `docs/DEVELOPER.md` and bibliography).
+- **Normative MCP revision:** version/commit or date of MCP spec and the concrete **HTTP+SSE transport profile** assumed by the project (fix in `go.mod` / `docs/DEVELOPER.md` and bibliography).
 - **Concrete HTTP surface of the gateway:** the plan states the pattern generically; **repo implements** `GET /mcp/sse`, `POST /mcp/rpc`, session header **`Mcp-Session-Id`** (document in OpenAPI when added).
 - **SSE format:** event names (`event:`), `data` field structure (raw JSON vs envelope), **heartbeats** and read/write timeouts.
 - **TLS:** termination at ingress vs TLS in the binary; certificate policy academic vs corporate.
@@ -871,9 +871,7 @@ This subsection records **stack choices already reflected in this repository** v
 
 ### 4.6 Security: AuthN, RAR, JSON Schema, and policy
 
-**Architecture decisions (closed for design direction):** **JWT Bearer** with **JWKS** validation (`iss`, `aud`, `exp`) as primary AuthN; **Phases 1–2** use **`AUTH_MODE=none`** for development velocity (must be documented as **not production-safe**). Comparative table in §4 (`tab:auth-comparison`).
-
-**Explicitly open in §4:** canonical **`authorization_details`** for type **`mcp_tool`** (exact fields, glob semantics, mapping to namespaced tool names) — **cannot be fixed until MCP client testing in phase 3**.
+**Architecture decisions (closed):** **JWT Bearer** with **JWKS** validation (`iss`, `aud`, `exp`) as primary AuthN; **Phases 1–2** use **`AUTH_MODE=none`** for development velocity (must be documented as **not production-safe**). Comparative table in §4 (`tab:auth-comparison`). Canonical RAR `authorization_details` for **`type: "mcp_tool"`** is fixed by **[ADR 0003](../adr/0003-security-rar-jwt-merge-failmode.md)** and mirrored in OpenAPI schema **`AuthorizationDetailsMcpTool`** (`docs/artifacts/openapi/openapi.yaml`), matching `internal/policy/rar.go`.
 
 **Other open choices:**
 
@@ -882,7 +880,7 @@ This subsection records **stack choices already reflected in this repository** v
 - **JSON Schema:** **draft** revision (e.g. 2020-12) and chosen **Go library** (license, performance, `$ref` support).
 - **List of “elevated” tools** requiring strict schema in non-dev (§3.C SEC3).
 - **Limits** on `arguments`: byte size, max JSON depth, max key count.
-- **Degradation if PolicyEngine/JWKS is down:** always deny vs documented `dev` mode (SEC7).
+- **Degradation policy (updated):** RAR parse/eval can explicitly degrade via `policy.allow_on_eval_failure` / `POLICY_ALLOW_ON_EVAL_FAILURE` (JWT-only fallback). JWKS unavailability remains fail-closed in JWT mode; no dedicated JWKS bypass flag is planned.
 - **Rate limiting / abuse** on gateway: yes/no and where (HTTP middleware).
 
 **Closure criteria:** integration tests with a signed test JWT + OpenAPI/Swagger header documentation (§3.C.8).
@@ -891,34 +889,50 @@ This subsection records **stack choices already reflected in this repository** v
 
 ### 4.7 Orchestrator, MCP session, JSON-RPC, and caches
 
+**Supported / out-of-scope MCP methods (current gateway scope):**
+
+| MCP method / group | Status | Notes |
+|---|---|---|
+| `initialize` | Supported | Aggregated negotiation over available backends. |
+| `notifications/initialized` / `initialized` | Supported | Required to complete handshake before operational RPCs. |
+| `ping` | Supported | Standard utility RPC path. |
+| `tools/list`, `tools/call` | Supported | Primary SRE broker surface; JWT/RAR AuthZ applies to tools only. |
+| `resources/list`, `resources/read` | Supported | Aggregated/pass-through after AuthN; no JWT/RAR allow-list enforcement in this phase. |
+| `prompts/list`, `prompts/get` | Supported | Aggregated/pass-through after AuthN; no JWT/RAR allow-list enforcement in this phase. |
+| `notifications/tools/list_changed` | Supported (optional) | `aggregation.forward_tools_list_changed` can forward events and trigger tools-only cache invalidation + router reindex. |
+| `notifications/resources/list_changed`, `notifications/prompts/list_changed` | Out of scope (forward side-effects) | No guaranteed cache invalidation/reindex/SSE broadcast behavior in this phase. |
+| Other MCP methods | Out of scope | Returned as method-not-supported by gateway contract. |
+
 **Repo decisions implemented (aligned with §3.A, tests in tree):**
 
 - **`jsonrpc` `id` strategy:** **strict preservation** of host `id` on the forward path (notifications omit `id`; `id: null` rejected at parse).
 - **`initialize` with partially down backends:** **omit** failed backends from merge; **JSON-RPC error to host only if all fail** (R6).
+- **Strict aggregation policy flags:** optional fail-closed behavior for `initialize` and list methods via **`aggregation.strict_initialize`** / **`aggregation.strict_list`** (or env equivalents), returning `StrictAggregationFailed` when enabled and an upstream fails.
 - **Merged `tools/list` cache:** TTL configurable (`multiplex.WithListTTL`); **invalidated after successful `initialize`**.
+- **Operational aggregation timeouts:** YAML-backed settings in `aggregation.*` (`init_timeout`, `list_timeout`, `call_timeout`) are wired to multiplexer deadlines.
+- **Per-backend concurrency controls:** upstream-level `max_concurrency` is implemented via backend client semaphores.
+- **Global multiplex concurrency cap:** optional gateway-wide semaphore via `aggregation.max_in_flight` (`0` disables it) now limits concurrent upstream RPCs across all backends.
 - **Namespacing separator:** **`__`** (double underscore); native names containing the separator are **rejected** (`internal/gateway/namespace`).
 - **Gateway application error codes:** stable constants in **`internal/gateway/errcodes`** (see package doc).
 
 **Still open / not yet in repo:**
 
-- **Concurrency limits:** global and **per `backend_id`** (semaphore) — spec §A.3; not implemented.
-- **Optional strict mode** for `initialize` (fail all if any backend fails) — policy flag only.
-- **Per-backend and per-MCP-method timeouts** — durations exist in code; **not yet driven from documented config** / OpenAPI.
-- **OpenAPI/Swagger** for HTTP surface (§6).
+- No additional orchestrator/session gaps captured for this subsection beyond ongoing operational tuning.
 
-**Closure criteria:** unit tests §3.A.7 + documentation of behavior when a mock backend fails — **largely met** for Phase 1 multiplexor; extend when real adapters and limits land.
+**Closure criteria:** unit tests §3.A.7 + documentation of behavior when a mock backend fails — **met for current multiplexor scope** (including global semaphore behavior).
 
 ---
 
 ### 4.8 Observability: export, cardinality, and agent metadata
 
-**Open choices (in addition to §4.3):**
+**Closed now (A9 + A14 docs pass):**
 
-- **Root span granularity:** one span per JSON-RPC message vs grouping by session (single decision documented in code).
-- **Metric cardinality:** whether `tool_name` or `backend_id` are Prometheus labels; **top-N** or aggregated metrics policy to avoid series explosion.
-- **W3C propagation** to HTTP backends: always on vs debug-only environments.
-- **LLM tokens:** whether to use a header like `X-Agent-Tokens-Used` and OTel attribute semantics.
-- **Log↔trace correlation:** structured log format (required fields).
+- **Metric cardinality policy** is closed and documented in `docs/DEVELOPER.md` (**Observability -> Metric cardinality**): bounded metric labels only, no unbounded IDs/tool names on counters/histograms, tool-level detail on spans (`mcp.tool.name`).
+- **Log↔trace correlation fields** are closed in `docs/DEVELOPER.md` (**Observability -> Log correlation**): JSON slog on stdout, `trace_id` correlation, and operator guidance for `span_id` / service identity.
+
+- **Root span granularity** is closed in `docs/DEVELOPER.md` (**Observability**): one root span per JSON-RPC message (`mcp.host.request`).
+- **W3C propagation** policy is closed in `docs/DEVELOPER.md` (**Observability**): trace context is always propagated to HTTP upstream backends.
+- **LLM tokens metric policy** is closed in `docs/DEVELOPER.md` (**Observability**): `X-Agent-Tokens-Used` is span metadata only (`mcp.agent.tokens_used`), with no Prometheus metric.
 
 **Closure criteria:** §3.D.8 + sample query screenshot in chosen backend.
 
@@ -926,7 +940,7 @@ This subsection records **stack choices already reflected in this repository** v
 
 ### 4.9 Normative versions, Go dependencies, and quality
 
-**Architecture decision (closed):** **Go 1.26** as implementation language (§4.1.1); `mcp-gateway/go.mod` uses **1.26.1** — keep in sync with documented version policy.
+**Architecture decision (closed):** **Go 1.26** as implementation language (§4.1.1); `mcp-gateway/go.mod` currently uses **1.26.1** — keep docs and module policy aligned.
 
 **Open choices:**
 
@@ -960,7 +974,7 @@ To justify the work before the committee, the final document should include at l
 3. **Telemetry** tables §4.3 (traces + metrics).
 4. **Embeddings** §4.4 with model/provider decision.
 5. Table or list of **router hyperparameters** §4.5 with final values.
-6. **RAR schema** and AuthN policy §4.6.
+6. **RAR schema** and AuthN policy §4.6 (**closed**; ADR 0003 + OpenAPI `AuthorizationDetailsMcpTool`).
 7. **Go dependencies** and cited MCP/JSON-RPC versions §4.9.
 
 **Plan status (April 2026):**
@@ -971,11 +985,11 @@ To justify the work before the committee, the final document should include at l
 | 2 | Transport comparison | **Done** — `tab:transport-comparison` | `GET /mcp/sse`, `POST /mcp/rpc`, `Mcp-Session-Id` |
 | 3 | Telemetry comparison | **Done** — tracing + metrics tables | Compose: Tempo, Prometheus, OTel Collector |
 | 4 | Embeddings decision | **Done** — ONNX + MiniLM | `deployments/embed/` service |
-| 5 | Router hyperparams | **Partial** — table exists, values **TBD** | Await phase 2 + `config.example.yaml` |
-| 6 | RAR + AuthN | **Partial** — JWT direction + `AUTH_MODE=none`; **RAR JSON open** | Phase 3 |
-| 7 | Go + spec versions | **Partial** — **Go 1.26** stated; MCP revision still to pin in `docs/DEVELOPER.md` / `go.mod` comment | `go.mod` 1.26.1 |
+| 5 | Router hyperparams | **Partial** — baseline values now documented (`top_k=8`, `T_min=0.35`, `hybrid_alpha=0.2`); final close pending B1.3 live calibration | `deployments/gateway.example.yaml` + `.env.example` mirror baseline `ROUTER_*` |
+| 6 | RAR + AuthN | **Done** — JWT direction + canonical RAR shape in ADR 0003 and OpenAPI `AuthorizationDetailsMcpTool` | Closed for gateway contract (Phase 3 ops hardening continues) |
+| 7 | Go + spec versions | **Partial (near-closed)** — **Go 1.26** stated; `docs/DEVELOPER.md` now pins MCP `2024-11-05` and includes a direct dependency table from `go.mod` | `go.mod` 1.26.1 + docs pinned |
 
-Items **5–7** remain **open** until design and implementation close the remaining rows; items **1–4** are **closed** in this plan and reflected in deployment scaffolding.
+Item **5** remains **open** until B1.3 calibration closes final router values; item **7** is now **partial (near-closed)** with MCP revision and dependency table pinned in docs. Items **1–4** plus **6** are **closed** in this plan and reflected in deployment scaffolding.
 
 ---
 
