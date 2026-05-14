@@ -1,8 +1,8 @@
-# ADR 0002: `filter_list` tools/list mode
+# ADR 0002: `filter_list` mode semantics
 
 ## Status
 
-Superseded — **`filter_list` is implemented** behind `router.mode: filter_list` / `ROUTER_MODE=filter_list` (see `docs/DEVELOPER.md`, `internal/router/semantic_router_filter_list.go`, `internal/gateway/multiplex/tools_list.go`).
+Accepted — **`filter_list` is implemented** behind `router.mode: filter_list` / `ROUTER_MODE=filter_list` (see `docs/DEVELOPER.md`, `internal/router/semantic_router_filter_list.go`, `internal/gateway/multiplex/tools_list.go`).
 
 ## Context
 
@@ -11,9 +11,9 @@ The architecture plan describes two router-adjacent `tools/list` behaviors:
 - **`assist_list`:** the host receives the full aggregated catalog; semantic routing applies on `tools/call` (and optionally vector-assisted list filtering is off).
 - **`filter_list`:** `tools/list` returns a subset of the merged catalog filtered by similarity to request-scoped intent (`X-MCP-Intent` via `hostctx`), subject to JWT/RAR allow-lists and vector index filters (plan §3.B S1).
 
-## Decision (historical)
+## Decision
 
-Tier 1 initially deferred `filter_list` to reduce scope. **Phase 3 / P0** implemented `filter_list` with explicit semantics:
+The gateway supports `filter_list` with explicit semantics:
 
 - **Empty `X-MCP-Intent`:** `tools/list` returns the full merged catalog after allow-list policy only (same as `assist_list` for that request). No last-known intent from prior RPCs.
 - **Degraded vector/embed/catalog mismatch:** full list is returned and a warning is logged (hosts keep a usable catalog).

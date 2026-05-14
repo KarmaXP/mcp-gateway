@@ -40,6 +40,10 @@ Merge rules:
 
 Unknown **`mcp_tool_groups`** entries are an error from `EffectiveAllowList` (fail closed unless degradation is enabled; see Decision 3).
 
+### Scope note (A13.2): JWT/RAR allow-list applies to `tools/*` only
+
+The effective allow-list derived from `mcp_tools`, `mcp_tool_groups`, and `authorization_details` is enforced on **`tools/list`** and **`tools/call`** only. It does **not** currently filter or deny **`resources/*`** or **`prompts/*`** gateway methods; those remain pass-through after AuthN in the current scope (see ADR 0004).
+
 ## Decision 3: Failure mode for policy evaluation
 
 - **Default:** **Fail closed.** If `authorization_details` cannot be parsed or conflicts with invariants (e.g. mutually exclusive fields), `EffectiveAllowList` returns an error and the JWT middleware rejects the request (**401**), unless **`policy.allow_on_eval_failure`** is set **true** in config.
@@ -51,6 +55,12 @@ Implementation: `internal/policy/engine.go` (`allowOnEvalFail` / `AllowOnEvalFai
 
 - **Audit:** Allow/deny audit lines are emitted through a pluggable **`policy.AuditSink`** (`Emit(ctx, AuditRecord)`). The default **`SlogAuditSink`** preserves prior behavior: structured **`slog`** (with `mcp_security_audit`, hashed subject prefix, no tokens/args) plus **`telemetry.RecordPolicyDecision`**. **`policy.SetAuditSink`** swaps the sink process-wide (tests, future Kafka/syslog). **`LogAudit`** only builds an **`AuditRecord`** and delegates to the active sink.
 - **Reload:** The active **`policy.Engine`** is held in a **`policy.Holder`** (`Load` / `Store` with **`atomic.Pointer`**). **`SIGHUP`** triggers **`config.Load()`** and **`holder.Store(policy.NewEngine(cfg.Policy))`**. JWT middleware and multiplex read the engine via **`holder.Load()`** on each use, so **new `POST /mcp/rpc`** requests see the updated policy as soon as the swap completes. An existing **SSE** connection does not by itself block policy updates: every RPC still passes through HTTP middleware. Clients that **cache** `tools/list` or tool metadata **in-process** may observe stale catalog or assumptions until they refresh or reconnect.
+
+## Decision 5 (A7.4 addendum): JWKS unavailability remains fail-closed
+
+- JWKS fetch/lookup/verification failures continue to return **401** in JWT mode (fail closed).
+- The gateway does **not** provide `auth.allow_jwks_unavailable` / `AUTH_ALLOW_JWKS_UNAVAILABLE` bypass semantics.
+- The only explicit insecure bypass for local development remains `AUTH_MODE=none`, which disables JWT validation by configuration rather than silently degrading an otherwise JWT-protected deployment.
 
 ## Consequences
 
