@@ -9,9 +9,9 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/KarmaXP/mcp-gateway/internal/auth"
-	"github.com/KarmaXP/mcp-gateway/internal/auth/ratelimit"
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/config"
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
@@ -28,9 +28,89 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
 )
 
+type auditSinkCloser interface {
+	policy.AuditSink
+	Close() error
+}
+
+var newSyslogAuditSink = func(network, address string) (auditSinkCloser, error) {
+	return policy.NewSyslogAuditSink(network, address)
+}
+
+const readinessProbeTimeout = 2 * time.Second
+
+type dependencyReadinessChecker struct {
+	httpClient *http.Client
+	qdrantURL  string
+	embedURL   string
+}
+
+func (c *dependencyReadinessChecker) CheckReadiness(ctx context.Context) error {
+	if err := probeAnyHealthPath(ctx, c.httpClient, c.qdrantURL, "/readyz", "/healthz"); err != nil {
+		return fmt.Errorf("qdrant dependency unhealthy: %w", err)
+	}
+	if err := probeAnyHealthPath(ctx, c.httpClient, c.embedURL, "/healthz"); err != nil {
+		return fmt.Errorf("embed dependency unhealthy: %w", err)
+	}
+	return nil
+}
+
+func probeAnyHealthPath(ctx context.Context, client *http.Client, baseURL string, paths ...string) error {
+	var lastErr error
+	for _, path := range paths {
+		if err := probeHealthPath(ctx, client, baseURL, path); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+	}
+	if lastErr != nil {
+		return lastErr
+	}
+	return fmt.Errorf("no readiness probe paths configured for %s", baseURL)
+}
+
+func probeHealthPath(ctx context.Context, client *http.Client, baseURL, path string) error {
+	if strings.TrimSpace(baseURL) == "" {
+		return fmt.Errorf("missing dependency base URL for path %s", path)
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, readinessProbeTimeout)
+	defer cancel()
+	u := strings.TrimRight(baseURL, "/") + path
+	req, err := http.NewRequestWithContext(probeCtx, http.MethodGet, u, nil)
+	if err != nil {
+		return fmt.Errorf("build request %s: %w", u, err)
+	}
+	res, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("probe %s failed: %w", u, err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("probe %s returned status %d", u, res.StatusCode)
+	}
+	return nil
+}
+
 func routerModeActive(cfg config.GatewayConfig) bool {
 	mode := strings.ToLower(strings.TrimSpace(cfg.SemanticRouter.Mode))
 	return mode == "on" || mode == "assist_list" || mode == "filter_list"
+}
+
+func buildReadinessChecker(cfg config.GatewayConfig) httpserver.ReadinessChecker {
+	if !routerModeActive(cfg) {
+		return nil
+	}
+	qdrantURL := strings.TrimSpace(os.Getenv("QDRANT_URL"))
+	embedURL := strings.TrimSpace(cfg.Embedding.URL)
+	if embedURL == "" {
+		embedURL = defaults.DefaultEmbedServiceURL
+	}
+	return &dependencyReadinessChecker{
+		httpClient: http.DefaultClient,
+		qdrantURL:  qdrantURL,
+		embedURL:   embedURL,
+	}
 }
 
 func preflightQdrant(cfg config.GatewayConfig) {
@@ -59,6 +139,7 @@ func multiplexerOptions(cfg config.GatewayConfig) ([]multiplex.Option, error) {
 		multiplex.WithInitTimeout(cfg.AggregationInitTimeout()),
 		multiplex.WithListTimeout(cfg.AggregationListTimeout()),
 		multiplex.WithCallTimeout(cfg.AggregationCallTimeout()),
+		multiplex.WithGlobalMaxInFlight(cfg.AggregationMaxInFlight()),
 	}
 	mode := strings.ToLower(strings.TrimSpace(cfg.SemanticRouter.Mode))
 	if mode == "" {
@@ -127,6 +208,37 @@ func multiplexerOptions(cfg config.GatewayConfig) ([]multiplex.Option, error) {
 	return opts, nil
 }
 
+func configureAuditSink(cfg config.GatewayConfig) (func(), error) {
+	auditCfg, err := cfg.ResolvePolicyAuditSink()
+	if err != nil {
+		return nil, err
+	}
+	switch auditCfg.SinkType {
+	case config.PolicyAuditSinkSlog:
+		policy.SetAuditSink(policy.SlogAuditSink{})
+		slog.Info("policy audit sink configured", "sink", config.PolicyAuditSinkSlog)
+		return nil, nil
+	case config.PolicyAuditSinkSyslog:
+		sink, err := newSyslogAuditSink(auditCfg.SyslogNetwork, auditCfg.SyslogAddress)
+		if err != nil {
+			return nil, err
+		}
+		policy.SetAuditSink(sink)
+		slog.Info("policy audit sink configured",
+			"sink", config.PolicyAuditSinkSyslog,
+			"network", auditCfg.SyslogNetwork,
+			"address", auditCfg.SyslogAddress,
+		)
+		return func() {
+			if err := sink.Close(); err != nil {
+				slog.Warn("policy audit sink close", "err", err)
+			}
+		}, nil
+	default:
+		return nil, fmt.Errorf("unsupported audit sink type %q", auditCfg.SinkType)
+	}
+}
+
 func main() {
 	ctx := context.Background()
 	teleShutdown, err := telemetry.Init(ctx, defaults.DefaultTelemetryServiceName)
@@ -149,6 +261,14 @@ func main() {
 	if err != nil {
 		slog.Error("config", "err", err)
 		os.Exit(1)
+	}
+	auditCleanup, err := configureAuditSink(cfg)
+	if err != nil {
+		slog.Error("policy audit sink", "err", err)
+		os.Exit(1)
+	}
+	if auditCleanup != nil {
+		defer auditCleanup()
 	}
 
 	preflightQdrant(cfg)
@@ -187,6 +307,7 @@ func main() {
 		os.Exit(1)
 	}
 	mpxOpts = append(mpxOpts, multiplex.WithPolicyHolder(polHolder))
+	mpxOpts = append(mpxOpts, multiplex.WithArgumentValidateLimits(cfg.PolicyArgumentLimits()))
 	mpxOpts = append(mpxOpts, multiplex.WithAggregationStrict(cfg.Aggregation.StrictInitialize, cfg.Aggregation.StrictList))
 	mpxOpts = append(mpxOpts, multiplex.WithReportPartialFailures(cfg.Aggregation.ReportPartialFailures))
 	mpx, err := multiplex.New(upstreams, mpxOpts...)
@@ -195,19 +316,27 @@ func main() {
 		os.Exit(1)
 	}
 
-	httpOpts := orchestrator.HTTPServerOptions(defaults.DefaultTelemetryServiceName, authCfg, validator, polHolder, ratelimit.FromEnvironment())
+	httpOpts := []httpserver.Option{
+		httpserver.WithOriginAllowList(cfg.AllowedOrigins()),
+	}
+	if readinessChecker := buildReadinessChecker(cfg); readinessChecker != nil {
+		httpOpts = append(httpOpts, httpserver.WithReadinessChecker(readinessChecker))
+	}
+	httpOpts = append(httpOpts, orchestrator.HTTPServerOptions(defaults.DefaultTelemetryServiceName, authCfg, validator, polHolder, cfg.RateLimit())...)
 	httpOpts = append(httpOpts, httpserver.WithShutdownContext(rootCtx))
 	srv := httpserver.New(mpx, addr, httpOpts...)
 
 	if cfg.ForwardToolsListChanged() {
 		backend.RegisterNotificationHandlers(upstreams, func(req *rpc.Request) {
-			if req == nil || !mcpwire.IsToolsListChangedNotification(req.Method) {
+			if req == nil || !mcpwire.IsCatalogListChangedNotification(req.Method) {
 				return
 			}
-			mpx.InvalidateToolCache()
+			if mcpwire.IsToolsListChangedNotification(req.Method) {
+				mpx.HandleToolsListChanged(context.Background())
+			}
 			srv.BroadcastNotification(req)
 		})
-		slog.Info("upstream tools/list_changed forwarding enabled")
+		slog.Info("upstream catalog list_changed forwarding enabled")
 	}
 
 	go func() {
@@ -220,6 +349,7 @@ func main() {
 				continue
 			}
 			policy.ReloadEngine(polHolder, cfg2)
+			slog.Warn("SIGHUP applies policy-only reload", "reloaded", "config.Load + policy.ReloadEngine", "not_reloaded", "rate_limit, allowed_origins, aggregation, audit_sink, backends, max_in_flight")
 			slog.Info("policy reloaded from config", "policy_version", cfg2.Policy.Version)
 		}
 	}()
