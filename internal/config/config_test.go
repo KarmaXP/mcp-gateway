@@ -65,6 +65,10 @@ backends:
     url: http://example.invalid:9
 policy:
   version: "test-pol"
+  harden_schemas: true
+  max_argument_bytes: 4096
+  max_argument_depth: 10
+  max_argument_keys: 99
   elevated_tools:
     - a__x
   tool_groups:
@@ -80,6 +84,10 @@ policy:
 	require.Equal(t, []string{"a__x"}, cfg.Policy.ElevatedTools)
 	require.Equal(t, []string{"a__list"}, cfg.Policy.ToolGroups["read"])
 	require.True(t, cfg.Policy.AllowOnEvalFailure)
+	require.True(t, cfg.Policy.HardenSchemas)
+	require.Equal(t, 4096, cfg.Policy.MaxArgumentBytes)
+	require.Equal(t, 10, cfg.Policy.MaxArgumentDepth)
+	require.Equal(t, 99, cfg.Policy.MaxArgumentKeys)
 }
 
 func TestQdrantCollectionDefault(t *testing.T) {
@@ -101,6 +109,7 @@ aggregation:
   init_timeout: 3s
   list_timeout: 7s
   call_timeout: 90s
+  max_in_flight: 5
 `), 0o644)
 	require.NoError(t, err)
 	t.Setenv("MCP_GATEWAY_CONFIG", p)
@@ -109,6 +118,7 @@ aggregation:
 	require.Equal(t, 3*time.Second, cfg.AggregationInitTimeout())
 	require.Equal(t, 7*time.Second, cfg.AggregationListTimeout())
 	require.Equal(t, 90*time.Second, cfg.AggregationCallTimeout())
+	require.Equal(t, 5, cfg.AggregationMaxInFlight())
 }
 
 func TestAggregationTimeoutsDefault(t *testing.T) {
@@ -127,4 +137,44 @@ func TestAggregationTimeoutsIgnoreInvalid(t *testing.T) {
 	require.Equal(t, defaults.MultiplexInitTimeout, c.AggregationInitTimeout())
 	require.Equal(t, defaults.MultiplexListTimeout, c.AggregationListTimeout())
 	require.Equal(t, defaults.MultiplexCallTimeout, c.AggregationCallTimeout())
+}
+
+func TestAggregationMaxInFlightDefaultAndInvalid(t *testing.T) {
+	var c GatewayConfig
+	require.Equal(t, 0, c.AggregationMaxInFlight())
+
+	c.Aggregation.MaxInFlight = -7
+	require.Equal(t, 0, c.AggregationMaxInFlight())
+}
+
+func TestApplyEnvOverridesPolicyAllowOnEvalFailureTrue(t *testing.T) {
+	cfg := GatewayConfig{}
+	t.Setenv("POLICY_ALLOW_ON_EVAL_FAILURE", "true")
+
+	cfg.ApplyEnvOverrides()
+	require.True(t, cfg.Policy.AllowOnEvalFailure)
+}
+
+func TestApplyEnvOverridesPolicyAllowOnEvalFailureFalse(t *testing.T) {
+	cfg := GatewayConfig{
+		Policy: PolicySettings{
+			AllowOnEvalFailure: true,
+		},
+	}
+	t.Setenv("POLICY_ALLOW_ON_EVAL_FAILURE", "false")
+
+	cfg.ApplyEnvOverrides()
+	require.False(t, cfg.Policy.AllowOnEvalFailure)
+}
+
+func TestApplyEnvOverridesAggregationMaxInFlight(t *testing.T) {
+	cfg := GatewayConfig{
+		Aggregation: AggregationSettings{
+			MaxInFlight: 2,
+		},
+	}
+	t.Setenv("AGGREGATION_MAX_IN_FLIGHT", "9")
+
+	cfg.ApplyEnvOverrides()
+	require.Equal(t, 9, cfg.AggregationMaxInFlight())
 }

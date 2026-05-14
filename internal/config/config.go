@@ -11,16 +11,24 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/KarmaXP/mcp-gateway/internal/auth/ratelimit"
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
+	"github.com/KarmaXP/mcp-gateway/internal/validate"
 )
 
 type GatewayConfig struct {
 	Upstreams      []UpstreamDefinition     `yaml:"backends"`
+	Gateway        GatewaySettings          `yaml:"gateway"`
 	SemanticRouter SemanticRouterSettings   `yaml:"router"`
 	Aggregation    AggregationSettings      `yaml:"aggregation"`
+	RateLimitCfg   RateLimitSettings        `yaml:"rate_limit"`
 	Policy         PolicySettings           `yaml:"policy"`
 	Qdrant         QdrantSettings           `yaml:"qdrant"`
 	Embedding      EmbeddingServiceSettings `yaml:"embed"`
+}
+
+type GatewaySettings struct {
+	AllowedOrigins []string `yaml:"allowed_origins"`
 }
 
 type AggregationSettings struct {
@@ -28,10 +36,17 @@ type AggregationSettings struct {
 	StrictList              bool   `yaml:"strict_list"`
 	ReportPartialFailures   bool   `yaml:"report_partial_failures"`
 	ForwardToolsListChanged bool   `yaml:"forward_tools_list_changed"`
+	MaxInFlight             int    `yaml:"max_in_flight"`
 	InitTimeout             string `yaml:"init_timeout"`
 	ListTimeout             string `yaml:"list_timeout"`
 	CallTimeout             string `yaml:"call_timeout"`
 	ListCacheTTL            string `yaml:"list_cache_ttl"`
+}
+
+type RateLimitSettings struct {
+	Enabled bool    `yaml:"enabled"`
+	RPS     float64 `yaml:"rps"`
+	Burst   int     `yaml:"burst"`
 }
 
 // RAR merge with JWT allow lists, elevated tools (strict schema), tool groups.
@@ -40,6 +55,13 @@ type PolicySettings struct {
 	ElevatedTools      []string            `yaml:"elevated_tools"`
 	ToolGroups         map[string][]string `yaml:"tool_groups"`
 	AllowOnEvalFailure bool                `yaml:"allow_on_eval_failure"`
+	HardenSchemas      bool                `yaml:"harden_schemas"`
+	MaxArgumentBytes   int                 `yaml:"max_argument_bytes"`
+	MaxArgumentDepth   int                 `yaml:"max_argument_depth"`
+	MaxArgumentKeys    int                 `yaml:"max_argument_keys"`
+	AuditSink          string              `yaml:"audit_sink"`
+	AuditSyslogNetwork string              `yaml:"audit_syslog_network"`
+	AuditSyslogAddress string              `yaml:"audit_syslog_address"`
 }
 
 type UpstreamDefinition struct {
@@ -77,6 +99,17 @@ type QdrantSettings struct {
 
 type EmbeddingServiceSettings struct {
 	URL string `yaml:"url"`
+}
+
+const (
+	PolicyAuditSinkSlog = "slog"
+	PolicyAuditSinkSyslog = "syslog"
+)
+
+type PolicyAuditSinkConfig struct {
+	SinkType      string
+	SyslogNetwork string
+	SyslogAddress string
 }
 
 var errNoUpstreams = errors.New("config: no upstreams defined")
@@ -159,6 +192,10 @@ func (c *GatewayConfig) Validate() error {
 }
 
 func (c *GatewayConfig) ApplyEnvOverrides() {
+	if raw, ok := os.LookupEnv("GATEWAY_ALLOWED_ORIGINS"); ok {
+		c.Gateway.AllowedOrigins = parseCommaSeparatedList(raw)
+	}
+
 	if v := strings.TrimSpace(os.Getenv("EMBED_URL")); v != "" {
 		c.Embedding.URL = v
 	}
@@ -198,8 +235,24 @@ func (c *GatewayConfig) ApplyEnvOverrides() {
 	if v := strings.TrimSpace(os.Getenv("POLICY_VERSION")); v != "" {
 		c.Policy.Version = v
 	}
-	if v := strings.ToLower(strings.TrimSpace(os.Getenv("POLICY_ALLOW_ON_EVAL_FAILURE"))); v == "1" || v == "true" || v == "yes" {
-		c.Policy.AllowOnEvalFailure = true
+	if v := strings.TrimSpace(os.Getenv("POLICY_AUDIT_SINK")); v != "" {
+		c.Policy.AuditSink = v
+	}
+	if v := strings.TrimSpace(os.Getenv("POLICY_AUDIT_SYSLOG_NETWORK")); v != "" {
+		c.Policy.AuditSyslogNetwork = v
+	}
+	if v := strings.TrimSpace(os.Getenv("POLICY_AUDIT_SYSLOG_ADDRESS")); v != "" {
+		c.Policy.AuditSyslogAddress = v
+	}
+	if v := strings.TrimSpace(os.Getenv("POLICY_ALLOW_ON_EVAL_FAILURE")); v != "" {
+		if b, ok := parseBoolValue(v); ok {
+			c.Policy.AllowOnEvalFailure = b
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("POLICY_HARDEN_SCHEMAS")); v != "" {
+		if b, ok := parseBoolValue(v); ok {
+			c.Policy.HardenSchemas = b
+		}
 	}
 	if v := strings.ToLower(strings.TrimSpace(os.Getenv("AGGREGATION_STRICT_INITIALIZE"))); v == "1" || v == "true" || v == "yes" {
 		c.Aggregation.StrictInitialize = true
@@ -213,10 +266,85 @@ func (c *GatewayConfig) ApplyEnvOverrides() {
 	if v := strings.ToLower(strings.TrimSpace(os.Getenv("AGGREGATION_REPORT_PARTIAL_FAILURES"))); v == "1" || v == "true" || v == "yes" {
 		c.Aggregation.ReportPartialFailures = true
 	}
+	if v := strings.TrimSpace(os.Getenv("AGGREGATION_MAX_IN_FLIGHT")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			c.Aggregation.MaxInFlight = n
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("RATE_LIMIT_ENABLED")); v != "" {
+		if b, ok := parseBoolValue(v); ok {
+			c.RateLimitCfg.Enabled = b
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("RATE_LIMIT_RPS")); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
+			c.RateLimitCfg.RPS = f
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("RATE_LIMIT_BURST")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			c.RateLimitCfg.Burst = n
+		}
+	}
 }
 
 func (c *GatewayConfig) ForwardToolsListChanged() bool {
 	return c != nil && c.Aggregation.ForwardToolsListChanged
+}
+
+func (c *GatewayConfig) PolicyArgumentLimits() validate.Limits {
+	dl := validate.DefaultLimits()
+	if c == nil {
+		return dl
+	}
+	out := validate.Limits{
+		MaxBytes: c.Policy.MaxArgumentBytes,
+		MaxDepth: c.Policy.MaxArgumentDepth,
+		MaxKeys:  c.Policy.MaxArgumentKeys,
+	}
+	if out.MaxBytes <= 0 {
+		out.MaxBytes = dl.MaxBytes
+	}
+	if out.MaxDepth <= 0 {
+		out.MaxDepth = dl.MaxDepth
+	}
+	if out.MaxKeys <= 0 {
+		out.MaxKeys = dl.MaxKeys
+	}
+	return out
+}
+
+func (c *GatewayConfig) ResolvePolicyAuditSink() (PolicyAuditSinkConfig, error) {
+	cfg := PolicyAuditSinkConfig{
+		SinkType:      PolicyAuditSinkSlog,
+		SyslogNetwork: "udp",
+	}
+	if c == nil {
+		return cfg, nil
+	}
+
+	sink := strings.ToLower(strings.TrimSpace(c.Policy.AuditSink))
+	if sink == "" {
+		return cfg, nil
+	}
+	switch sink {
+	case PolicyAuditSinkSlog:
+		cfg.SinkType = PolicyAuditSinkSlog
+		return cfg, nil
+	case PolicyAuditSinkSyslog:
+		cfg.SinkType = PolicyAuditSinkSyslog
+		cfg.SyslogNetwork = strings.ToLower(strings.TrimSpace(c.Policy.AuditSyslogNetwork))
+		if cfg.SyslogNetwork == "" {
+			cfg.SyslogNetwork = "udp"
+		}
+		cfg.SyslogAddress = strings.TrimSpace(c.Policy.AuditSyslogAddress)
+		if cfg.SyslogAddress == "" {
+			return cfg, fmt.Errorf("config: policy.audit_syslog_address is required when policy.audit_sink=%s", PolicyAuditSinkSyslog)
+		}
+		return cfg, nil
+	default:
+		return cfg, fmt.Errorf("config: policy.audit_sink must be %s or %s", PolicyAuditSinkSlog, PolicyAuditSinkSyslog)
+	}
 }
 
 func (c *GatewayConfig) RouterEmbedTimeout() time.Duration {
@@ -279,6 +407,16 @@ func (c *GatewayConfig) AggregationListCacheTTL() time.Duration {
 	return 0
 }
 
+func (c *GatewayConfig) AggregationMaxInFlight() int {
+	if c == nil {
+		return 0
+	}
+	if c.Aggregation.MaxInFlight < 0 {
+		return 0
+	}
+	return c.Aggregation.MaxInFlight
+}
+
 func parseDurationString(s string) (time.Duration, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -287,11 +425,68 @@ func parseDurationString(s string) (time.Duration, error) {
 	return time.ParseDuration(s)
 }
 
+func parseBoolValue(v string) (bool, bool) {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "on":
+		return true, true
+	case "0", "false", "no", "off":
+		return false, true
+	default:
+		return false, false
+	}
+}
+
+func normalizeStringList(items []string) []string {
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		trimmed := strings.TrimSpace(item)
+		if trimmed == "" {
+			continue
+		}
+		out = append(out, trimmed)
+	}
+	return out
+}
+
+func parseCommaSeparatedList(raw string) []string {
+	return normalizeStringList(strings.Split(raw, ","))
+}
+
+func (c *GatewayConfig) AllowedOrigins() []string {
+	if c == nil {
+		return nil
+	}
+	return normalizeStringList(c.Gateway.AllowedOrigins)
+}
+
 func (c *GatewayConfig) QdrantCollection() string {
 	if c == nil || strings.TrimSpace(c.Qdrant.Collection) == "" {
 		return defaults.DefaultQdrantCollectionName
 	}
 	return strings.TrimSpace(c.Qdrant.Collection)
+}
+
+func (c *GatewayConfig) RateLimit() ratelimit.Config {
+	if c == nil {
+		return ratelimit.Config{
+			Enabled: false,
+			RPS:     float64(defaults.DefaultRateLimitRPS),
+			Burst:   defaults.DefaultRateLimitBurst,
+		}
+	}
+	rps := c.RateLimitCfg.RPS
+	if rps <= 0 {
+		rps = float64(defaults.DefaultRateLimitRPS)
+	}
+	burst := c.RateLimitCfg.Burst
+	if burst <= 0 {
+		burst = defaults.DefaultRateLimitBurst
+	}
+	return ratelimit.Config{
+		Enabled: c.RateLimitCfg.Enabled,
+		RPS:     rps,
+		Burst:   burst,
+	}
 }
 
 func (u *UpstreamDefinition) ResolveAuthToken() string {

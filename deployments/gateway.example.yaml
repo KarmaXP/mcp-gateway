@@ -14,20 +14,51 @@
 #   list_timeout: 10s
 #   call_timeout: 60s
 #   list_cache_ttl: 30s
+#   max_in_flight: 0 # 0 = disabled (no global cap across upstream RPCs)
 #   report_partial_failures: false
-#   forward_tools_list_changed: false
-# Env: AGGREGATION_STRICT_INITIALIZE=1, AGGREGATION_STRICT_LIST=1
+#   forward_tools_list_changed: false # forwards tools catalog list_changed only; invalidates tools cache + triggers router reindex + broadcasts SSE catalog notifications
+# Env: AGGREGATION_STRICT_INITIALIZE=1, AGGREGATION_STRICT_LIST=1, AGGREGATION_MAX_IN_FLIGHT=16
+
+# Optional: per-subject token bucket for POST /mcp/rpc.
+# rate_limit:
+#   enabled: false
+#   rps: 100
+#   burst: 200
+# Env: RATE_LIMIT_ENABLED=true, RATE_LIMIT_RPS=100, RATE_LIMIT_BURST=200
 
 # Gateway policy (RAR merge, tool groups, elevated tools requiring JSON Schema — see internal/policy).
 # policy:
 #   version: "2026-05-01"
 #   allow_on_eval_failure: false
+#   harden_schemas: true
+#   audit_sink: slog # slog (default) | syslog
+#   audit_syslog_network: udp # default udp; only used when audit_sink=syslog
+#   audit_syslog_address: 127.0.0.1:514 # required when audit_sink=syslog
+#   max_argument_bytes: 262144
+#   max_argument_depth: 32
+#   max_argument_keys: 256
 #   elevated_tools:
 #     - k8s__exec_pod
 #   tool_groups:
 #     k8s_read:
 #       - k8s__get_logs
 #       - k8s__list_pods
+# SIGHUP reload scope today:
+#   - Reloaded: MCP_GATEWAY_CONFIG via config.Load + policy.ReloadEngine (policy only).
+#   - Not reloaded until process restart: rate_limit, gateway.allowed_origins,
+#     aggregation (including max_in_flight), policy.audit_sink, backends.
+# Note: audit sink is set once at startup; SIGHUP policy reload does not reconfigure it.
+
+# Optional: browser/client origin allow-list for host ingress.
+# Empty or unset = no Origin checks.
+# When set, requests on GET /mcp/sse and POST /mcp/rpc with a non-empty
+# Origin header must match one value exactly after trimming spaces.
+# Requests without Origin header are still allowed.
+# gateway:
+#   allowed_origins:
+#     - https://chat.openai.com
+#     - https://cursor.sh
+# Env: GATEWAY_ALLOWED_ORIGINS=https://chat.openai.com,https://cursor.sh
 
 backends:
   - id: backend-alpha
@@ -47,9 +78,10 @@ backends:
 # When mode is on, assist_list, or filter_list, set QDRANT_URL (and EMBED_URL) in the environment.
 router:
   mode: off
-  # top_k: 8
-  # score_min: 0.35
-  # hybrid_alpha: 0.2
+  # B1.4 baseline pending B1.3 live calibration (internal/defaults + eval harness seed).
+  top_k: 8
+  score_min: 0.35
+  hybrid_alpha: 0.2
   # allow_auto_rename: false
   # vector_dim: 384
   # embed_timeout: 10s
