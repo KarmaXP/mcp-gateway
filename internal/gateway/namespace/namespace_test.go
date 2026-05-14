@@ -41,3 +41,38 @@ func TestSplitRejectsMissingSeparator(t *testing.T) {
 	_, _, err := Split("not_namespaced")
 	require.Error(t, err)
 }
+
+func BenchmarkNamespaceAdd(b *testing.B) {
+	const (
+		prefix = "backend0"
+		native = "search_documents"
+	)
+	b.ReportAllocs()
+	b.SetBytes(int64(len(prefix) + len(Separator) + len(native)))
+
+	for b.Loop() {
+		ns, err := Join(prefix, native)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if ns == "" {
+			b.Fatal("empty namespaced tool")
+		}
+	}
+}
+
+func BenchmarkNamespaceStrip(b *testing.B) {
+	const namespaced = "backend0__search_documents"
+	b.ReportAllocs()
+	b.SetBytes(int64(len(namespaced)))
+
+	for b.Loop() {
+		prefix, native, err := Split(namespaced)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if prefix == "" || native == "" {
+			b.Fatal("empty split segment")
+		}
+	}
+}

@@ -111,10 +111,58 @@ func TestPhase2SiloNarrowingRespectsAllowedTools(t *testing.T) {
 		ToolName:       "wrong__tool",
 		IntentText:     "debug kubernetes pod logs during incident",
 		CatalogVersion: ver,
-		AllowedTools:   []string{"k8s__get_logs", "aws__list_buckets"},
+		AllowedTools:   []string{"k8s__get_pod_logs", "prom__query_range"},
 	}
 	got, dec, err := sr.ResolveToolsCall(ctx, sig)
 	require.NoError(t, err)
-	require.Equal(t, "k8s__get_logs", got)
+	require.Equal(t, "k8s__get_pod_logs", got)
 	require.Equal(t, router.OutcomeVectorHit, dec.Outcome)
+}
+
+func TestGoldenCasesMRRAndNDCG(t *testing.T) {
+	ctx := context.Background()
+	dim := 384
+	st := store.NewInMemoryVectorStore(dim)
+	emb := LexicalEmbedder{Dim: dim}
+	cfg := router.DefaultSemanticRouterRuntimeConfig()
+	cfg.Mode = router.ModeAssistList
+	cfg.TopK = 16
+	cfg.ScoreMin = 0.08
+	cfg.AllowAutoRename = true
+	sr := router.NewSemanticRouter(cfg, emb, st, dim)
+
+	require.NoError(t, sr.Reindex(ctx, "eval-v1", SyntheticCatalog()))
+	ver := sr.CatalogVersion()
+	cases := GoldenCases()
+
+	rankings := make([][]router.ScoredTool, 0, len(cases))
+	relevances := make([]map[string]float64, 0, len(cases))
+
+	for _, tc := range cases {
+		got, dec, err := sr.ResolveToolsCall(ctx, router.RoutingSignal{
+			ToolName:       "wrong__tool_name",
+			IntentText:     tc.Intent,
+			CatalogVersion: ver,
+			AllowedTools:   tc.Allowed,
+		})
+		require.NoError(t, err, "case %s", tc.WantTool)
+		require.Equal(t, router.OutcomeVectorHit, dec.Outcome)
+
+		candidates := append([]router.ScoredTool(nil), dec.Candidates...)
+		if len(candidates) == 0 {
+			candidates = append(candidates, router.ScoredTool{
+				Name:   got,
+				Score:  dec.Confidence,
+				Source: "vector",
+			})
+		}
+		rankings = append(rankings, candidates)
+		relevances = append(relevances, tc.Relevance)
+	}
+
+	mrr := MeanReciprocalRankAtK(rankings, relevances, 5)
+	ndcg5 := MeanNDCGAtK(rankings, relevances, 5)
+	t.Logf("golden metrics lexical baseline: MRR=%.3f nDCG@5=%.3f", mrr, ndcg5)
+	require.GreaterOrEqual(t, mrr, 0.95)
+	require.GreaterOrEqual(t, ndcg5, 0.90)
 }

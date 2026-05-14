@@ -114,3 +114,19 @@ func TestNewErrorPreservesIDAndPayload(t *testing.T) {
 	require.Equal(t, "boom", out.Error.Message)
 	require.JSONEq(t, `{"hint":"x"}`, string(out.Error.Data))
 }
+
+func BenchmarkParseRequest(b *testing.B) {
+	raw := []byte(`{"jsonrpc":"2.0","method":"tools/call","params":{"name":"backend__tool","arguments":{"query":"hello"}},"id":"bench-1"}`)
+	b.ReportAllocs()
+	b.SetBytes(int64(len(raw)))
+
+	for b.Loop() {
+		req, err := ParseRequest(raw)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if req.Method == "" {
+			b.Fatal("empty method")
+		}
+	}
+}

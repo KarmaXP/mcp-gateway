@@ -10,30 +10,28 @@ func SyntheticCatalog() []router.IndexedTool {
 		prefix, native, desc string
 		keys                 []string
 	}{
-		{"k8s", "get_logs", "Stream container logs from a Kubernetes pod for debugging incidents", []string{"pod", "namespace", "tail"}},
-		{"k8s", "list_pods", "List pods in a namespace with status and resource usage summary", []string{"namespace", "label_selector"}},
-		{"k8s", "apply_manifest", "Apply a declarative YAML manifest to a Kubernetes cluster safely", []string{"manifest_path", "dry_run"}},
-		{"k8s", "rollout_status", "Check rollout progress for a Deployment or StatefulSet resource", []string{"name", "namespace"}},
-		{"aws", "list_buckets", "Enumerate S3 buckets visible to the current IAM principal", []string{"region"}},
-		{"aws", "put_object", "Upload an object to an S3 bucket with optional server-side encryption", []string{"bucket", "key", "body"}},
-		{"aws", "describe_instances", "Describe EC2 instances filtered by tags or VPC identifiers", []string{"filters"}},
-		{"aws", "rotate_keys", "Rotate IAM access keys for a service account following policy", []string{"user"}},
-		{"gh", "list_prs", "List open pull requests for a GitHub repository with labels", []string{"repo", "state"}},
-		{"gh", "merge_pr", "Merge an approved pull request using squash or merge commit", []string{"repo", "number"}},
-		{"gh", "request_review", "Request reviewers on a pull request with a comment template", []string{"repo", "number", "reviewers"}},
-		{"slack", "post_message", "Post a formatted message to a Slack channel with thread support", []string{"channel", "text"}},
-		{"slack", "list_channels", "List Slack channels the bot can access for routing notifications", []string{"cursor"}},
-		{"jira", "create_issue", "Create a Jira issue with project key, summary, and issue type", []string{"project", "summary"}},
-		{"jira", "transition_issue", "Move a Jira issue through workflow states with a comment", []string{"key", "transition"}},
-		{"pg", "run_query", "Execute a read-only SQL query against a Postgres analytics replica", []string{"sql", "timeout"}},
-		{"pg", "list_tables", "List tables in a Postgres schema for discovery workflows", []string{"schema"}},
-		{"prom", "query_range", "Query Prometheus metrics over a time range with step resolution", []string{"query", "start", "end"}},
-		{"prom", "targets", "List Prometheus scrape targets and health for observability checks", []string{"state"}},
-		{"vault", "read_secret", "Read a secret path from Vault with version pinning support", []string{"path", "version"}},
-		{"vault", "renew_lease", "Renew a Vault lease before expiry for long-running automation", []string{"lease_id"}},
-		{"dns", "lookup_record", "Resolve DNS records for incident triage and connectivity checks", []string{"name", "type"}},
-		{"tls", "check_cert", "Inspect TLS certificate expiry for a hostname and port combination", []string{"host", "port"}},
-		{"run", "shell_command", "Run an audited shell command on a bastion with allow-listed binaries", []string{"command", "timeout"}},
+		{"k8s", "get_pod_logs", "Get Kubernetes pod logs for an incident window and optional previous container stream", []string{"namespace", "pod", "container", "since", "previous", "tail"}},
+		{"k8s", "list_pods", "List Kubernetes pods in a namespace with readiness, restart count, and node placement", []string{"namespace", "label_selector", "field_selector"}},
+		{"k8s", "describe_pod", "Describe a Kubernetes pod with events, probes, and recent restart reasons", []string{"namespace", "pod"}},
+		{"k8s", "list_nodes", "List Kubernetes nodes with schedulable state, pressure conditions, and kubelet version", []string{"label_selector"}},
+		{"k8s", "describe_node", "Describe a Kubernetes node allocatable resources and recent node condition transitions", []string{"node"}},
+		{"k8s", "rollout_status", "Check Kubernetes deployment rollout status and unavailable replica progress", []string{"namespace", "deployment", "timeout"}},
+		{"k8s", "restart_deployment", "Restart a Kubernetes deployment by patching pod template annotations safely", []string{"namespace", "deployment", "reason"}},
+		{"k8s", "list_events", "List Kubernetes warning events for a namespace ordered by last seen timestamp", []string{"namespace", "type", "limit"}},
+		{"prom", "query_instant", "Run an instant Prometheus query for a single evaluation timestamp", []string{"query", "time"}},
+		{"prom", "query_range", "Run a Prometheus range query over start end and step for SLO burn analysis", []string{"query", "start", "end", "step"}},
+		{"prom", "label_values", "Fetch Prometheus label values to scope dashboard filters during triage", []string{"label", "match"}},
+		{"prom", "series", "List Prometheus series matching metric selectors across a bounded time range", []string{"match", "start", "end"}},
+		{"prom", "targets", "List Prometheus scrape targets and health errors grouped by job", []string{"state"}},
+		{"prom", "alerts", "List active Prometheus alerts with severity, state, and fingerprint metadata", []string{"state", "receiver"}},
+		{"prom", "rules", "List Prometheus alerting and recording rules with evaluation interval details", []string{"group"}},
+		{"logs", "query", "Query centralized logs by service, namespace, and free text over a time window", []string{"service", "namespace", "query", "start", "end", "limit"}},
+		{"logs", "tail", "Tail centralized logs for a service with stream follow and sampling controls", []string{"service", "namespace", "query", "follow"}},
+		{"logs", "context", "Fetch surrounding centralized log lines around a specific log record identifier", []string{"record_id", "before", "after"}},
+		{"logs", "facets", "List centralized log facets and top values for fast incident slicing", []string{"field", "start", "end"}},
+		{"logs", "saved_searches", "List saved centralized log searches used in on call runbooks", []string{"team"}},
+		{"logs", "pipelines", "List centralized log processing pipelines and drop filter configuration", []string{"environment"}},
+		{"logs", "ingestion_health", "Show centralized log ingestion lag and dropped record counters by source", []string{"source", "start", "end"}},
 	}
 	out := make([]router.IndexedTool, 0, len(rows))
 	for _, r := range rows {
@@ -50,24 +48,48 @@ func SyntheticCatalog() []router.IndexedTool {
 	return out
 }
 
-func GoldenCases() []struct {
-	Intent   string
-	WantTool string
-	Allowed  []string
-} {
+type GoldenCase struct {
+	Intent    string
+	WantTool  string
+	Allowed   []string
+	Relevance map[string]float64
+}
+
+func GoldenCases() []GoldenCase {
 	cat := SyntheticCatalog()
-	cases := make([]struct {
-		Intent   string
-		WantTool string
-		Allowed  []string
-	}, 0, len(cat))
+	toolsByPrefix := make(map[string][]string, len(cat))
+	for _, e := range cat {
+		pfx := e.ToolRow.Name
+		for i := 0; i < len(pfx)-1; i++ {
+			if pfx[i] == '_' && pfx[i+1] == '_' {
+				pfx = pfx[:i]
+				break
+			}
+		}
+		toolsByPrefix[pfx] = append(toolsByPrefix[pfx], e.ToolRow.Name)
+	}
+	cases := make([]GoldenCase, 0, len(cat))
 	for _, e := range cat {
 		intent := e.ToolRow.Description
-		cases = append(cases, struct {
-			Intent   string
-			WantTool string
-			Allowed  []string
-		}{Intent: intent, WantTool: e.ToolRow.Name})
+		relevance := map[string]float64{e.ToolRow.Name: 3}
+		pfx := e.ToolRow.Name
+		for i := 0; i < len(pfx)-1; i++ {
+			if pfx[i] == '_' && pfx[i+1] == '_' {
+				pfx = pfx[:i]
+				break
+			}
+		}
+		for _, other := range toolsByPrefix[pfx] {
+			if other == e.ToolRow.Name {
+				continue
+			}
+			relevance[other] = 1
+		}
+		cases = append(cases, GoldenCase{
+			Intent:    intent,
+			WantTool:  e.ToolRow.Name,
+			Relevance: relevance,
+		})
 	}
 	return cases
 }
