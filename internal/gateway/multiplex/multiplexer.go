@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
@@ -61,6 +62,7 @@ type Multiplexer struct {
 	strictInit            bool
 	strictList            bool
 	reportPartialFailures bool
+	globalCallSemaphore   *semaphore.Weighted
 }
 
 type Option func(*Multiplexer)
@@ -115,6 +117,16 @@ func WithAggregationStrict(strictInitialize, strictList bool) Option {
 
 func WithReportPartialFailures(report bool) Option {
 	return func(a *Multiplexer) { a.reportPartialFailures = report }
+}
+
+func WithGlobalMaxInFlight(maxInFlight int) Option {
+	return func(a *Multiplexer) {
+		if maxInFlight <= 0 {
+			a.globalCallSemaphore = nil
+			return
+		}
+		a.globalCallSemaphore = semaphore.NewWeighted(int64(maxInFlight))
+	}
 }
 
 func New(upstreams []backend.Upstream, opts ...Option) (*Multiplexer, error) {
@@ -180,6 +192,21 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 		g.Go(func() error {
 			callCtx, cancel := context.WithTimeout(ctx, a.initTimeout)
 			defer cancel()
+			release, err := a.acquireGlobalCallSlot(callCtx)
+			if err != nil {
+				slog.Warn("initialize backend semaphore wait failed", "backend_id", b.ID(), "err", err)
+				if a.strictInit {
+					mu.Lock()
+					strictFailed = true
+					mu.Unlock()
+				} else {
+					mu.Lock()
+					initFailures = append(initFailures, PartialFailure{BackendID: b.ID(), Reason: classifyCallFailure(err)})
+					mu.Unlock()
+				}
+				return nil
+			}
+			defer release()
 			subID := json.RawMessage(fmt.Sprintf(`"gw-init-%s"`, b.ID()))
 			req := &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: "initialize", ID: subID, Params: hostParams()}
 			resp, err := b.Call(callCtx, req)

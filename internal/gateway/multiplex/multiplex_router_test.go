@@ -3,6 +3,9 @@ package multiplex
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,6 +19,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/router/embed"
 	"github.com/KarmaXP/mcp-gateway/internal/router/index"
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
+	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
 
 type mapEmbed struct {
@@ -49,6 +53,57 @@ func (e *embedCtxDone) Embed(ctx context.Context, texts []string) ([][]float32, 
 		return nil, err
 	}
 	return e.inner.Embed(ctx, texts)
+}
+
+type dynamicToolsUpstream struct {
+	id     string
+	prefix string
+
+	mu    sync.RWMutex
+	tools []string
+	calls atomic.Int32
+}
+
+func newDynamicToolsUpstream(id, prefix string, tools []string) *dynamicToolsUpstream {
+	return &dynamicToolsUpstream{
+		id:     id,
+		prefix: prefix,
+		tools:  append([]string(nil), tools...),
+	}
+}
+
+func (u *dynamicToolsUpstream) ID() string     { return u.id }
+func (u *dynamicToolsUpstream) Prefix() string { return u.prefix }
+
+func (u *dynamicToolsUpstream) SetTools(tools []string) {
+	u.mu.Lock()
+	u.tools = append([]string(nil), tools...)
+	u.mu.Unlock()
+}
+
+func (u *dynamicToolsUpstream) Call(_ context.Context, req *rpc.Request) (*rpc.Response, error) {
+	switch req.Method {
+	case "tools/list":
+		u.calls.Add(1)
+		u.mu.RLock()
+		tools := append([]string(nil), u.tools...)
+		u.mu.RUnlock()
+		out := make([]map[string]any, 0, len(tools))
+		for _, name := range tools {
+			out = append(out, map[string]any{
+				"name":        name,
+				"description": fmt.Sprintf("tool %s", name),
+				"inputSchema": map[string]any{"type": "object"},
+			})
+		}
+		raw, err := json.Marshal(map[string]any{"tools": out})
+		if err != nil {
+			return nil, err
+		}
+		return rpc.NewResult(req.ID, raw), nil
+	default:
+		return rpc.NewError(req.ID, errcodes.MethodNotFound, "method not found", nil), nil
+	}
 }
 
 func routerTestSemanticRouter(t *testing.T, emb embed.Embedder, scoreMin float64, autoRename bool) (*router.SemanticRouter, *store.InMemoryVectorStore) {
@@ -138,6 +193,34 @@ func TestToolsListFilterListSubsetByIntent(t *testing.T) {
 	require.NoError(t, json.Unmarshal(resp.Result, &body))
 	require.Len(t, body.Tools, 1)
 	require.Equal(t, "p__echo", body.Tools[0].Name)
+}
+
+func TestHandleToolsListChangedReindexesAndInvalidatesCache(t *testing.T) {
+	up := newDynamicToolsUpstream("b1", "p", []string{"echo"})
+	emb := &mapEmbed{dim: 4, vecs: map[string][]float32{}}
+	sr, _ := routerTestSemanticRouter(t, emb, 0.99, true)
+
+	a, err := New([]backend.Upstream{up}, WithListTTL(time.Minute), WithSemanticRouter(sr))
+	require.NoError(t, err)
+
+	_, err = a.ToolsList(context.Background(), json.RawMessage(`1`))
+	require.NoError(t, err)
+	_, err = a.ToolsList(context.Background(), json.RawMessage(`2`))
+	require.NoError(t, err)
+	require.Equal(t, int32(1), up.calls.Load(), "second tools/list should hit cache")
+	before := sr.CatalogVersion()
+	require.NotEmpty(t, before)
+
+	up.SetTools([]string{"echo", "list"})
+	a.HandleToolsListChanged(context.Background())
+	after := sr.CatalogVersion()
+	require.NotEmpty(t, after)
+	require.NotEqual(t, before, after, "tools/list_changed should refresh semantic catalog version")
+	require.Equal(t, int32(2), up.calls.Load(), "handle should fetch tools/list for reindex")
+
+	_, err = a.ToolsList(context.Background(), json.RawMessage(`3`))
+	require.NoError(t, err)
+	require.Equal(t, int32(3), up.calls.Load(), "tools cache should be invalidated after list_changed")
 }
 
 func TestAggregateSemanticRouterAmbiguousReturnsCode(t *testing.T) {

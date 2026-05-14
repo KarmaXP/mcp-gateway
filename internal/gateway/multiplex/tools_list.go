@@ -149,6 +149,12 @@ func (a *Multiplexer) listToolsFromEachUpstream(ctx context.Context) ([][]map[st
 func (a *Multiplexer) callUpstreamToolsList(ctx context.Context, b backend.Upstream) ([]map[string]any, *PartialFailure) {
 	callCtx, cancel := context.WithTimeout(ctx, a.listTimeout)
 	defer cancel()
+	release, err := a.acquireGlobalCallSlot(callCtx)
+	if err != nil {
+		slog.Warn("tools/list semaphore wait failed", "backend_id", b.ID(), "err", err)
+		return nil, &PartialFailure{BackendID: b.ID(), Reason: classifyCallFailure(err)}
+	}
+	defer release()
 	subID := json.RawMessage(fmt.Sprintf(`"gw-list-%s"`, b.ID()))
 	req := &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: "tools/list", ID: subID, Params: nil}
 	resp, err := b.Call(callCtx, req)

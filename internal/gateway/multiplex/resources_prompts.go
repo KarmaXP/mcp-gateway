@@ -131,6 +131,12 @@ func (a *Multiplexer) PromptsGet(ctx context.Context, hostID json.RawMessage, pa
 func (a *Multiplexer) invokeUpstreamGeneric(ctx context.Context, hostID json.RawMessage, b backendCaller, method string, params json.RawMessage, muxSpan trace.Span) (*rpc.Response, error) {
 	callCtx, cancel := context.WithTimeout(ctx, a.callTimeout)
 	defer cancel()
+	release, err := a.acquireGlobalCallSlot(callCtx)
+	if err != nil {
+		muxSpan.SetStatus(codes.Error, "upstream semaphore wait")
+		return rpc.NewError(hostID, errcodes.GatewayInternal, "backend call failed", nil), nil
+	}
+	defer release()
 	bctx, bspan := telemetry.StartSpan(callCtx, telemetry.SpanBackendCall)
 	defer bspan.End()
 	bspan.SetAttributes(
@@ -187,6 +193,12 @@ func (a *Multiplexer) listResourcesFromEachUpstream(ctx context.Context) ([][]ma
 func (a *Multiplexer) callUpstreamResourcesList(ctx context.Context, b backend.Upstream) ([]map[string]any, *PartialFailure) {
 	callCtx, cancel := context.WithTimeout(ctx, a.listTimeout)
 	defer cancel()
+	release, err := a.acquireGlobalCallSlot(callCtx)
+	if err != nil {
+		slog.Warn("resources/list semaphore wait failed", "backend_id", b.ID(), "err", err)
+		return nil, &PartialFailure{BackendID: b.ID(), Reason: classifyCallFailure(err)}
+	}
+	defer release()
 	subID := json.RawMessage(fmt.Sprintf(`"gw-reslist-%s"`, b.ID()))
 	req := &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: "resources/list", ID: subID, Params: nil}
 	resp, err := b.Call(callCtx, req)
@@ -218,6 +230,12 @@ func (a *Multiplexer) listPromptsFromEachUpstream(ctx context.Context) ([][]map[
 func (a *Multiplexer) callUpstreamPromptsList(ctx context.Context, b backend.Upstream) ([]map[string]any, *PartialFailure) {
 	callCtx, cancel := context.WithTimeout(ctx, a.listTimeout)
 	defer cancel()
+	release, err := a.acquireGlobalCallSlot(callCtx)
+	if err != nil {
+		slog.Warn("prompts/list semaphore wait failed", "backend_id", b.ID(), "err", err)
+		return nil, &PartialFailure{BackendID: b.ID(), Reason: classifyCallFailure(err)}
+	}
+	defer release()
 	subID := json.RawMessage(fmt.Sprintf(`"gw-prlist-%s"`, b.ID()))
 	req := &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: "prompts/list", ID: subID, Params: nil}
 	resp, err := b.Call(callCtx, req)

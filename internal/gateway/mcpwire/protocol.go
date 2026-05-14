@@ -12,8 +12,26 @@ const (
 
 	NotificationToolsListChanged = "notifications/tools/list_changed"
 	LegacyToolsListChanged = "tools/list_changed"
+	NotificationResourcesListChanged = "notifications/resources/list_changed"
+	LegacyResourcesListChanged = "resources/list_changed"
+	NotificationPromptsListChanged = "notifications/prompts/list_changed"
+	LegacyPromptsListChanged = "prompts/list_changed"
 )
 
 func IsToolsListChangedNotification(method string) bool {
 	return method == NotificationToolsListChanged || method == LegacyToolsListChanged
+}
+
+func IsResourcesListChangedNotification(method string) bool {
+	return method == NotificationResourcesListChanged || method == LegacyResourcesListChanged
+}
+
+func IsPromptsListChangedNotification(method string) bool {
+	return method == NotificationPromptsListChanged || method == LegacyPromptsListChanged
+}
+
+func IsCatalogListChangedNotification(method string) bool {
+	return IsToolsListChangedNotification(method) ||
+		IsResourcesListChangedNotification(method) ||
+		IsPromptsListChangedNotification(method)
 }

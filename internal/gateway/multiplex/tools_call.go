@@ -143,6 +143,11 @@ func (a *Multiplexer) invokeUpstreamToolsCall(ctx context.Context, hostID json.R
 	telemetry.RecordInternalPhase(ctx, "tools/call", defaults.MetricInternalPhaseMux, time.Since(muxStart))
 	callCtx, cancel := context.WithTimeout(ctx, a.callTimeout)
 	defer cancel()
+	release, err := a.acquireGlobalCallSlot(callCtx)
+	if err != nil {
+		return rpc.NewError(hostID, errcodes.GatewayInternal, "backend call failed", nil), nil
+	}
+	defer release()
 	bctx, bspan := telemetry.StartSpan(callCtx, telemetry.SpanBackendCall)
 	defer bspan.End()
 	bspan.SetAttributes(

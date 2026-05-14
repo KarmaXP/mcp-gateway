@@ -60,10 +60,12 @@ func TestListChangedHandlerWiringInvalidatesCacheAndBroadcasts(t *testing.T) {
 	sess := sm.Create(ctx)
 
 	backend.RegisterNotificationHandlers([]backend.Upstream{up}, func(req *rpc.Request) {
-		if req == nil || !mcpwire.IsToolsListChangedNotification(req.Method) {
+		if req == nil || !mcpwire.IsCatalogListChangedNotification(req.Method) {
 			return
 		}
-		mpx.InvalidateToolCache()
+		if mcpwire.IsToolsListChangedNotification(req.Method) {
+			mpx.HandleToolsListChanged(context.Background())
+		}
 		sm.BroadcastNotification(req)
 	})
 
@@ -74,6 +76,36 @@ func TestListChangedHandlerWiringInvalidatesCacheAndBroadcasts(t *testing.T) {
 	_, err = mpx.ToolsList(rpcCtx, id)
 	require.NoError(t, err)
 	require.Equal(t, int32(1), counter.calls.Load())
+
+	nonToolMethods := []string{
+		mcpwire.NotificationResourcesListChanged,
+		mcpwire.LegacyResourcesListChanged,
+		mcpwire.NotificationPromptsListChanged,
+		mcpwire.LegacyPromptsListChanged,
+	}
+	for _, method := range nonToolMethods {
+		method := method
+		t.Run("broadcast-"+method, func(t *testing.T) {
+			up.deliverNotification(&rpc.Request{
+				JSONRPC: rpc.JSONRPCVersion,
+				Method:  method,
+			})
+
+			select {
+			case raw := <-sess.Out():
+				var got rpc.Request
+				require.NoError(t, json.Unmarshal(raw, &got))
+				require.Equal(t, method, got.Method)
+				require.True(t, got.IsNotification())
+			case <-time.After(2 * time.Second):
+				t.Fatalf("timeout waiting for %s on host session", method)
+			}
+
+			_, err = mpx.ToolsList(rpcCtx, id)
+			require.NoError(t, err)
+			require.Equal(t, int32(1), counter.calls.Load(), "%s must not invalidate tools cache", method)
+		})
+	}
 
 	up.deliverNotification(&rpc.Request{
 		JSONRPC: rpc.JSONRPCVersion,
@@ -93,4 +125,23 @@ func TestListChangedHandlerWiringInvalidatesCacheAndBroadcasts(t *testing.T) {
 	_, err = mpx.ToolsList(rpcCtx, id)
 	require.NoError(t, err)
 	require.Equal(t, int32(2), counter.calls.Load())
+
+	up.deliverNotification(&rpc.Request{
+		JSONRPC: rpc.JSONRPCVersion,
+		Method:  mcpwire.LegacyToolsListChanged,
+	})
+
+	select {
+	case raw := <-sess.Out():
+		var got rpc.Request
+		require.NoError(t, json.Unmarshal(raw, &got))
+		require.Equal(t, mcpwire.LegacyToolsListChanged, got.Method)
+		require.True(t, got.IsNotification())
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for legacy list_changed on host session")
+	}
+
+	_, err = mpx.ToolsList(rpcCtx, id)
+	require.NoError(t, err)
+	require.Equal(t, int32(3), counter.calls.Load())
 }
