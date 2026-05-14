@@ -17,8 +17,8 @@ CYAN    := \033[36m
 RESET   := \033[0m
 
 .DEFAULT_GOAL := help
-.PHONY: help build run stop test test-cover test-integration ci smoke fmt lint clean tidy \
-        docker-build docker-up docker-up-full docker-down docker-logs docker-clean
+.PHONY: help build run stop test test-cover test-integration ci smoke smoke-e2e fmt lint clean tidy \
+        docker-build docker-up docker-up-full docker-down docker-logs docker-clean calibration-up
 
 # Help: sectioned list of targets (descriptions are defined here only)
 help:
@@ -36,6 +36,7 @@ help:
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test-cover" "go test -race with coverage report (internal/*)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test-integration" "go test -tags=integration (JWT policy + optional Qdrant/embed/OTLP; see docs/DEVELOPER.md)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "smoke" "curl MCP flow against gateway + scripts/smoke_upstream (sets SMOKE_AUTO_START_GATEWAY=1)"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "smoke-e2e" "curl MCP handshake/tools flow against an already-running gateway"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "fmt" "gofmt -w . then normalize const/var '=' spacing (gofmt re-aligns; see .ai/rules/go.md)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "lint" "Run golangci-lint + check for column-aligned '=' in Go sources"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "ci" "Same checks as GitHub Actions lint-and-unit job (lint + vet + race tests, -count=1)"
@@ -48,6 +49,7 @@ help:
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-down"     "Stop and remove all containers"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-logs"     "Follow logs from all running services"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-clean"    "Remove containers, volumes and built image"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "calibration-up"  "Start full calibration stack and print compose health"
 	@printf "\n"
 
 # Targets Implementation
@@ -101,6 +103,11 @@ smoke:
 	@chmod +x scripts/smoke_test.sh
 	@SMOKE_AUTO_START_GATEWAY=1 bash scripts/smoke_test.sh
 
+smoke-e2e:
+	@echo "🔥 Smoke E2E (expects already-running gateway/upstream)..."
+	@chmod +x scripts/smoke_e2e.sh
+	@bash scripts/smoke_e2e.sh
+
 fmt:
 	@echo "📝 gofmt + normalize '=' spacing in const/var blocks..."
 	@gofmt -w .
@@ -148,3 +155,7 @@ docker-clean:
 	@$(COMPOSE) --profile gateway down -v --remove-orphans
 	@-$(COMPOSE_LEGACY) --profile gateway down -v --remove-orphans
 	@docker rmi mcp-gateway:dev mcp-gateway-embed:dev 2>/dev/null || true
+
+calibration-up: docker-up-full
+	@echo "🧪 Calibration stack status (wait for healthy)..."
+	@$(COMPOSE) --profile gateway ps

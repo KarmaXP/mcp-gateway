@@ -24,10 +24,42 @@ jobs:
           go vet ./...
           go test -race -count=1 ./...
 
-  integration:
-    # Full stack checks (compose). On PRs, run locally with `make test-integration` after `make docker-up`.
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+  smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: MCP e2e smoke (router mode off, no docker)
+        run: |
+          set -euo pipefail
+          SMOKE_AUTO_START_GATEWAY=1 SMOKE_CLEAN_PORTS=0 bash scripts/smoke_test.sh
+
+  smoke-jwt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: MCP e2e JWT smoke (router mode off, no docker)
+        run: |
+          set -euo pipefail
+          SMOKE_AUTO_START_GATEWAY=1 SMOKE_CLEAN_PORTS=0 bash scripts/smoke_jwt.sh
+
+  integration:
+    # Full stack checks (compose). Run on PRs as a regression gate for gateway + deps wiring.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -38,6 +70,7 @@ jobs:
 
       - name: Start Qdrant, embed, OTLP collector (compose)
         run: |
+          set -euo pipefail
           docker compose -f deployments/docker-compose.yaml up -d qdrant embed otel-collector
           for i in $(seq 1 90); do
             curl -sfS http://127.0.0.1:6333/healthz && break
@@ -61,7 +94,50 @@ jobs:
           EMBED_URL: http://127.0.0.1:8001
           OTEL_EXPORTER_OTLP_ENDPOINT: http://127.0.0.1:4318
         run: |
+          set -euo pipefail
           go test -tags=integration -race -count=1 \
             ./internal/gateway/httpserver/... \
             ./internal/router/... \
             ./internal/telemetry/...
+
+  perf-gate:
+    # Optional manual perf gate; not part of push/PR required checks.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Start stack with gateway and Prometheus
+        run: |
+          set -euo pipefail
+          docker compose -f deployments/docker-compose.yaml --profile gateway up -d
+          for i in $(seq 1 90); do
+            curl -sfS http://127.0.0.1:8080/healthz && break
+            sleep 2
+          done
+          for i in $(seq 1 90); do
+            curl -sfS http://127.0.0.1:9090/-/healthy && break
+            sleep 2
+          done
+          curl -sfS -X POST \
+            -H "Content-Type: application/json" \
+            --data '{}' \
+            http://127.0.0.1:8080/mcp/rpc >/dev/null || true
+          sleep 5
+
+      - name: Perf gate (internal p95)
+        env:
+          P95_THRESHOLD_MS: "120"
+          PROMETHEUS_URL: http://127.0.0.1:9090
+          SKIP_IF_NO_METRICS: "1"
+          ALLOW_LOADTEST_FALLBACK: "0"
+          GATEWAY_URL: http://127.0.0.1:8080
+        run: |
+          set -euo pipefail
+          bash scripts/check_gateway_p95.sh
