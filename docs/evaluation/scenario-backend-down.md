@@ -1,4 +1,4 @@
-# Scenario B3.4: backend down on list/call
+# Backend unavailable walkthrough
 
 Reproducible evaluation scenario for **one backend down** during `tools/list` and `tools/call`, with `aggregation.report_partial_failures: true`.
 

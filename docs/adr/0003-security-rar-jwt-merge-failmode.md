@@ -33,10 +33,10 @@ Merge rules:
 
 | JWT list (after group expansion) | RAR list | Effective allow list |
 |----------------------------------|----------|----------------------|
-| Non-empty                        | Non-empty | **Intersection:** only JWT tools that match **any** RAR entry (exact or glob). |
-| Empty                            | Non-empty | **RAR only.** |
-| Non-empty                        | Empty     | **JWT only** (tools + expanded groups). |
-| Empty                            | Empty     | **No restriction** (empty effective list → full merged catalog; same as pre-policy behavior for callers without tool claims). |
+| Non-empty            | Non-empty | **Intersection:** only JWT tools that match **any** RAR entry (exact or glob). |
+| Empty              | Non-empty | **RAR only.** |
+| Non-empty            | Empty   | **JWT only** (tools + expanded groups). |
+| Empty              | Empty   | **No restriction** (empty effective list → full merged catalog; same as pre-policy behavior for callers without tool claims). |
 
 Unknown **`mcp_tool_groups`** entries are an error from `EffectiveAllowList` (fail closed unless degradation is enabled; see Decision 3).
 
@@ -69,7 +69,7 @@ Implementation: `internal/policy/engine.go` (`allowOnEvalFail` / `AllowOnEvalFai
 
 ## References
 
-- `docs/architecture/mcp_gateway.plan.md` — security layer and policy
-- `internal/policy/` — engine, RAR expansion, `AuditSink`, `Holder`, audit logging
-- `internal/auth/middleware.go` — JWT + effective allow list per request
-- `internal/auth/claims.go` — `mcp_tools`, `mcp_tool_groups`, `authorization_details` input
+- `docs/architecture/mcp_gateway.plan.md`, security layer and policy
+- `internal/policy/`, engine, RAR expansion, `AuditSink`, `Holder`, audit logging
+- `internal/auth/middleware.go`, JWT + effective allow list per request
+- `internal/auth/claims.go`, `mcp_tools`, `mcp_tool_groups`, `authorization_details` input

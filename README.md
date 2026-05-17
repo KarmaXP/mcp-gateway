@@ -1,42 +1,110 @@
 # MCP Gateway
 
-Welcome. This repository is an **open-source gateway for the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/)** — the standard way for AI applications and agents to use **tools**, **resources**, and **prompts** from your own systems in a structured, interoperable way.
+An open-source **[Model Context Protocol (MCP)](https://modelcontextprotocol.io/)** gateway in **Go**: one HTTP endpoint for your AI host, many MCP backends behind it, with optional semantic routing, auth, and observability.
 
-If you are new to MCP: think of it as a **common language** between an AI host (assistant, IDE, or automation) and the **capabilities** you expose (Kubernetes, metrics, tickets, internal APIs, and more). A gateway sits in the middle when you want **one connection** for the host and **many backends** behind it, with room for policy and observability.
+New to MCP? It is the shared wire format between an assistant (or agent) and the **tools** you expose (clusters, metrics, tickets, internal APIs, …). This project adds a **gateway** when you want a single connection, merged catalogs, and centralized policy.
 
-## What you’ll find here
+---
 
-**mcp-gateway** is a production-minded implementation in **Go**: the AI client talks to a **single** HTTP endpoint (streaming + JSON-RPC, as MCP defines for remote use). The gateway **multiplexes** traffic to multiple MCP servers, merges their catalogs, and can optionally **route** natural-language intent to the right tool when names are ambiguous.
+## ✨ What it does
 
-It is aimed at **platform engineering**, **SRE**, and **security-conscious** teams who want MCP without a tangle of one-off integrations.
+- **Multiplexes** several MCP servers behind one host-facing URL (SSE + JSON-RPC).
+- **Namespaces** tools as `prefix__tool_name` so catalogs stay unambiguous.
+- **Routes** natural-language intent to the right tool when the router is enabled (vector search + rules).
+- **Secures** ingress with JWT, allow-lists, JSON Schema checks, and audit hooks.
+- **Observes** traffic via OpenTelemetry, Prometheus, Grafana, and Tempo (Docker stack).
 
-## Who this is for
+Built for platform, SRE, and security-minded teams standardizing on MCP.
 
-- **Builders** evaluating or standardizing on MCP across internal tools.
-- **Operators** who need **one place** for auth, allow-lists, and telemetry around MCP traffic.
-- **Readers** curious how MCP fits a **multi-backend** or **regulated** environment — you do not need to read the code to get value from the docs linked below.
+---
 
-## Documentation map
+## 🚀 Quick start
 
-| I want to… | Start here |
-|------------|------------|
-| Run, configure, or integrate with this gateway (env vars, auth, OpenAPI, CI, metrics) | **[Developer & operator guide](docs/DEVELOPER.md)** |
-| Read the full technical specification and requirements | **[Architecture plan](docs/architecture/mcp_gateway.plan.md)** |
-| See the HTTP/API contract (headers, JWT, errors) | **[OpenAPI spec](docs/artifacts/openapi/openapi.yaml)** |
-| Understand specific design choices | **[Architecture Decision Records](docs/adr/)** |
-| Record live router/latency numbers (embed + vector DB) | **[Calibration runbook](docs/evaluation/calibration-run.md)** |
-
-## Try it locally (minimal)
-
-From this directory, with **Docker** available:
+**Requirements:** Go 1.26+ ([`go.mod`](go.mod)). Docker is optional.
 
 ```bash
-make docker-up    # optional: Qdrant, embedding sidecar, observability stack
-make run          # start the gateway (see .env / gateway.yaml patterns)
+git clone <your-fork-or-upstream>
+cd mcp-gateway
+make demo     # one mock upstream + gateway + MCP handshake + tools/call (no Docker)
 ```
 
-For Makefile targets, tests, smoke checks, and integration with compose, use **[docs/DEVELOPER.md](docs/DEVELOPER.md)**.
+`make demo` prints the gateway URL and how to stop it (`make stop`).
 
-## License
+Optional first-time env file:
+
+```bash
+make bootstrap   # copies .env.example → .env if missing
+```
+
+---
+
+## 🧪 Try more locally
+
+| Command | What you get |
+|---------|----------------|
+| `make run` | Gateway on **8080** (default config: `deployments/gateway.demo.yaml`) |
+| `make demo-full` | Two mock backends + `alpha__echo` through the gateway |
+| `make sre-smoke` | Three SRE-style tools (`k8s__`, `prom__`, `gh__`) via mock upstreams |
+| `make verify-e2e` | Full automated check: unit tests + demo + multi-backend + SRE smoke |
+| `make docker-up` | Qdrant, embedding sidecar, OTel, Prometheus, Grafana |
+| `make sre-up` | Docker deps + SRE mocks (for semantic router with `router.mode: on`) |
+
+Ports and mock layouts: **[Local ports reference](docs/local-ports.md)**. Operator details: **[Developer guide](docs/DEVELOPER.md)** (`make help` lists all targets).
+
+**Full stack with Docker:**
+
+```bash
+make bootstrap
+make docker-up
+make run
+```
+
+---
+
+## 📚 Documentation
+
+**Full index:** **[docs/README.md](docs/README.md)**
+
+| I want to… | Read |
+|------------|------|
+| Configure env vars and YAML | **[Configuration reference](docs/configuration.md)** |
+| Understand errors and status codes | **[Error reference](docs/errors.md)** |
+| See supported MCP methods | **[MCP capabilities](docs/mcp-capabilities.md)** |
+| Register backends (HTTP or stdio) | **[Adding backends](docs/ADDING_BACKENDS.md)** |
+| Connect an IDE, script, or agent | **[Connecting agents](docs/CONNECTING_AGENTS.md)** |
+| Deploy with Docker / production notes | **[Deployment](docs/deployment.md)** |
+| Operate (metrics, CI, observability) | **[Developer guide](docs/DEVELOPER.md)** |
+| Architecture overview | **[Architecture](docs/architecture/README.md)** |
+| HTTP contract (OpenAPI) | **[openapi.yaml](docs/artifacts/openapi/openapi.yaml)** |
+| Measure router quality and latency | **[Calibration runbook](docs/evaluation/calibration-run.md)** |
+
+---
+
+## 🗺️ Roadmap
+
+| Status | Item |
+|--------|------|
+| ✅ **Available** | Host transport (SSE + JSON-RPC), multi-backend merge, JWT + policy, semantic router, compose observability stack, local mocks and smoke targets |
+| ✅ **Available** | Example configs: single-backend demo, alpha/beta, SRE three-backend layout |
+| 📖 **Documented pattern** | LangGraph (or any MCP host) calling the gateway, see [Connecting agents](docs/CONNECTING_AGENTS.md); you implement the agent in your own repo |
+| 🔧 **You provide** | Real MCP backends (Kubernetes, Prometheus, GitHub, …) and production deployment |
+| 📊 **Optional** | Record router recall and latency using the [calibration runbook](docs/evaluation/calibration-run.md) when tuning or reporting performance |
+
+---
+
+## 🛠️ Development
+
+Contributors and maintainers:
+
+```bash
+make ci         # lint + vet + race tests (matches GitHub Actions)
+make test-integration  # JWT + router integration (needs Qdrant/embed when running full stack)
+```
+
+See **[docs/DEVELOPER.md](docs/DEVELOPER.md)** for auth setup, OpenAPI, and integration-test prerequisites.
+
+---
+
+## 📄 License
 
 See [LICENSE](LICENSE).

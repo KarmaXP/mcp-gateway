@@ -7,14 +7,14 @@ Repeatable procedure to record **live** router and gateway latency numbers with 
 From `mcp-gateway/`, choose one boot path:
 
 1. **Compose dependencies + host gateway**
-   ```bash
-   make docker-up
-   ```
+  ```bash
+  make docker-up
+  ```
 2. **Full compose stack (includes gateway container)**
-   ```bash
-   make docker-up-full
-   ```
-   (Equivalent helper target: `make calibration-up`.)
+  ```bash
+  make docker-up-full
+  ```
+  (Equivalent helper target: `make calibration-up`.)
 
 Wait for compose health:
 
@@ -39,7 +39,7 @@ export ROUTER_MODE=${ROUTER_MODE:-assist_list}
 export QDRANT_URL=${QDRANT_URL:-http://127.0.0.1:6333}
 export EMBED_URL=${EMBED_URL:-http://127.0.0.1:8001}
 export OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://127.0.0.1:4318}
-export PORT=${PORT:-18080}
+export PORT=${PORT:-8080}
 make run
 ```
 
@@ -49,33 +49,34 @@ Gateway health/readiness check (works with current or stricter future readiness)
 # compose gateway:
 curl -sf http://127.0.0.1:${HOST_PORT_GATEWAY:-8080}/healthz
 curl -fsS "http://127.0.0.1:${HOST_PORT_GATEWAY:-8080}/readyz" >/dev/null \
-  || curl -fsS "http://127.0.0.1:${HOST_PORT_GATEWAY:-8080}/healthz" >/dev/null
+ || curl -fsS "http://127.0.0.1:${HOST_PORT_GATEWAY:-8080}/healthz" >/dev/null
 
 # host gateway:
 curl -sf "http://127.0.0.1:${PORT}/healthz"
 curl -fsS "http://127.0.0.1:${PORT}/readyz" >/dev/null \
-  || curl -fsS "http://127.0.0.1:${PORT}/healthz" >/dev/null
+ || curl -fsS "http://127.0.0.1:${PORT}/healthz" >/dev/null
 ```
 
 ## Calibration checks
 
 1. **Unit / synthetic eval (CI-style):**
-   ```bash
-   go test -race ./internal/router/...
-   go test -race ./internal/router/eval/...
-   ```
+  ```bash
+  go test -race ./internal/router/...
+  go test -race ./internal/router/eval/...
+  ```
 2. **Integration (real Qdrant + embed):**
-   ```bash
-   make test-integration
-   ```
-   (Uses `-tags=integration` as defined in the Makefile.)
+  ```bash
+  make test-integration
+  ```
+  (Uses `-tags=integration` as defined in the Makefile.)
 3. **B1.3 recall calibration:** run the MiniLM+Qdrant recall harness (recall@1 + recall@3):
-   ```bash
-   QDRANT_URL=http://127.0.0.1:6333 EMBED_URL=http://127.0.0.1:8001 \
-     go test -tags=integration -race ./internal/router/eval -run TestPhase2VectorRecallMiniLM -v
-   ```
-   - Optional B1.2 catalog input: set `PHASE2_CATALOG_PATH=/absolute/path/to/b1.2-catalog.json`.
-   - If `PHASE2_CATALOG_PATH` is unset or missing, the test falls back to `SyntheticCatalog()`.
+  ```bash
+  QDRANT_URL=http://127.0.0.1:6333 EMBED_URL=http://127.0.0.1:8001 \
+   go test -tags=integration -race ./internal/router/eval -run TestPhase2VectorRecallMiniLM -v
+  ```
+  - Optional B1.2 catalog input: set `PHASE2_CATALOG_PATH=/absolute/path/to/b1.2-catalog.json`.
+  - Default file in-repo: `docs/evaluation/b1.2-catalog.json` (from `go run ./tools/gen-b12-catalog > docs/evaluation/b1.2-catalog.json`).
+  - If no catalog file is found, the test falls back to `SyntheticCatalog()`.
 4. **Optional load / soak:** if you use `scripts/loadtest`, document command line, duration, and concurrent clients.
 
 ## Metrics definitions (GoldenCases)
@@ -84,7 +85,7 @@ Use these when reporting retrieval quality from `go test ./internal/router/eval/
 
 - **MRR@5 (Mean Reciprocal Rank):** for each case, find the first rank position `r <= 5` of the highest-relevance tool and score `1/r` (or `0` if not present), then average across all cases.
 - **nDCG@5 (Normalized Discounted Cumulative Gain):** compute DCG over the top 5 candidates with graded relevance:
-  `DCG@5 = Σ((2^rel_i - 1) / log2(i + 1))`, then divide by ideal DCG@5 (best possible ordering for that case), and average across cases.
+ `DCG@5 = Σ((2^rel_i - 1) / log2(i + 1))`, then divide by ideal DCG@5 (best possible ordering for that case), and average across cases.
 - **Relevance labels in this harness:** target tool relevance is highest (`3`), same-prefix alternatives are weakly relevant (`1`), all others are `0`.
 
 Quick run:
@@ -101,20 +102,20 @@ Run from the `mcp-gateway/` module root in two terminals.
 
 ```bash
 # Direct path (exact tool name), router off
-PORT=18080 go run ./cmd/gateway
+PORT=8080 go run ./cmd/gateway
 ```
 
 ```bash
-go run ./scripts/loadtest -url http://127.0.0.1:18080 -mode direct -workers 10 -duration 45s
+go run ./scripts/loadtest -url http://127.0.0.1:8080 -mode direct -workers 10 -duration 45s
 ```
 
 ```bash
 # Semantic path (vector router), router on + embed sidecar
-ROUTER_MODE=on EMBED_URL=http://127.0.0.1:8001 QDRANT_URL=http://127.0.0.1:6333 PORT=18080 go run ./cmd/gateway
+ROUTER_MODE=on EMBED_URL=http://127.0.0.1:8001 QDRANT_URL=http://127.0.0.1:6333 PORT=8080 go run ./cmd/gateway
 ```
 
 ```bash
-go run ./scripts/loadtest -url http://127.0.0.1:18080 -mode semantic -workers 10 -duration 45s
+go run ./scripts/loadtest -url http://127.0.0.1:8080 -mode semantic -workers 10 -duration 45s
 ```
 
 Record the printed `throughput_rps_est`, `latency_p95_ms`, and `latency_p99_ms` for both modes.
@@ -125,12 +126,12 @@ The k6 script probes `GET /healthz` and `GET /readyz`. Run it once with gateway 
 
 ```bash
 # Direct-mode gateway baseline
-BASE_URL=http://127.0.0.1:18080 k6 run --vus 30 --duration 60s scripts/loadtest/k6_http_baseline.js
+BASE_URL=http://127.0.0.1:8080 k6 run --vus 30 --duration 60s scripts/loadtest/k6_http_baseline.js
 ```
 
 ```bash
 # Semantic-mode gateway baseline (same k6 script, gateway started with ROUTER_MODE=on)
-BASE_URL=http://127.0.0.1:18080 k6 run --vus 30 --duration 60s scripts/loadtest/k6_http_baseline.js
+BASE_URL=http://127.0.0.1:8080 k6 run --vus 30 --duration 60s scripts/loadtest/k6_http_baseline.js
 ```
 
 ## Versioned index text template
@@ -158,7 +159,7 @@ For reproducible runs, record both the catalog identifier and template version t
 
 ## Record (template)
 
-Fill in after each run. Do not invent numbers—leave cells blank if a step was not executed.
+Fill in after each run. Do not invent numbers, leave cells blank if a step was not executed.
 
 | Metric / artifact | Command or source | Value | Notes |
 | ----------------- | ----------------- | ----- | ----- |
@@ -216,9 +217,9 @@ The application registers `mcp.gateway.internal.duration_seconds`. After OTel �
 Use this procedure to report gateway-only latency for `parse`, `security`, `router`, and `mux`.
 
 1. Confirm the histogram family exists in your Prometheus target:
-   ```promql
-   mcp_gateway_internal_duration_seconds_bucket{phase=~"parse|security|router|mux"}
-   ```
+  ```promql
+  mcp_gateway_internal_duration_seconds_bucket{phase=~"parse|security|router|mux"}
+  ```
 2. Pick one fixed lookback window for the run (for example `5m`) and keep it unchanged across comparisons.
 3. Run the quantile queries below and export values either in seconds or multiplied by `1000` (ms).
 
@@ -226,28 +227,28 @@ Example PromQL (all phases in one query per quantile):
 
 ```promql
 histogram_quantile(
-  0.50,
-  sum by (le, phase) (
-    rate(mcp_gateway_internal_duration_seconds_bucket{phase=~"parse|security|router|mux"}[5m])
-  )
+ 0.50,
+ sum by (le, phase) (
+  rate(mcp_gateway_internal_duration_seconds_bucket{phase=~"parse|security|router|mux"}[5m])
+ )
 )
 ```
 
 ```promql
 histogram_quantile(
-  0.95,
-  sum by (le, phase) (
-    rate(mcp_gateway_internal_duration_seconds_bucket{phase=~"parse|security|router|mux"}[5m])
-  )
+ 0.95,
+ sum by (le, phase) (
+  rate(mcp_gateway_internal_duration_seconds_bucket{phase=~"parse|security|router|mux"}[5m])
+ )
 )
 ```
 
 ```promql
 histogram_quantile(
-  0.99,
-  sum by (le, phase) (
-    rate(mcp_gateway_internal_duration_seconds_bucket{phase=~"parse|security|router|mux"}[5m])
-  )
+ 0.99,
+ sum by (le, phase) (
+  rate(mcp_gateway_internal_duration_seconds_bucket{phase=~"parse|security|router|mux"}[5m])
+ )
 )
 ```
 
@@ -255,10 +256,10 @@ Per-phase drill-down example (`router`, p95):
 
 ```promql
 histogram_quantile(
-  0.95,
-  sum by (le) (
-    rate(mcp_gateway_internal_duration_seconds_bucket{phase="router"}[5m])
-  )
+ 0.95,
+ sum by (le) (
+  rate(mcp_gateway_internal_duration_seconds_bucket{phase="router"}[5m])
+ )
 )
 ```
 
@@ -276,21 +277,21 @@ Telemetry attribute references:
 Procedure:
 
 1. Query request spans (TraceQL):
-   ```traceql
-   { name = "mcp.host.request" && span.mcp.method = "tools/call" }
-   ```
+  ```traceql
+  { name = "mcp.host.request" && span.mcp.method = "tools/call" }
+  ```
 2. Narrow to a specific request using one or more span attributes:
-   - `span.mcp.jsonrpc.id`
-   - `span.mcp.session.id`
-   - `span.mcp.tool.name`
+  - `span.mcp.jsonrpc.id`
+  - `span.mcp.session.id`
+  - `span.mcp.tool.name`
 3. For the selected trace, record:
-   - `T_total` = duration of `mcp.host.request`.
-   - `T_upstream` = sum of child `mcp.backend.call` durations.
+  - `T_total` = duration of `mcp.host.request`.
+  - `T_upstream` = sum of child `mcp.backend.call` durations.
 4. Compute:
-   - Single backend path: `T_internal = T_total - T_upstream`.
-   - Fan-out path: report both
-     - `T_upstream_sum = sum(all mcp.backend.call spans)`.
-     - `T_internal_exclusive = T_total - backend critical path`.
+  - Single backend path: `T_internal = T_total - T_upstream`.
+  - Fan-out path: report both
+   - `T_upstream_sum = sum(all mcp.backend.call spans)`.
+   - `T_internal_exclusive = T_total - backend critical path`.
 5. Cross-check that trace-derived internal latency trends match Prometheus phase quantiles from B2.1.
 
 Store one Tempo trace URL (or screenshot) per run next to the quantitative results so decomposition is auditable.
@@ -302,5 +303,5 @@ Store one Tempo trace URL (or screenshot) per run next to the quantitative resul
 
 ## References
 
-- `docs/architecture/mcp_gateway.plan.md` — §3.B modes (`filter_list`), §3.D metrics, §6 latency budget.
-- `docs/DEVELOPER.md` — `ROUTER_MODE`, observability, integration tests.
+- `docs/architecture/mcp_gateway.plan.md`, §3.B modes (`filter_list`), §3.D metrics, §6 latency budget.
+- `docs/DEVELOPER.md`, `ROUTER_MODE`, observability, integration tests.

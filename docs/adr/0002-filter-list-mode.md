@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted — **`filter_list` is implemented** behind `router.mode: filter_list` / `ROUTER_MODE=filter_list` (see `docs/DEVELOPER.md`, `internal/router/semantic_router_filter_list.go`, `internal/gateway/multiplex/tools_list.go`).
+Accepted, **`filter_list` is implemented** behind `router.mode: filter_list` / `ROUTER_MODE=filter_list` (see `docs/DEVELOPER.md`, `internal/router/semantic_router_filter_list.go`, `internal/gateway/multiplex/tools_list.go`).
 
 ## Context
 
@@ -25,7 +25,7 @@ The gateway supports `filter_list` with explicit semantics:
 
 ## References
 
-- `docs/architecture/mcp_gateway.plan.md` — `tools/list` modes, §3.D internal histogram, §6 p95
-- `docs/evaluation/calibration-run.md` — live embedding + Qdrant calibration template
-- `internal/gateway/multiplex` — merged `tools/list`
-- `internal/router` — semantic routing and `FilterToolsForList`
+- `docs/architecture/mcp_gateway.plan.md`, `tools/list` modes, §3.D internal histogram, §6 p95
+- `docs/evaluation/calibration-run.md`, live embedding + Qdrant calibration template
+- `internal/gateway/multiplex`, merged `tools/list`
+- `internal/router`, semantic routing and `FilterToolsForList`

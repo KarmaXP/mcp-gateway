@@ -120,7 +120,7 @@ info:
     name: MIT
     identifier: MIT
 servers:
-  - url: http://localhost:18080
+  - url: http://localhost:8080
     description: Local default (see PORT / GATEWAY_PORT in .env)
   - url: http://localhost:8080
     description: Docker gateway profile default

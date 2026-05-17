@@ -1,4 +1,4 @@
-# B3.3 - JWT allow-list scenario (`AUTH_MODE=jwt`)
+# JWT allow-list walkthrough (`AUTH_MODE=jwt`)
 
 This scenario validates JWT-based tool authorization in gateway mode:
 
@@ -143,6 +143,6 @@ kill "${SSE_PID}" 2>/dev/null || true
 rm -f "${SSE_HDR}" "${SSE_OUT}"
 ```
 
-## Cross-link (B4.4)
+## Automated check
 
-- Add a link here to the B4.4 smoke scenario document when it is available.
+CI runs `scripts/smoke_jwt.sh` on every push (see [DEVELOPER.md § Continuous integration](../DEVELOPER.md#continuous-integration)).

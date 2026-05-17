@@ -19,8 +19,8 @@ The gateway is positioned as an SRE/platform MCP broker that aggregates backend 
 
 - **Authentication (AuthN)** applies to the session ingress (`GET /mcp/sse`, `POST /mcp/rpc`) in JWT mode.
 - **Authorization (AuthZ)** from JWT claims / RAR allow-lists is **tools-only**:
-  - `tools/list` is filtered by effective allowed tools.
-  - `tools/call` is denied when target tool is outside the effective allowed tools.
+ - `tools/list` is filtered by effective allowed tools.
+ - `tools/call` is denied when target tool is outside the effective allowed tools.
 - `resources/*` and `prompts/*` are currently **pass-through after AuthN** (no JWT/RAR allow-list filtering at this layer).
 
 ### 3) Supported vs out-of-scope MCP methods
@@ -56,7 +56,7 @@ Equivalent side-effects for `resources/*` and `prompts/*` list-change notificati
 
 ## References
 
-- `docs/architecture/mcp_gateway.plan.md` — orchestrator scope and method behavior
-- `docs/adr/0003-security-rar-jwt-merge-failmode.md` — JWT/RAR merge and fail modes
-- `docs/artifacts/openapi/openapi.yaml` — host-facing HTTP/MCP contract
-- `docs/DEVELOPER.md` — operator-facing configuration semantics
+- `docs/architecture/mcp_gateway.plan.md`, orchestrator scope and method behavior
+- `docs/adr/0003-security-rar-jwt-merge-failmode.md`, JWT/RAR merge and fail modes
+- `docs/artifacts/openapi/openapi.yaml`, host-facing HTTP/MCP contract
+- `docs/DEVELOPER.md`, operator-facing configuration semantics

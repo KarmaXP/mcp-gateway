@@ -1,6 +1,6 @@
 # Router trace capture (OTLP/Tempo)
 
-Use this during calibration runs to capture the semantic-router decision path for thesis figures.
+Use this during calibration runs to capture the semantic-router decision path for reports or diagrams.
 
 ## 1) Spans and attributes to capture
 
@@ -46,7 +46,7 @@ Optional narrowing for one host session:
 { name = "mcp.host.request" && span.mcp.method = "tools/call" && span.mcp.session.id = "<session-id>" }
 ```
 
-## 3) Capture procedure for thesis figure
+## 3) Capture procedure
 
 1. Run the calibration workload from `docs/evaluation/calibration-run.md` (semantic mode, not direct mode).
 2. Open a matching trace in Tempo using the query above.

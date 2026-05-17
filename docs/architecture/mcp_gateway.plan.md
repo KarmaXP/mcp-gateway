@@ -2,25 +2,25 @@
 name: MCP Gateway architecture plan
 overview: "In-repository technical specification and decision log for the MCP Gateway. Optional export of the body to standalone Markdown (without this YAML front matter). Stack choices and open items are tracked in §4.x."
 todos:
-  - id: router-phase2-benchmark
-    content: Synthetic router eval (≥20 tools, recall + p95) — internal/router/eval
-    status: completed
-  - id: expand-sections
-    content: Expand §1–8 with full prose (paragraphs, filled tables, Mermaid diagrams) in this file
-    status: pending
-  - id: export-plan-md
-    content: Optional — copy body to a clean deliverable Markdown without front matter when needed
-    status: pending
-  - id: mermaid-pass
-    content: Validate Mermaid diagrams (no spaces in IDs; quotes on labels with parentheses)
-    status: pending
-  - id: ibm-bibliography
-    content: Finalize IBM Context Forge and bibliography with verifiable public sources
-    status: pending
+ - id: router-phase2-benchmark
+  content: Synthetic router eval (≥20 tools, recall + p95), internal/router/eval
+  status: completed
+ - id: expand-sections
+  content: Expand §1, 8 with full prose (paragraphs, filled tables, Mermaid diagrams) in this file
+  status: pending
+ - id: export-plan-md
+  content: Optional, copy body to a clean deliverable Markdown without front matter when needed
+  status: pending
+ - id: mermaid-pass
+  content: Validate Mermaid diagrams (no spaces in IDs; quotes on labels with parentheses)
+  status: pending
+ - id: ibm-bibliography
+  content: Finalize IBM Context Forge and bibliography with verifiable public sources
+  status: pending
 isProject: false
 ---
 
-# Technical specification — MCP gateway for platform engineering
+# Technical specification: MCP gateway for platform engineering
 
 ## Role of this document (read first)
 
@@ -32,7 +32,7 @@ isProject: false
 
 ## Objective and scope
 
-- **Target length:** ~15 pages of substantive content (on the order of 6,000–9,000 words excluding diagrams), formal technical prose where a longer narrative exists outside this repo; this plan is in **English** for the repo—**navigable outline**, numbered sections, **requirement → module traceability**.
+- **Target length:** ~15 pages of substantive content (on the order of 6,000, 9,000 words excluding diagrams), formal technical prose where a longer narrative exists outside this repo; this plan is in **English** for the repo, **navigable outline**, numbered sections, **requirement → module traceability**.
 - **Core topic:** Intermediation infrastructure that reduces the host↔server **mesh** (N×M) via a **centralized Go orchestrator** that does not replace MCP but multiplexes it, enforces policy, and adds observability.
 
 ---
@@ -42,12 +42,12 @@ isProject: false
 Fixed block (also in exported `mcp_gateway.md` if you split it):
 
 
-| Field   | Value                                                                                                    |
+| Field  | Value                                                  |
 | ------- | -------------------------------------------------------------------------------------------------------- |
-| Title   | Design and implementation of a Model Context Protocol (MCP) gateway for platform engineering              |
-| Author  | Carlos Palomero                                                                                          |
-| Version | 1.0 (engineering draft)                                                                                  |
-| Date    | *(update each revision)*                                                                                 |
+| Title  | Design and implementation of a Model Context Protocol (MCP) gateway for platform engineering       |
+| Author | Carlos Palomero                                             |
+| Version | 1.0 (engineering draft)                                         |
+| Date  | *(update each revision)*                                         |
 
 
 - **In scope:** Go gateway as the single MCP negotiation point toward N upstream servers; capability aggregation with mandatory **namespacing**; cross-cutting security and telemetry.
@@ -58,36 +58,36 @@ Fixed block (also in exported `mcp_gateway.md` if you split it):
 
 ## 2. Business context: SRE and platform engineering
 
-**Use case — incident response:**
+**Use case, incident response:**
 
 
-| Element                         | Content to develop in prose                                                                                                                                           |
+| Element             | Content to develop in prose                                                                      |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Actors                          | On-call engineer; agent (e.g. **LangGraph**) as reasoning orchestrator                                                                                             |
-| Silos integrated via MCP        | **Kubernetes** (infra/state), **Prometheus** (metrics), **GitHub** (versions/PRs/releases), **RAG** over runbooks/documentation                                       |
-| Problem                         | Connection mesh, fragmented credentials and policies, redundant or conflicting tool catalogs                                                                         |
-| Value — MTTR                    | Explicit causal chain: less context switching, unified tool discovery, correlated traces; **do not invent figures**—room for experimental benchmark results             |
-| Value — corporate security      | Centralized identity (OIDC), least privilege per tool, granular consent, input validation (link to §3.C)                                                             |
-| Stakeholder note                | Explicit subsection: **absolute priority** to backend, AI, and business case; **frontend out of scope**                                                                |
+| Actors             | On-call engineer; agent (e.g. **LangGraph**) as reasoning orchestrator                                               |
+| Silos integrated via MCP    | **Kubernetes** (infra/state), **Prometheus** (metrics), **GitHub** (versions/PRs/releases), **RAG** over runbooks/documentation                    |
+| Problem             | Connection mesh, fragmented credentials and policies, redundant or conflicting tool catalogs                                     |
+| Value, MTTR          | Explicit causal chain: less context switching, unified tool discovery, correlated traces; **do not invent figures**, room for experimental benchmark results       |
+| Value, corporate security   | Centralized identity (OIDC), least privilege per tool, granular consent, input validation (link to §3.C)                               |
+| Stakeholder note        | Explicit subsection: **absolute priority** to backend, AI, and business case; **frontend out of scope**                                |
 
 
-**Mermaid diagram (required) — business context:**
+**Mermaid diagram (required), business context:**
 
 ```mermaid
 flowchart LR
-  eng[OnCallEngineer]
-  host[AgentHost]
-  gw[MCPGateway]
-  k8s[K8sMCP]
-  prom[PrometheusMCP]
-  gh[GitHubMCP]
-  rag[RAGMCP]
-  eng --> host
-  host --> gw
-  gw --> k8s
-  gw --> prom
-  gw --> gh
-  gw --> rag
+ eng[OnCallEngineer]
+ host[AgentHost]
+ gw[MCPGateway]
+ k8s[K8sMCP]
+ prom[PrometheusMCP]
+ gh[GitHubMCP]
+ rag[RAGMCP]
+ eng --> host
+ host --> gw
+ gw --> k8s
+ gw --> prom
+ gw --> gh
+ gw --> rag
 ```
 
 
@@ -98,14 +98,14 @@ flowchart LR
 
 ## 3. System architecture (specifications for implementation / AI)
 
-For **each** subsystem **A–D**, the final document should complete four subsections:
+For **each** subsystem **A, D**, the final document should complete four subsections:
 
 1. **Responsibility**
 2. **Interface contract** (MCP messages, SSE, errors)
 3. **Data flow** (steps or diagram)
 4. **Golden rules**
 
-### A. Multiplexing orchestrator — P0 (critical)
+### A. Multiplexing orchestrator: P0 (critical)
 
 Expanded implementation specification. This component is the **gateway core**: all MCP traffic from the host passes through it; it multiplexes N logical connections to upstream MCP servers and returns a **single** coherent protocol view to the host.
 
@@ -154,9 +154,9 @@ Expanded implementation specification. This component is the **gateway core**: a
 1. The host opens the streaming side of the transport (GET SSE or whatever the MCP spec in use requires) and optionally sends the first POST for `initialize`.
 2. The gateway **SessionManager** assigns an internal `session_id` (UUID) and registers a write channel to the host SSE.
 3. Each incoming JSON-RPC message is enqueued in a **dispatcher** that:
-  - validates JSON-RPC syntax;
-  - classifies `method` (standard MCP vs notification);
-  - invokes the corresponding **method handler**.
+ - validates JSON-RPC syntax;
+ - classifies `method` (standard MCP vs notification);
+ - invokes the corresponding **method handler**.
 
 **`initialize` (orchestrator view):**
 
@@ -184,39 +184,39 @@ Expanded implementation specification. This component is the **gateway core**: a
 #### A.4 Golden rules
 
 
-| Rule                                                      | Rationale                                                                                                                         |
+| Rule                           | Rationale                                                             |
 | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| **R1 — Unique prefix per backend**                        | Avoids collisions in `tools/list` and ambiguity in `tools/call`.                                                                  |
-| **R2 — Mandatory strip on forward**                       | Backends see native contracts; only the gateway knows the prefix.                                                               |
-| **R3 — Preserve host-visible `id` in the response**         | The host JSON-RPC client must correlate without knowing internal ids.                                                             |
-| **R4 — One coherent SSE stream per host session**         | Avoids races and simplifies the client mental model.                                                                              |
-| **R5 — `context` with per-backend-call deadline**         | Hung backends must not block goroutines indefinitely; deadlines aligned with SLAs in §6.                                        |
-| **R6 — Partial aggregation failure must not kill session** | One down backend does not invalidate others’ `initialize` unless an explicit “strict” policy.                                    |
-| **R7 — Do not reinterpret MCP results**                   | The gateway is a broker, not a second LLM; do not alter tool output text except agreed security policies (§3.C).                  |
+| **R1: Unique prefix per backend**            | Avoids collisions in `tools/list` and ambiguity in `tools/call`.                                 |
+| **R2: Mandatory strip on forward**            | Backends see native contracts; only the gateway knows the prefix.                                |
+| **R3: Preserve host-visible `id` in the response**     | The host JSON-RPC client must correlate without knowing internal ids.                               |
+| **R4: One coherent SSE stream per host session**     | Avoids races and simplifies the client mental model.                                       |
+| **R5: `context` with per-backend-call deadline**     | Hung backends must not block goroutines indefinitely; deadlines aligned with SLAs in §6.                    |
+| **R6: Partial aggregation failure must not kill session** | One down backend does not invalidate others’ `initialize` unless an explicit “strict” policy.                  |
+| **R7: Do not reinterpret MCP results**          | The gateway is a broker, not a second LLM; do not alter tool output text except agreed security policies (§3.C).         |
 
 
 #### A.5 Component diagram (Mermaid)
 
 ```mermaid
 flowchart TB
-  host[MCPHost]
-  sess[SessionManager]
-  disp[JSONRPCDispatcher]
-  agg[CapabilityAggregator]
-  ns[NamespaceMapper]
-  b1[BackendAdapter_B1]
-  b2[BackendAdapter_B2]
-  bn[BackendAdapter_BN]
-  host --> sess
-  sess --> disp
-  disp --> agg
-  disp --> ns
-  agg --> b1
-  agg --> b2
-  agg --> bn
-  ns --> b1
-  ns --> b2
-  ns --> bn
+ host[MCPHost]
+ sess[SessionManager]
+ disp[JSONRPCDispatcher]
+ agg[CapabilityAggregator]
+ ns[NamespaceMapper]
+ b1[BackendAdapter_B1]
+ b2[BackendAdapter_B2]
+ bn[BackendAdapter_BN]
+ host --> sess
+ sess --> disp
+ disp --> agg
+ disp --> ns
+ agg --> b1
+ agg --> b2
+ agg --> bn
+ ns --> b1
+ ns --> b2
+ ns --> bn
 ```
 
 
@@ -224,13 +224,13 @@ flowchart TB
 #### A.6 Suggested Go packages (implementation)
 
 
-| Package                      | Intended contents                                                |
+| Package           | Intended contents                        |
 | ---------------------------- | ---------------------------------------------------------------- |
-| `internal/gateway/session`   | Host sessions, `id` map registry, serialized SSE writes, method dispatch |
-| `internal/gateway/multiplex` | `initialize` / `tools/list` merge, cache invalidation            |
-| `internal/gateway/namespace` | Prefix/strip, character validation and uniqueness                |
-| `internal/backend`           | `Backend`, `Connect` interfaces, timeouts, health                |
-| `internal/rpc`               | JSON-RPC 2.0 parse/validate (mandatory unit tests §6)            |
+| `internal/gateway/session`  | Host sessions, `id` map registry, serialized SSE writes, method dispatch |
+| `internal/gateway/multiplex` | `initialize` / `tools/list` merge, cache invalidation      |
+| `internal/gateway/namespace` | Prefix/strip, character validation and uniqueness        |
+| `internal/backend`      | `Backend`, `Connect` interfaces, timeouts, health        |
+| `internal/rpc`        | JSON-RPC 2.0 parse/validate (mandatory unit tests §6)      |
 
 
 #### A.7 Orchestrator-specific acceptance criteria (Phase 1)
@@ -241,7 +241,7 @@ flowchart TB
 - Unit tests for **prefix/strip mapping** and **preserved `id`** in responses.
 - Document the exact SSE format used (event name, JSON data) in exported comments or `docs/DEVELOPER.md` / OpenAPI.
 
-### B. Semantic router — P1 (high)
+### B. Semantic router: P1 (high)
 
 The **semantic router** reduces **context noise** for the agent when the merged tool catalog is large (multiple silos × dozens of tools). It does not replace the orchestrator: it **filters, disambiguates, and chooses destination** before the multiplexer performs prefix `strip` and backend forward per §3.A. It runs **inside** the gateway; the MCP host still has a single endpoint and a single merged `tools/list`, except optional modes documented below.
 
@@ -268,39 +268,39 @@ The **semantic router** reduces **context noise** for the agent when the merged 
 
 ```text
 type RoutingSignal struct {
-  SessionID       string
-  Method          string            // e.g. "tools/call"
-  ToolName        string            // name requested by host (may be empty in advanced modes)
-  ArgumentsJSON   json.RawMessage   // MCP arguments
-  IntentText      string            // optional: free text or last user message if host forwards it
-  AllowedTools    []string          // optional: subset imposed by §3.C
-  CatalogVersion  string            // hash of merged tools/list to invalidate index cache
+ SessionID    string
+ Method     string      // e.g. "tools/call"
+ ToolName    string      // name requested by host (may be empty in advanced modes)
+ ArgumentsJSON  json.RawMessage  // MCP arguments
+ IntentText   string      // optional: free text or last user message if host forwards it
+ AllowedTools  []string     // optional: subset imposed by §3.C
+ CatalogVersion string      // hash of merged tools/list to invalidate index cache
 }
 
 type RoutingDecision struct {
-  UpstreamID          string
-  ToolNameNamespaced  string
-  Confidence          float64       // 0..1 or normalized score
-  Candidates          []ScoredTool  // top-K for logs / explainability
-  FallbackLayer       string        // "exact" | "vector" | "rules" | "default_backend"
-  LatencyMS           int64
+ UpstreamID     string
+ ToolNameNamespaced string
+ Confidence     float64    // 0..1 or normalized score
+ Candidates     []ScoredTool // top-K for logs / explainability
+ FallbackLayer    string    // "exact" | "vector" | "rules" | "default_backend"
+ LatencyMS      int64
 }
 
 type ScoredTool struct {
-  Name   string
-  Score  float64
-  Source string // e.g. "vector", "bm25", "hybrid"
+ Name  string
+ Score float64
+ Source string // e.g. "vector", "bm25", "hybrid"
 }
 ```
 
 **Signal input:**
 
 
-| Signal source                      | Use                                                                                                                                                                                           |
+| Signal source           | Use                                                                                              |
 | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tools/call`: `name` + `arguments` | Primary in standard MCP: vector compares the request to tool descriptions.                                                                                                                    |
-| Optional `IntentText`              | If the host or an agent proxy sends context (agreed HTTP header, experimental param field, or documented convention), improves recall when `name` is generic or an alias.             |
-| Short session history              | Optional Phase 2+: last N invoked tool names to disambiguate semantic collisions (implementation: buffer in `SessionManager`, not required for minimum milestone).                             |
+| `tools/call`: `name` + `arguments` | Primary in standard MCP: vector compares the request to tool descriptions.                                                          |
+| Optional `IntentText`       | If the host or an agent proxy sends context (agreed HTTP header, experimental param field, or documented convention), improves recall when `name` is generic or an alias.       |
+| Short session history       | Optional Phase 2+: last N invoked tool names to disambiguate semantic collisions (implementation: buffer in `SessionManager`, not required for minimum milestone).               |
 
 
 **Output (Decision):**
@@ -311,44 +311,44 @@ type ScoredTool struct {
 **Vector DB contract:**
 
 - **Implementation decision:** **Qdrant** as reference vector store (see §4.1 for rationale and alternatives). The internal interface (`internal/router/store`) must remain **abstractable** for tests with doubles/fakes without a container.
-- Minimum operations: `Upsert(vectors + metadata)`, `Query(vector, topK, filter)`, `DeleteByCatalogVersion` or full rebuild on catalog change — all mappable to Qdrant collections/points API and **payload** filters (`backend_id`, `tool_name_namespaced`, `catalog_version`, etc.).
-- **Filters**: by `AllowedTools`, `backend_id`, tags — must be applied **before** the final top-K to enforce policy without *post hoc* in-memory filtering only (avoids leaking forbidden names in ranking logs).
+- Minimum operations: `Upsert(vectors + metadata)`, `Query(vector, topK, filter)`, `DeleteByCatalogVersion` or full rebuild on catalog change, all mappable to Qdrant collections/points API and **payload** filters (`backend_id`, `tool_name_namespaced`, `catalog_version`, etc.).
+- **Filters**: by `AllowedTools`, `backend_id`, tags, must be applied **before** the final top-K to enforce policy without *post hoc* in-memory filtering only (avoids leaking forbidden names in ranking logs).
 
 **Operating modes (configurable):**
 
 
-| Mode          | Behavior                                                                                                                                                                    |
+| Mode     | Behavior                                                                                  |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `off`         | No embeddings; exact `name` match + rule/alias table only.                                                                                                                    |
-| `assist_list` | `tools/list` to host stays full; router only affects `tools/call` or an internal “suggestions” endpoint (if exposed).                                                        |
-| `filter_list` | `tools/list` returns a subset filtered by similarity to session `IntentText` (requires defining how session intent is set; document the mechanism in this repo).          |
+| `off`     | No embeddings; exact `name` match + rule/alias table only.                                                          |
+| `assist_list` | `tools/list` to host stays full; router only affects `tools/call` or an internal “suggestions” endpoint (if exposed).                            |
+| `filter_list` | `tools/list` returns a subset filtered by similarity to session `IntentText` (requires defining how session intent is set; document the mechanism in this repo).     |
 
 
-#### B.3 Data flow — Signal–Decision pipeline
+#### B.3 Data flow: Signal, Decision pipeline
 
-**Phase 1 — Catalog ingestion (trigger: change in §3.A aggregation):**
+**Phase 1, Catalog ingestion (trigger: change in §3.A aggregation):**
 
 1. When a new merged `tools/list` completes (or on a refresh interval), **CatalogIndexer** serializes each tool into a normalized **text document** (fixed template: name, description, parameters, silo).
 2. Compute **embedding** per document (batch) and write to the Vector DB with metadata: `tool_name_namespaced`, `backend_id`, `catalog_version`.
 3. Invalidate L1 in-memory cache queries tied to the previous `catalog_version`.
 
-**Phase 2 — Intent classification (per request):**
+**Phase 2, Intent classification (per request):**
 
 1. **Build query text** for request embedding: controlled concatenation of `ToolName`, summary of `arguments` keys, and `IntentText` if present (fixed order and separators for reproducibility).
 2. **Light classifier (optional):** rules or small model labeling the request as `EXACT_NAME`, `AMBIGUOUS`, or `EXPLORATION` (no clear name). This label **only** adjusts weight of the next step; it does not replace the vector.
 3. If the label is `EXACT_NAME` and `ToolName` exists literally in the catalog and is in `AllowedTools` → **deterministic shortcut**: immediate decision without vector query (minimum latency).
 
-**Phase 3 — Vector search and candidate reduction:**
+**Phase 3, Vector search and candidate reduction:**
 
-1. Embed the query; `Query` with configurable `topK` (e.g. 8–24) and policy filters.
+1. Embed the query; `Query` with configurable `topK` (e.g. 8, 24) and policy filters.
 2. **Score threshold** `T_min`: below it, do not auto-accept top-1 unless there is a **single** candidate after filtering.
 3. **Optional hybrid:** combine BM25 over names/descriptions in memory or a secondary engine with vector score (weights α, β documented for reproducibility).
 4. **Semantic deduplication:** if two very similar tools from the same backend appear in top-K, apply tie-break (higher score, or configured silo preference).
 
-**Phase 4 — Decision and transparent routing:**
+**Phase 4, Decision and transparent routing:**
 
 1. Choose winning `ToolNameNamespaced` and map to `backend_id`.
-2. Pass the decision to the **multiplexer** to run `tools/call` as if the host had named that tool directly (controlled substitution of `name` **only if** configuration allows automatic name correction; otherwise reject with error to avoid surprising the client — configurable **`AllowAutoRename`**).
+2. Pass the decision to the **multiplexer** to run `tools/call` as if the host had named that tool directly (controlled substitution of `name` **only if** configuration allows automatic name correction; otherwise reject with error to avoid surprising the client, configurable **`AllowAutoRename`**).
 3. Record `RoutingDecision` on the session span/log.
 
 **Temporal interaction with §3.A (recommended strict order):**
@@ -360,42 +360,42 @@ Incoming JSON-RPC → syntax validation → §3.C (when present) → §3.B route
 #### B.4 Golden rules
 
 
-| Rule                                                                              | Rationale                                                                                                                             |
+| Rule                                       | Rationale                                                               |
 | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| **S1 — Never in-memory-only filter what policy must filter in the index**         | Avoids ranking and logs over forbidden tools.                                                                                         |
-| **S2 — Versioned catalog**                                                        | Reproducibility and consistency between host-visible `tools/list` and served vectors.                                                 |
-| **S3 — Deterministic shortcut before vector**                                     | Gateway p95 latency: happy path with explicit name does not pay embedding cost.                                                       |
-| **S4 — Explicit `AllowAutoRename`, conservative default**                         | Transparency: host may assume requested name is executed unless clearly configured otherwise.                                           |
-| **S5 — Top-K and thresholds in config, not hardcoded**                            | Experimental tuning for evaluation without recompiling.                                                                         |
-| **S6 — Graceful degradation**                                                     | If the Vector DB is unavailable, fall back to rules + exact match and alert; do not kill the session unless strict policy.            |
-| **S7 — Minimal explainability**                                                   | Keep candidates and scores in structured logs (retention per privacy).                                                                |
+| **S1: Never in-memory-only filter what policy must filter in the index**     | Avoids ranking and logs over forbidden tools.                                             |
+| **S2: Versioned catalog**                            | Reproducibility and consistency between host-visible `tools/list` and served vectors.                         |
+| **S3: Deterministic shortcut before vector**                   | Gateway p95 latency: happy path with explicit name does not pay embedding cost.                            |
+| **S4: Explicit `AllowAutoRename`, conservative default**             | Transparency: host may assume requested name is executed unless clearly configured otherwise.                      |
+| **S5: Top-K and thresholds in config, not hardcoded**              | Experimental tuning for evaluation without recompiling.                                     |
+| **S6: Graceful degradation**                           | If the Vector DB is unavailable, fall back to rules + exact match and alert; do not kill the session unless strict policy.      |
+| **S7: Minimal explainability**                          | Keep candidates and scores in structured logs (retention per privacy).                                |
 
 
 #### B.5 Flow diagram (Mermaid)
 
 ```mermaid
 flowchart TD
-  inReq[Incoming_tools_call]
-  sig[BuildRoutingSignal]
-  exact{ExactNameInCatalog}
-  emb[EmbedQuery]
-  vec[VectorSearch_topK]
-  thr{ScoreAboveThreshold}
-  rules[RulesFallback]
-  dec[RoutingDecision]
-  mux[OrchestratorDispatch]
-  err[JSONRPC_Error]
-  inReq --> sig
-  sig --> exact
-  exact -->|yes| dec
-  exact -->|no| emb
-  emb --> vec
-  vec --> thr
-  thr -->|yes| dec
-  thr -->|no| rules
-  rules -->|resolved| dec
-  rules -->|fail| err
-  dec --> mux
+ inReq[Incoming_tools_call]
+ sig[BuildRoutingSignal]
+ exact{ExactNameInCatalog}
+ emb[EmbedQuery]
+ vec[VectorSearch_topK]
+ thr{ScoreAboveThreshold}
+ rules[RulesFallback]
+ dec[RoutingDecision]
+ mux[OrchestratorDispatch]
+ err[JSONRPC_Error]
+ inReq --> sig
+ sig --> exact
+ exact -->|yes| dec
+ exact -->|no| emb
+ emb --> vec
+ vec --> thr
+ thr -->|yes| dec
+ thr -->|no| rules
+ rules -->|resolved| dec
+ rules -->|fail| err
+ dec --> mux
 ```
 
 
@@ -403,13 +403,13 @@ flowchart TD
 #### B.6 Suggested Go packages (implementation)
 
 
-| Package                 | Intended contents                                                                     |
+| Package         | Intended contents                                   |
 | ----------------------- | ------------------------------------------------------------------------------------- |
-| `internal/router`       | Signal–Decision pipeline orchestration, mode flags                                    |
-| `internal/router/index` | CatalogIndexer, text normalization, `catalog_version`                                 |
-| `internal/router/embed` | Embedding client, cache by text hash                                                  |
-| `internal/router/store` | **Qdrant** implementation (official HTTP/gRPC or Go client); mock in unit tests       |
-| `internal/router/rules` | Aliases, keywords, silo→prefix maps                                                   |
+| `internal/router`    | Signal, Decision pipeline orchestration, mode flags                  |
+| `internal/router/index` | CatalogIndexer, text normalization, `catalog_version`                 |
+| `internal/router/embed` | Embedding client, cache by text hash                         |
+| `internal/router/store` | **Qdrant** implementation (official HTTP/gRPC or Go client); mock in unit tests    |
+| `internal/router/rules` | Aliases, keywords, silo→prefix maps                          |
 
 
 #### B.7 Observability and router-specific metrics (alignment §3.D)
@@ -425,9 +425,9 @@ flowchart TD
 - Reproducible benchmark: p95 of vector + embedding phase under the budget agreed in §6 (excluding MCP backend latency).
 - Document default `topK`, `T_min`, `AllowAutoRename`, and the exact indexed document format in the repo.
 
-**In-repo harness:** `internal/router/eval` — synthetic catalog (`SyntheticCatalog`, 24 tools), golden intents, `TestPhase2VectorRecallLexical` (recall@1), `TestPhase2EmbedAndQueryP95`, and silo narrowing coverage. Run: `go test ./internal/router/eval -run Phase2 -v`. The lexical embedder is deterministic (no live ONNX); repeat the same tests against **all-MiniLM-L6-v2** + Qdrant for thesis-grade numbers.
+**In-repo harness:** `internal/router/eval`, synthetic catalog (`SyntheticCatalog`, 24 tools), golden intents, `TestPhase2VectorRecallLexical` (recall@1), `TestPhase2EmbedAndQueryP95`, and silo narrowing coverage. Run: `go test ./internal/router/eval -run Phase2 -v`. The lexical embedder is deterministic (no live ONNX); repeat the same tests against **all-MiniLM-L6-v2** + Qdrant for thesis-grade numbers.
 
-### C. Security layer — P1 (high)
+### C. Security layer: P1 (high)
 
 The security layer implements **authentication**, **per-tool authorization**, and **input validation** before a request reaches the semantic router (§3.B) and multiplexer (§3.A). Goal: reduce abuse surface (injection, lateral escalation via dangerous tools, exfiltration via malformed arguments) and align the gateway with **Zero Trust** practice (explicit identity, least privilege, logged decisions).
 
@@ -453,11 +453,11 @@ The security layer implements **authentication**, **per-tool authorization**, an
 **Surface toward host / HTTP client:**
 
 
-| Mechanism                                            | Use                                                                                                                                          |
+| Mechanism                      | Use                                                                     |
 | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Authorization: Bearer <JWT>`                      | Default documented mode for this gateway; MCP host or agent proxy attaches the token on each POST/stream tied to the session.                |
-| mTLS (optional)                                      | Workload identity (service cert) complementing or replacing Bearer in mesh environments; map cert → `SPIFFE ID` → policy.                      |
-| Context headers (optional, project convention)        | E.g. `X-Tenant-ID` only if signed or bound to JWT; do not trust unauthenticated headers for critical decisions.                              |
+| `Authorization: Bearer <JWT>`           | Default documented mode for this gateway; MCP host or agent proxy attaches the token on each POST/stream tied to the session.        |
+| mTLS (optional)                   | Workload identity (service cert) complementing or replacing Bearer in mesh environments; map cert → `SPIFFE ID` → policy.           |
+| Context headers (optional, project convention)    | E.g. `X-Tenant-ID` only if signed or bound to JWT; do not trust unauthenticated headers for critical decisions.               |
 
 
 **Claims and policy (guidance, not normative for external summaries):**
@@ -470,11 +470,11 @@ The security layer implements **authentication**, **per-tool authorization**, an
 
 ```text
 type SecurityContext struct {
-  SubjectID     string            // sub or SPIFFE
-  TenantID      string            // optional
-  AllowedTools  map[string]struct{} // closed set after evaluation
-  PolicyVersion string
-  RawClaims     jwt.MapClaims     // only if needed; avoid logging full claims
+ SubjectID   string      // sub or SPIFFE
+ TenantID   string      // optional
+ AllowedTools map[string]struct{} // closed set after evaluation
+ PolicyVersion string
+ RawClaims   jwt.MapClaims   // only if needed; avoid logging full claims
 }
 
 // After AuthN/AuthZ + schema validation:
@@ -484,12 +484,12 @@ func Enforce(req *JSONRPCRequest, ctx *SecurityContext) error
 **Errors toward the host (JSON-RPC 2.0):**
 
 
-| Situation                                         | Recommended behavior                                                                                       |
+| Situation                     | Recommended behavior                                            |
 | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Missing or malformed token                        | `-32001` or documented application code `UNAUTHENTICATED`                                                |
-| Valid token but no consent for the tool           | `PERMISSION_DENIED` (do not reveal other tools if security-through-obscurity policy)                       |
-| Arguments fail JSON Schema validation             | `INVALID_PARAMS` (JSON-RPC) with minimal `message` detail (avoid leaking internal schema in production)   |
-| Policy not loaded / internal error                | `-32603` with `request_id` correlation for support                                                         |
+| Missing or malformed token            | `-32001` or documented application code `UNAUTHENTICATED`                        |
+| Valid token but no consent for the tool      | `PERMISSION_DENIED` (do not reveal other tools if security-through-obscurity policy)            |
+| Arguments fail JSON Schema validation       | `INVALID_PARAMS` (JSON-RPC) with minimal `message` detail (avoid leaking internal schema in production)  |
+| Policy not loaded / internal error        | `-32603` with `request_id` correlation for support                             |
 
 
 #### C.3 Data flow
@@ -503,12 +503,12 @@ Parsed JSON-RPC → C.AuthN → C.AuthZ per method/tool → C.JSONSchema(args) �
 **By MCP method type:**
 
 
-| Method         | Security actions                                                                                                                                                   |
+| Method     | Security actions                                                                          |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `initialize`   | Client AuthN; optionally restrict `clientInfo` or versions; do not expose sensitive backend capabilities in the merged result if policy forbids.                 |
-| `tools/list`   | Filter the merged list **before** sending to the host: only tools ∈ `AllowedTools` (reduces surface metadata leakage).                                          |
-| `tools/call`   | AuthZ by tool name; JSON Schema validation; optionally `arguments` size limits (bytes and JSON depth) before schema.                                              |
-| Notifications  | Define whether they require the same Bearer; default **yes** on the same HTTP/SSE session.                                                                         |
+| `initialize`  | Client AuthN; optionally restrict `clientInfo` or versions; do not expose sensitive backend capabilities in the merged result if policy forbids.         |
+| `tools/list`  | Filter the merged list **before** sending to the host: only tools ∈ `AllowedTools` (reduces surface metadata leakage).                     |
+| `tools/call`  | AuthZ by tool name; JSON Schema validation; optionally `arguments` size limits (bytes and JSON depth) before schema.                       |
+| Notifications | Define whether they require the same Bearer; default **yes** on the same HTTP/SSE session.                                     |
 
 
 **RAR / consent flow (logical view):**
@@ -526,37 +526,37 @@ Parsed JSON-RPC → C.AuthN → C.AuthZ per method/tool → C.JSONSchema(args) �
 #### C.4 Golden rules
 
 
-| Rule                                                                        | Rationale                                                                                                                            |
+| Rule                                    | Rationale                                                              |
 | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| **SEC1 — Validate JWT before any business logic**                           | Avoids useful work for anonymous attackers and simplifies rate limiting.                                                             |
-| **SEC2 — Filtered `tools/list` = policy, not UI only**                      | Host must not see tools it cannot invoke (less enumeration, less agent confusion).                                                   |
-| **SEC3 — JSON Schema mandatory for risky tools in prod**                    | Configurable list of “elevated” tools that **require** strict schema; no schema → deny or `dev` only.                                |
-| **SEC4 — `additionalProperties: false` by default in corporate schemas**    | Limits injection of unexpected fields toward backends that forward to APIs.                                                          |
-| **SEC5 — Do not log tokens or secret-bearing arguments**                    | Redact `password`, `token`, `kubeconfig`, etc., via a key list.                                                                      |
-| **SEC6 — JWT keys (JWKS) with cache and rotation**                          | Fetch JWKS from `iss`, cache TTL, handle unknown `kid`.                                                                              |
-| **SEC7 — Fail closed**                                                        | If PolicyEngine cannot evaluate (store down), **deny** unless explicit degradation mode documented for non-prod.                     |
+| **SEC1, Validate JWT before any business logic**              | Avoids useful work for anonymous attackers and simplifies rate limiting.                               |
+| **SEC2, Filtered `tools/list` = policy, not UI only**           | Host must not see tools it cannot invoke (less enumeration, less agent confusion).                          |
+| **SEC3, JSON Schema mandatory for risky tools in prod**          | Configurable list of “elevated” tools that **require** strict schema; no schema → deny or `dev` only.                |
+| **SEC4, `additionalProperties: false` by default in corporate schemas**  | Limits injection of unexpected fields toward backends that forward to APIs.                             |
+| **SEC5, Do not log tokens or secret-bearing arguments**          | Redact `password`, `token`, `kubeconfig`, etc., via a key list.                                   |
+| **SEC6, JWT keys (JWKS) with cache and rotation**             | Fetch JWKS from `iss`, cache TTL, handle unknown `kid`.                                       |
+| **SEC7, Fail closed**                            | If PolicyEngine cannot evaluate (store down), **deny** unless explicit degradation mode documented for non-prod.           |
 
 
 #### C.5 Sequence diagram (Mermaid)
 
 ```mermaid
 sequenceDiagram
-  participant Host as MCPHost
-  participant GW as Gateway
-  participant Auth as AuthNJWT
-  participant Pol as PolicyEngine
-  participant Val as JSONSchemaValidator
-  participant Rtr as SemanticRouter
-  participant Mux as Orchestrator
-  Host->>GW: tools_call_Bearer
-  GW->>Auth: ValidateJWT
-  Auth-->>GW: SecurityContext
-  GW->>Pol: Authorize_tool_name
-  Pol-->>GW: allow_or_deny
-  GW->>Val: Validate_arguments
-  Val-->>GW: ok_or_INVALID_PARAMS
-  GW->>Rtr: Route_AllowedTools
-  Rtr->>Mux: Dispatch
+ participant Host as MCPHost
+ participant GW as Gateway
+ participant Auth as AuthNJWT
+ participant Pol as PolicyEngine
+ participant Val as JSONSchemaValidator
+ participant Rtr as SemanticRouter
+ participant Mux as Orchestrator
+ Host->>GW: tools_call_Bearer
+ GW->>Auth: ValidateJWT
+ Auth-->>GW: SecurityContext
+ GW->>Pol: Authorize_tool_name
+ Pol-->>GW: allow_or_deny
+ GW->>Val: Validate_arguments
+ Val-->>GW: ok_or_INVALID_PARAMS
+ GW->>Rtr: Route_AllowedTools
+ Rtr->>Mux: Dispatch
 ```
 
 
@@ -564,24 +564,24 @@ sequenceDiagram
 #### C.6 Suggested Go packages (implementation)
 
 
-| Package                        | Intended contents                                                           |
+| Package            | Intended contents                              |
 | ------------------------------ | --------------------------------------------------------------------------- |
-| `internal/auth/oidc`           | JWT validation, JWKS, claim extraction, optional mTLS                       |
-| `internal/auth/rar`            | `authorization_details` parser, expansion to tools                          |
-| `internal/policy`              | Rules engine, versioning, optional hot-reload from file/CRD                 |
-| `internal/validate`            | JSON Schema load/compile, `arguments` validation, JSON size limits          |
-| `internal/middleware/security` | HTTP/MCP chaining before JSON-RPC handler                                   |
+| `internal/auth/oidc`      | JWT validation, JWKS, claim extraction, optional mTLS            |
+| `internal/auth/rar`      | `authorization_details` parser, expansion to tools             |
+| `internal/policy`       | Rules engine, versioning, optional hot-reload from file/CRD         |
+| `internal/validate`      | JSON Schema load/compile, `arguments` validation, JSON size limits     |
+| `internal/middleware/security` | HTTP/MCP chaining before JSON-RPC handler                  |
 
 
-Common Go ecosystem libraries (implementation reference, not prescriptive): `github.com/golang-jwt/jwt`, JSON Schema validators (e.g. `sanathkr/go-jsonschema` or `xeipuuv/gojsonschema` — evaluate license and draft in §4).
+Common Go ecosystem libraries (implementation reference, not prescriptive): `github.com/golang-jwt/jwt`, JSON Schema validators (e.g. `sanathkr/go-jsonschema` or `xeipuuv/gojsonschema`, evaluate license and draft in §4).
 
-#### C.7 Stub mode (Phases 1–2) vs production (Phase 3)
+#### C.7 Stub mode (Phases 1, 2) vs production (Phase 3)
 
 
-| Phase | Behavior                                                                                                                         |
+| Phase | Behavior                                                             |
 | ----- | -------------------------------------------------------------------------------------------------------------------------------- |
-| 1–2   | `AUTH_MODE=none` or optional JWT without RAR: minimal syntax validation only; document **not** safe for public exposure.         |
-| 3     | AuthN/AuthZ + Schema + audit on by default in `staging`/`prod`.                                                                  |
+| 1, 2  | `AUTH_MODE=none` or optional JWT without RAR: minimal syntax validation only; document **not** safe for public exposure.     |
+| 3   | AuthN/AuthZ + Schema + audit on by default in `staging`/`prod`.                                 |
 
 
 #### C.8 Specific acceptance criteria (Phase 3)
@@ -592,7 +592,7 @@ Common Go ecosystem libraries (implementation reference, not prescriptive): `git
 - Unit cases: 3+ schemas (valid, wrong type, extra field with `additionalProperties: false`) for an example tool.
 - OpenAPI/Swagger or `docs/DEVELOPER.md`: required headers, expected claims, example RAR `authorization_details` for two tools.
 
-### D. Observability engine — P2 (medium)
+### D. Observability engine: P2 (medium)
 
 The **observability engine** provides correlated **distributed traces**, **metrics**, and **structured logs** to operate and evaluate the gateway in SRE-oriented scenarios (MTTR, incident acknowledgment, meeting the latency budget §6). It uses **OpenTelemetry (OTel)** as the single API/SDK and prefers export via **OTLP** to backends chosen in §4 (Jaeger, Tempo, Prometheus, Honeycomb, etc.).
 
@@ -617,25 +617,25 @@ The **observability engine** provides correlated **distributed traces**, **metri
 **Service identity (OTel Resource):**
 
 
-| Attribute                | Indicative value                 |
+| Attribute        | Indicative value         |
 | ------------------------ | -------------------------------- |
-| `service.name`           | `mcp-gateway` (configurable)     |
-| `service.version`        | Git or semver of the binary      |
-| `deployment.environment` | `dev` / `staging` / `prod`       |
+| `service.name`      | `mcp-gateway` (configurable)   |
+| `service.version`    | Git or semver of the binary   |
+| `deployment.environment` | `dev` / `staging` / `prod`    |
 
 
 **Span naming conventions (mandatory in implementation):**
 
 
-| Span                                                    | When created                                                  | Parent                                                                 |
+| Span                          | When created                         | Parent                                 |
 | ------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `mcp.host.request`                                      | On accepting a host JSON-RPC message (after successful parse) | root (or child of HTTP transport span if server is instrumented)       |
-| `mcp.security.authn`                                    | JWT / mTLS validation                                         | `mcp.host.request`                                                     |
-| `mcp.security.authz`                                    | Per-tool policy check                                         | `mcp.host.request`                                                     |
-| `mcp.validate.json_schema`                              | Argument validation                                           | `mcp.host.request`                                                     |
-| `mcp.router.semantic`                                   | Signal–Decision pipeline §3.B                                 | `mcp.host.request`                                                     |
-| `mcp.backend.call`                                      | One invocation per participating backend                      | `mcp.host.request`                                                     |
-| `mcp.multiplex.initialize` / `mcp.multiplex.tools_list` | Multi-backend negotiation or merge                              | `mcp.host.request`                                                     |
+| `mcp.host.request`                   | On accepting a host JSON-RPC message (after successful parse) | root (or child of HTTP transport span if server is instrumented)    |
+| `mcp.security.authn`                  | JWT / mTLS validation                     | `mcp.host.request`                           |
+| `mcp.security.authz`                  | Per-tool policy check                     | `mcp.host.request`                           |
+| `mcp.validate.json_schema`               | Argument validation                      | `mcp.host.request`                           |
+| `mcp.router.semantic`                  | Signal, Decision pipeline §3.B                 | `mcp.host.request`                           |
+| `mcp.backend.call`                   | One invocation per participating backend           | `mcp.host.request`                           |
+| `mcp.multiplex.initialize` / `mcp.multiplex.tools_list` | Multi-backend negotiation or merge               | `mcp.host.request`                           |
 
 
 **Recommended standard attributes (OTel semantics + MCP domain):**
@@ -652,22 +652,22 @@ The **observability engine** provides correlated **distributed traces**, **metri
 - Use standard `context.Context`: each handler receives `ctx` with active `span`; child goroutines must use `trace.ContextWithSpan` or OTel Go’s recommended pattern so the **parent is not lost**.
 - Outgoing HTTP calls to MCP backends (if HTTP) should inject `traceparent` via `otelhttp.NewTransport` or equivalent for trace continuity **where the backend accepts it** (many MCP servers ignore propagation; `mcp.backend.call` may remain a child of the gateway only, which is acceptable).
 
-**Metrics — minimum instrumentation required for production observability:**
+**Metrics, minimum instrumentation required for production observability:**
 
 
-| Metric                                      | Type      | Labels                  | Definition                                                                                                                     |
+| Metric                   | Type   | Labels         | Definition                                                           |
 | ------------------------------------------- | --------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `mcp_gateway_request_duration_seconds`      | Histogram | `method`, `outcome`     | Total handling time from ingress to response on the stream (includes backends).                                              |
-| `mcp_gateway_internal_duration_seconds`     | Histogram | `method`, `phase`       | Time **only** in gateway process per phase (`parse`, `security`, `router`, `mux`) — basis for < 50 ms p95 budget §6. (OTel instrument: `mcp.gateway.internal.duration_seconds`.)           |
-| `mcp_gateway_backend_call_duration_seconds` | Histogram | `backend_id`, `outcome` | Time from send to adapter until backend response.                                                                              |
-| `mcp_gateway_requests_total`                | Counter   | `method`, `outcome`     | Request count (`success` / `client_error` / `server_error`).                                                                   |
+| `mcp_gateway_request_duration_seconds`   | Histogram | `method`, `outcome`   | Total handling time from ingress to response on the stream (includes backends).                       |
+| `mcp_gateway_internal_duration_seconds`   | Histogram | `method`, `phase`    | Time **only** in gateway process per phase (`parse`, `security`, `router`, `mux`), basis for < 50 ms p95 budget §6. (OTel instrument: `mcp.gateway.internal.duration_seconds`.)      |
+| `mcp_gateway_backend_call_duration_seconds` | Histogram | `backend_id`, `outcome` | Time from send to adapter until backend response.                                       |
+| `mcp_gateway_requests_total`        | Counter  | `method`, `outcome`   | Request count (`success` / `client_error` / `server_error`).                                  |
 
 
 **Token usage:**
 
 - The gateway does **not** observe LLM token usage by itself. Documented options to pair with upstream telemetry:
-  - **Optional metadata:** agreed HTTP header, e.g. `X-Agent-Tokens-Used: 1234`, read in the handler and recorded as span attribute `mcp.agent.tokens_used` on `mcp.host.request` **if** the host sends it with a valid non-negative integer.
-  - **No header:** omit token metadata (instrumentation quality trade-off).
+ - **Optional metadata:** agreed HTTP header, e.g. `X-Agent-Tokens-Used: 1234`, read in the handler and recorded as span attribute `mcp.agent.tokens_used` on `mcp.host.request` **if** the host sends it with a valid non-negative integer.
+ - **No header:** omit token metadata (instrumentation quality trade-off).
 
 #### D.3 Data flow
 
@@ -680,35 +680,35 @@ The **observability engine** provides correlated **distributed traces**, **metri
 #### D.4 Golden rules
 
 
-| Rule                                                             | Rationale                                                                                                         |
+| Rule                               | Rationale                                                     |
 | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| **O1 — One root span per processed JSON-RPC request**            | Avoids unreadable trees and double-counting in metrics.                                                           |
-| **O2 — Mark span error if host receives JSON-RPC `error`**         | Consistency across logs, traces, and client experience.                                                           |
-| **O3 — Do not put `arguments` values in span attributes**        | Privacy and size; optional hashes if correlation needed.                                                          |
-| **O4 — Measure `internal_duration` with a monotonic clock**        | Reproducible internal latency per §6.                                                                             |
-| **O5 — Bounded label cardinality**                               | Do not use unbounded `tool_name` on Prometheus without limits; prefer aggregation or top-N at the collector.    |
-| **O6 — Ordered SDK shutdown**                                    | Avoid span loss when restarting K8s pods.                                                                         |
+| **O1, One root span per processed JSON-RPC request**      | Avoids unreadable trees and double-counting in metrics.                              |
+| **O2, Mark span error if host receives JSON-RPC `error`**     | Consistency across logs, traces, and client experience.                              |
+| **O3, Do not put `arguments` values in span attributes**    | Privacy and size; optional hashes if correlation needed.                             |
+| **O4, Measure `internal_duration` with a monotonic clock**    | Reproducible internal latency per §6.                                       |
+| **O5, Bounded label cardinality**                | Do not use unbounded `tool_name` on Prometheus without limits; prefer aggregation or top-N at the collector.  |
+| **O6, Ordered SDK shutdown**                  | Avoid span loss when restarting K8s pods.                                     |
 
 
 #### D.5 Span hierarchy diagram (Mermaid)
 
 ```mermaid
 flowchart TB
-  root[mcp_host_request]
-  authn[mcp_security_authn]
-  authz[mcp_security_authz]
-  val[mcp_validate_json_schema]
-  rtr[mcp_router_semantic]
-  mpx[mcp_multiplex_optional]
-  be1[mcp_backend_call_B1]
-  be2[mcp_backend_call_B2]
-  root --> authn
-  root --> authz
-  root --> val
-  root --> rtr
-  root --> mpx
-  root --> be1
-  root --> be2
+ root[mcp_host_request]
+ authn[mcp_security_authn]
+ authz[mcp_security_authz]
+ val[mcp_validate_json_schema]
+ rtr[mcp_router_semantic]
+ mpx[mcp_multiplex_optional]
+ be1[mcp_backend_call_B1]
+ be2[mcp_backend_call_B2]
+ root --> authn
+ root --> authz
+ root --> val
+ root --> rtr
+ root --> mpx
+ root --> be1
+ root --> be2
 ```
 
 
@@ -716,11 +716,11 @@ flowchart TB
 #### D.6 Suggested Go packages (implementation)
 
 
-| Package                      | Intended contents                                           |
+| Package           | Intended contents                      |
 | ---------------------------- | ----------------------------------------------------------- |
-| `internal/telemetry`         | OTel bootstrap, OTLP config, shutdown                     |
-| `internal/telemetry/mcp`     | Span names, attributes, `StartSpan(ctx, name)` helpers      |
-| `internal/telemetry/metrics` | Histogram/counter registration per §D.2                   |
+| `internal/telemetry`     | OTel bootstrap, OTLP config, shutdown           |
+| `internal/telemetry/mcp`   | Span names, attributes, `StartSpan(ctx, name)` helpers   |
+| `internal/telemetry/metrics` | Histogram/counter registration per §D.2          |
 
 
 Typical dependencies: `go.opentelemetry.io/otel`, `go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp`, OTLP exporters.
@@ -755,22 +755,22 @@ This subsection records **stack choices already reflected in this repository** v
 
 | Area | Closed (decided) | Still open / TBD |
 |------|---------------------------|------------------|
-| **Language** | **Go 1.26** — concurrency, static binary, ecosystem (JWT, OTLP, Qdrant HTTP). | Pin policy in `go.mod`, CI matrix. |
-| **Vector store** | **Qdrant** — HNSW, **metadata filters during ANN** (policy in-index); **HTTP API client** in gateway (`internal/router/store/qdrant.go`); **cosine** distance; **384 dimensions** aligned with embeddings. | Collection naming / rotation, HNSW tuning, auth/TLS in non-local deploys, persistence strategy (see §4.1 residual). |
+| **Language** | **Go 1.26**, concurrency, static binary, ecosystem (JWT, OTLP, Qdrant HTTP). | Pin policy in `go.mod`, CI matrix. |
+| **Vector store** | **Qdrant**, HNSW, **metadata filters during ANN** (policy in-index); **HTTP API client** in gateway (`internal/router/store/qdrant.go`); **cosine** distance; **384 dimensions** aligned with embeddings. | Collection naming / rotation, HNSW tuning, auth/TLS in non-local deploys, persistence strategy (see §4.1 residual). |
 | **Embeddings** | **Local ONNX Runtime**, model **all-MiniLM-L6-v2**; **384-d**, **L2-normalised** outputs; service **`embed:8001`**; image build bakes ONNX (no runtime download). | Indexed text template version, batch/rate limits, optional embedding cache, multilingual needs (§4.4 residual). |
 | **Host ↔ gateway transport** | **HTTP POST** (agent requests) + **SSE** (async responses); **JSON-RPC 2.0**; MCP **reference transport** for interoperability. | Normative MCP spec revision pinned in `docs/DEVELOPER.md` / bibliography; TLS termination; body size limits, heartbeats, backpressure (§4.2 residual). |
-| **Trace backend** | **Grafana Tempo** (OTLP); **metrics_generator** RED → Prometheus; exemplars for trace–metric correlation. | Sampling ratios, retention, attribute redaction details (§4.3 residual). |
+| **Trace backend** | **Grafana Tempo** (OTLP); **metrics_generator** RED → Prometheus; exemplars for trace, metric correlation. | Sampling ratios, retention, attribute redaction details (§4.3 residual). |
 | **Metrics / OTel topology** | **Prometheus** + **OpenTelemetry Collector** as **sidecar** (gateway → OTLP → Collector → Tempo + Prometheus scrape). | OTLP gRPC vs HTTP from gateway to Collector; prod sampling (§4.3 residual). |
-| **AuthN (design-time)** | **JWT Bearer** with **JWKS**; validate `iss`, `aud`, `exp`. **Phases 1–2** run with **`AUTH_MODE=none`** (dev-only; not for public exposure). | Concrete IdP URLs, key rotation ops, rate limits, mTLS vs JWT for mesh (§4.6 residual). |
-| **AuthZ / RAR** | **Closed** — canonical RAR `authorization_details` for **`type: "mcp_tool"`** is fixed in **[ADR 0003](../adr/0003-security-rar-jwt-merge-failmode.md)** and OpenAPI schema **`AuthorizationDetailsMcpTool`** (`docs/artifacts/openapi/openapi.yaml`), aligned with `internal/policy/rar.go` (`tool_name`/`tool_pattern` exclusivity, non-`mcp_tool` ignored, glob via `filepath.Match`). | IdP-side issuance UX/policy remains deployment-specific; gateway contract is fixed (§4.6). |
+| **AuthN (design-time)** | **JWT Bearer** with **JWKS**; validate `iss`, `aud`, `exp`. **Phases 1, 2** run with **`AUTH_MODE=none`** (dev-only; not for public exposure). | Concrete IdP URLs, key rotation ops, rate limits, mTLS vs JWT for mesh (§4.6 residual). |
+| **AuthZ / RAR** | **Closed**, canonical RAR `authorization_details` for **`type: "mcp_tool"`** is fixed in **[ADR 0003](../adr/0003-security-rar-jwt-merge-failmode.md)** and OpenAPI schema **`AuthorizationDetailsMcpTool`** (`docs/artifacts/openapi/openapi.yaml`), aligned with `internal/policy/rar.go` (`tool_name`/`tool_pattern` exclusivity, non-`mcp_tool` ignored, glob via `filepath.Match`). | IdP-side issuance UX/policy remains deployment-specific; gateway contract is fixed (§4.6). |
 | **Router hyperparameters** | This plan includes a comparison framework; **table marks `topK`, `T_min`, `AllowAutoRename`, BM25 hybrid as TBD** pending phase-2 calibration on synthetic catalog (≥20 tools). | All numeric thresholds and `config.example.yaml` final values (§4.5). |
 | **Orchestrator behaviour** | Plan §3.A defers low-level detail to the repo. **Repo:** multiplexor implements **`__` namespacing**, **host `id` preservation**, **partial backend omit on `initialize` / list (R6)**, **optional strict mode flags** (`aggregation.strict_initialize`, `aggregation.strict_list`), **operational timeouts from YAML** (`aggregation.init_timeout`, `list_timeout`, `call_timeout`), **per-backend concurrency caps** (`max_concurrency`), and **application error codes** (`internal/gateway/errcodes`). | Global multiplex semaphore policy (§4.7 residual). |
 
-**§4.11 checklist:** Items **1–4** and the **trace/metrics/embeddings** narrative are reflected in deployment scaffolding and this plan. Item **5** (router hyperparameters) has **structure + TBD** numeric values. Item **6** is **closed** (JWT direction plus canonical RAR shape in ADR 0003 + OpenAPI `AuthorizationDetailsMcpTool`). Item **7** is **partially** closed: `docs/DEVELOPER.md` now pins MCP protocol revision `2024-11-05` and includes a consolidated direct dependency table from `go.mod`; remaining work is routine dependency/version maintenance.
+**§4.11 checklist:** Items **1, 4** and the **trace/metrics/embeddings** narrative are reflected in deployment scaffolding and this plan. Item **5** (router hyperparameters) has **structure + TBD** numeric values. Item **6** is **closed** (JWT direction plus canonical RAR shape in ADR 0003 + OpenAPI `AuthorizationDetailsMcpTool`). Item **7** is **partially** closed: `docs/DEVELOPER.md` now pins MCP protocol revision `2024-11-05` and includes a consolidated direct dependency table from `go.mod`; remaining work is routine dependency/version maintenance.
 
 ---
 
-### 4.1 Vector store — decision: Qdrant
+### 4.1 Vector store: decision: Qdrant
 
 **Architecture decision (closed):** the semantic router (§3.B) will use **Qdrant** as the vector database in implementation and in `docker-compose` / reference deployment, with the gateway speaking Qdrant’s **HTTP JSON API** (see `internal/router/store/qdrant.go`), **cosine** similarity, and **384-dimensional** vectors consistent with §4.4. (gRPC remains available on Qdrant for other clients; the gateway implementation chose HTTP for a minimal `net/http` dependency.)
 
@@ -779,11 +779,11 @@ This subsection records **stack choices already reflected in this repository** v
 **Rationale:**
 
 - **Performance and data model:** Rust engine with competitive ANN search (e.g. HNSW); fits a tool catalog growing across silos and catalog versions (`catalog_version`) without requiring “hyper-massive” lab scale while leaving headroom.
-- **Pragmatism for a Go backend:** Qdrant runs as a **sidecar service** (single container or Qdrant Cloud), with **HTTP and gRPC** APIs and suitable Go clients, without a Python runtime or coupling the gateway binary to foreign ecosystems — aligned with advisor priority (Go backend).
+- **Pragmatism for a Go backend:** Qdrant runs as a **sidecar service** (single container or Qdrant Cloud), with **HTTP and gRPC** APIs and suitable Go clients, without a Python runtime or coupling the gateway binary to foreign ecosystems, aligned with advisor priority (Go backend).
 - **Pre-vector filters (§3.B / §3.C requirement):** per-point metadata (`backend_id`, namespaced names, policy) maps to **payload + filter conditions** in query so `AllowedTools` and silo segregation apply in the index, not only in memory.
 - **Operations:** official image, stable docs, natural fit with **Kubernetes** (StatefulSet or managed deploy) for the Platform Engineering operational case.
 
-**Alternatives to capture in a comparative table:** pgvector, ChromaDB — conclusion aligned with **Qdrant** for this work.
+**Alternatives to capture in a comparative table:** pgvector, ChromaDB, conclusion aligned with **Qdrant** for this work.
 
 **Residual operational choices** (architecture core choice fixed; tune in implementation / `docs/DEVELOPER.md`):
 
@@ -800,7 +800,7 @@ This subsection records **stack choices already reflected in this repository** v
 
 ### 4.2 Network transport, HTTP, and remote MCP
 
-**Architecture decision (closed):** **SSE over HTTP** + **HTTP POST** for client requests, **JSON-RPC 2.0**, as **MCP reference transport** — see comparative table in §4 (`tab:transport-comparison`).
+**Architecture decision (closed):** **SSE over HTTP** + **HTTP POST** for client requests, **JSON-RPC 2.0**, as **MCP reference transport**, see comparative table in §4 (`tab:transport-comparison`).
 
 **Mandatory comparative table (transport):** satisfied in §4 (SSE vs WebSockets vs gRPC).
 
@@ -821,7 +821,7 @@ This subsection records **stack choices already reflected in this repository** v
 
 **Not 1:1 substitutes:** traces vs metrics vs unified platform. Documentation should **separate** the discussion.
 
-**Architecture decisions (closed):** **Grafana Tempo** for trace storage (OTLP, `metrics_generator` RED → Prometheus, exemplars); **Prometheus** + **OpenTelemetry Collector sidecar** for decoupled export — see tables in §4 (`tab:tracing-comparison`, `tab:metrics-comparison`).
+**Architecture decisions (closed):** **Grafana Tempo** for trace storage (OTLP, `metrics_generator` RED → Prometheus, exemplars); **Prometheus** + **OpenTelemetry Collector sidecar** for decoupled export, see tables in §4 (`tab:tracing-comparison`, `tab:metrics-comparison`).
 
 **Suggested comparative tables (telemetry):** satisfied in §4.
 
@@ -838,11 +838,11 @@ This subsection records **stack choices already reflected in this repository** v
 
 ### 4.4 Embeddings and semantic model
 
-**Architecture decisions (closed):** **Local ONNX** inference; model **all-MiniLM-L6-v2**; **384** dimensions; **L2-normalised** vectors; **cosine** in Qdrant; auxiliary service **`embed:8001`**; ONNX baked at image build — see §4 (`tab:embed-comparison`).
+**Architecture decisions (closed):** **Local ONNX** inference; model **all-MiniLM-L6-v2**; **384** dimensions; **L2-normalised** vectors; **cosine** in Qdrant; auxiliary service **`embed:8001`**; ONNX baked at image build, see §4 (`tab:embed-comparison`).
 
 **Residual choices (Phase 2+ engineering):**
 
-- **Indexed text policy:** exact concatenation template (name, description, parameters) — `document_template_version` for reproducibility.
+- **Indexed text policy:** exact concatenation template (name, description, parameters), `document_template_version` for reproducibility.
 - **Batch and rate limiting:** reindex batch size; retries on 429/5xx.
 - **Language:** if catalog mixes EN/ES, whether a multilingual model is required.
 - **Embedding cache** by text hash (avoid recomputing on every restart).
@@ -859,8 +859,8 @@ This subsection records **stack choices already reflected in this repository** v
 
 - **`tools/list` mode:** `assist_list` vs **`filter_list`** (intent-filtered subset via `X-MCP-Intent` / `hostctx`; see ADR 0002, `docs/DEVELOPER.md`).
 - **`AllowAutoRename`:** recommended default **conservative `false`**; final policy TBD.
-- **`IntentText`:** standard documented mechanism (HTTP header name, JSON-RPC params field — **must be documented** and versioned).
-- **`topK` and `T_min` threshold** — **TBD** for production (defaults are starting points; measure with live embeddings).
+- **`IntentText`:** standard documented mechanism (HTTP header name, JSON-RPC params field, **must be documented** and versioned).
+- **`topK` and `T_min` threshold**, **TBD** for production (defaults are starting points; measure with live embeddings).
 - **Hybrid BM25 + vector:** α is configurable; optional second pass on weights or corpus-wide BM25 remains future work if needed.
 - **Light classifier** before vector (rules vs small model): in scope or deferred.
 - **Session history** (last N tools): N and privacy policy.
@@ -871,12 +871,12 @@ This subsection records **stack choices already reflected in this repository** v
 
 ### 4.6 Security: AuthN, RAR, JSON Schema, and policy
 
-**Architecture decisions (closed):** **JWT Bearer** with **JWKS** validation (`iss`, `aud`, `exp`) as primary AuthN; **Phases 1–2** use **`AUTH_MODE=none`** for development velocity (must be documented as **not production-safe**). Comparative table in §4 (`tab:auth-comparison`). Canonical RAR `authorization_details` for **`type: "mcp_tool"`** is fixed by **[ADR 0003](../adr/0003-security-rar-jwt-merge-failmode.md)** and mirrored in OpenAPI schema **`AuthorizationDetailsMcpTool`** (`docs/artifacts/openapi/openapi.yaml`), matching `internal/policy/rar.go`.
+**Architecture decisions (closed):** **JWT Bearer** with **JWKS** validation (`iss`, `aud`, `exp`) as primary AuthN; **Phases 1, 2** use **`AUTH_MODE=none`** for development velocity (must be documented as **not production-safe**). Comparative table in §4 (`tab:auth-comparison`). Canonical RAR `authorization_details` for **`type: "mcp_tool"`** is fixed by **[ADR 0003](../adr/0003-security-rar-jwt-merge-failmode.md)** and mirrored in OpenAPI schema **`AuthorizationDetailsMcpTool`** (`docs/artifacts/openapi/openapi.yaml`), matching `internal/policy/rar.go`.
 
 **Other open choices:**
 
-- **Primary AuthN mode (deployment):** mTLS workload vs combination with JWT (minimal vs “enterprise-like”) — primary design centres on JWT; mesh variants optional.
-- **IdP:** issuer (`iss`), JWKS URL, `aud` validation, clock/skew — concrete values environment-specific.
+- **Primary AuthN mode (deployment):** mTLS workload vs combination with JWT (minimal vs “enterprise-like”), primary design centres on JWT; mesh variants optional.
+- **IdP:** issuer (`iss`), JWKS URL, `aud` validation, clock/skew, concrete values environment-specific.
 - **JSON Schema:** **draft** revision (e.g. 2020-12) and chosen **Go library** (license, performance, `$ref` support).
 - **List of “elevated” tools** requiring strict schema in non-dev (§3.C SEC3).
 - **Limits** on `arguments`: byte size, max JSON depth, max key count.
@@ -919,7 +919,7 @@ This subsection records **stack choices already reflected in this repository** v
 
 - No additional orchestrator/session gaps captured for this subsection beyond ongoing operational tuning.
 
-**Closure criteria:** unit tests §3.A.7 + documentation of behavior when a mock backend fails — **met for current multiplexor scope** (including global semaphore behavior).
+**Closure criteria:** unit tests §3.A.7 + documentation of behavior when a mock backend fails, **met for current multiplexor scope** (including global semaphore behavior).
 
 ---
 
@@ -940,12 +940,12 @@ This subsection records **stack choices already reflected in this repository** v
 
 ### 4.9 Normative versions, Go dependencies, and quality
 
-**Architecture decision (closed):** **Go 1.26** as implementation language (§4.1.1); `mcp-gateway/go.mod` currently uses **1.26.1** — keep docs and module policy aligned.
+**Architecture decision (closed):** **Go 1.26** as implementation language (§4.1.1); `mcp-gateway/go.mod` currently uses **1.26.1**, keep docs and module policy aligned.
 
 **Open choices:**
 
 - **Minimum Go version** policy for the module (patch updates) for the project lifecycle.
-- **Libraries:** JWT, HTTP client, SSE (if dedicated library), JSON Schema validator, Qdrant client — **pin** semver in `go.mod` with brief justification in docs.
+- **Libraries:** JWT, HTTP client, SSE (if dedicated library), JSON Schema validator, Qdrant client, **pin** semver in `go.mod` with brief justification in docs.
 - **CI:** linter (`golangci-lint`), integration tests with Compose, coverage threshold for `internal/rpc` (§6).
 - **Dependency licenses** (compatibility with academic submission).
 
@@ -959,7 +959,7 @@ This subsection records **stack choices already reflected in this repository** v
 
 - **Framework** orchestrating reasoning against the gateway (LangGraph as SRE case reference §2 vs alternatives).
 - **Coupling level:** agent uses standard MCP only vs extensions (`IntentText`, token headers).
-- **Agent runtime** (notebook, Python service, other) — outside the Go binary but needed for reproducible demo.
+- **Agent runtime** (notebook, Python service, other), outside the Go binary but needed for reproducible demo.
 
 **Closure criteria:** if scope is gateway-only, document **explicitly** that this section is context, not core implementation.
 
@@ -981,19 +981,19 @@ To justify the work before the committee, the final document should include at l
 
 | # | Deliverable | Documented design | Repo / implementation |
 |---|-------------|--------------------|------------------------|
-| 1 | Vector DB comparison | **Done** — `tab:vectordb-comparison` | Qdrant in Compose aligns |
-| 2 | Transport comparison | **Done** — `tab:transport-comparison` | `GET /mcp/sse`, `POST /mcp/rpc`, `Mcp-Session-Id` |
-| 3 | Telemetry comparison | **Done** — tracing + metrics tables | Compose: Tempo, Prometheus, OTel Collector |
-| 4 | Embeddings decision | **Done** — ONNX + MiniLM | `deployments/embed/` service |
-| 5 | Router hyperparams | **Partial** — baseline values now documented (`top_k=8`, `T_min=0.35`, `hybrid_alpha=0.2`); final close pending B1.3 live calibration | `deployments/gateway.example.yaml` + `.env.example` mirror baseline `ROUTER_*` |
-| 6 | RAR + AuthN | **Done** — JWT direction + canonical RAR shape in ADR 0003 and OpenAPI `AuthorizationDetailsMcpTool` | Closed for gateway contract (Phase 3 ops hardening continues) |
-| 7 | Go + spec versions | **Partial (near-closed)** — **Go 1.26** stated; `docs/DEVELOPER.md` now pins MCP `2024-11-05` and includes a direct dependency table from `go.mod` | `go.mod` 1.26.1 + docs pinned |
+| 1 | Vector DB comparison | **Done**, `tab:vectordb-comparison` | Qdrant in Compose aligns |
+| 2 | Transport comparison | **Done**, `tab:transport-comparison` | `GET /mcp/sse`, `POST /mcp/rpc`, `Mcp-Session-Id` |
+| 3 | Telemetry comparison | **Done**, tracing + metrics tables | Compose: Tempo, Prometheus, OTel Collector |
+| 4 | Embeddings decision | **Done**, ONNX + MiniLM | `deployments/embed/` service |
+| 5 | Router hyperparams | **Partial**, baseline values now documented (`top_k=8`, `T_min=0.35`, `hybrid_alpha=0.2`); final close pending B1.3 live calibration | `deployments/gateway.example.yaml` + `.env.example` mirror baseline `ROUTER_*` |
+| 6 | RAR + AuthN | **Done**, JWT direction + canonical RAR shape in ADR 0003 and OpenAPI `AuthorizationDetailsMcpTool` | Closed for gateway contract (Phase 3 ops hardening continues) |
+| 7 | Go + spec versions | **Partial (near-closed)**, **Go 1.26** stated; `docs/DEVELOPER.md` now pins MCP `2024-11-05` and includes a direct dependency table from `go.mod` | `go.mod` 1.26.1 + docs pinned |
 
-Item **5** remains **open** until B1.3 calibration closes final router values; item **7** is now **partial (near-closed)** with MCP revision and dependency table pinned in docs. Items **1–4** plus **6** are **closed** in this plan and reflected in deployment scaffolding.
+Item **5** remains **open** until B1.3 calibration closes final router values; item **7** is now **partial (near-closed)** with MCP revision and dependency table pinned in docs. Items **1, 4** plus **6** are **closed** in this plan and reflected in deployment scaffolding.
 
 ---
 
-## 5. Implementation guide — handshake (lifecycle)
+## 5. Implementation guide: handshake (lifecycle)
 
 1. **Step 1:** Client sends `initialize` (relevant MCP fields, timeouts, retries).
 2. **Step 2:** Gateway runs **synthetic negotiation**: query backends (or cache), merge capabilities (multiplexer), apply namespacing and policies, build a single MCP-conformant response.
@@ -1007,20 +1007,20 @@ Item **5** remains **open** until B1.3 calibration closes final router values; i
 
 **Repository:**
 
-- `cmd/` — gateway binary
-- `internal/` — core, router, security, telemetry (not externally importable)
-- `pkg/` — reusable libraries if applicable
-- `api/` — **OpenAPI/Swagger** (admin, health, HTTP metrics if any)
-- `deployments/` — Docker Compose (**Qdrant service** in Phase 2 alongside gateway), example K8s manifests
+- `cmd/`, gateway binary
+- `internal/`, core, router, security, telemetry (not externally importable)
+- `pkg/`, reusable libraries if applicable
+- `api/`, **OpenAPI/Swagger** (admin, health, HTTP metrics if any)
+- `deployments/`, Docker Compose (**Qdrant service** in Phase 2 alongside gateway), example K8s manifests
 
 **Phases:**
 
 
-| Phase                     | Scope                                                   | Exit criteria                                                                |
+| Phase           | Scope                          | Exit criteria                                |
 | ------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| **1 (incl. 10 Apr milestone)** | Walking skeleton: core + handshake + Docker/Compose     | Stable `initialize`; JSON-RPC parser with tests; compose with gateway + mocks |
-| **2**                     | Semantic router + **Qdrant** (Compose / Go client)      | Measurable Signal–Decision; index populated from merged catalog §3.A      |
-| **3**                     | Security (OIDC, RAR, JSON Schema) + OTel                | Per-tool policies; hierarchical exportable spans                              |
+| **1 (incl. 10 Apr milestone)** | Walking skeleton: core + handshake + Docker/Compose   | Stable `initialize`; JSON-RPC parser with tests; compose with gateway + mocks |
+| **2**           | Semantic router + **Qdrant** (Compose / Go client)   | Measurable Signal, Decision; index populated from merged catalog §3.A   |
+| **3**           | Security (OIDC, RAR, JSON Schema) + OTel        | Per-tool policies; hierarchical exportable spans               |
 
 
 **Quality criteria:**
@@ -1041,7 +1041,7 @@ Item **5** remains **open** until B1.3 calibration closes final router values; i
 ## 8. Document closure (export)
 
 - Traceable lists of **functional and non-functional requirements**.
-- **Requirement → module matrix** (synthesis §2–3 and §6).
+- **Requirement → module matrix** (synthesis §2, 3 and §6).
 - **References / bibliography** (MCP, JSON-RPC 2.0, OTel, OIDC/RAR, IBM Context Forge, LangGraph).
 - **Glossary:** MTTR, hop, namespacing, synthetic negotiation, routing transparency.
 
@@ -1051,19 +1051,19 @@ Item **5** remains **open** until B1.3 calibration closes final router values; i
 
 ```mermaid
 flowchart LR
-  meta[MetadataVision]
-  biz[SREContext]
-  arch[ModuleArchitecture]
-  alt[AlternativesStudy]
-  impl[HandshakeGuide]
-  work[PhasesRepoQuality]
-  sota[StateOfArt]
-  meta --> biz
-  biz --> arch
-  arch --> alt
-  arch --> impl
-  arch --> work
-  alt --> work
-  sota --> biz
-  sota --> arch
+ meta[MetadataVision]
+ biz[SREContext]
+ arch[ModuleArchitecture]
+ alt[AlternativesStudy]
+ impl[HandshakeGuide]
+ work[PhasesRepoQuality]
+ sota[StateOfArt]
+ meta --> biz
+ biz --> arch
+ arch --> alt
+ arch --> impl
+ arch --> work
+ alt --> work
+ sota --> biz
+ sota --> arch
 ```

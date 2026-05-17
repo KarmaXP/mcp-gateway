@@ -18,10 +18,20 @@ From `mcp-gateway/`:
 GATEWAY_URL=http://127.0.0.1:8080 go run ./scripts/mcp_host_demo
 ```
 
+Multi-backend (`gateway.example.yaml`):
+
+```bash
+make demo-backends
+MCP_GATEWAY_CONFIG=deployments/gateway.example.yaml make run   # other terminal
+TOOL_NAME=alpha__echo GATEWAY_URL=http://127.0.0.1:8080 go run ./scripts/mcp_host_demo
+```
+
+Or one shot: `make demo-full`.
+
 Optional env vars:
 
 - `GATEWAY_URL`: Gateway base URL (default `http://127.0.0.1:8080`)
-- `TOOL_NAME`: Tool to call after `tools/list`. If empty, the first tool returned by `tools/list` is used.
+- `TOOL_NAME`: Tool to call after `tools/list`. If empty, the first tool returned by `tools/list` is used (e.g. `alpha__echo` with `make demo-backends`).
 
 ## Example output
 

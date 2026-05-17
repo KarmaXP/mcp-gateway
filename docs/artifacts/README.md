@@ -1,6 +1,6 @@
 # API and observability artifacts
 
-Operator and build details: **[DEVELOPER.md](../DEVELOPER.md)**.
+Documentation index: **[docs/README.md](../README.md)**. Operator guide: **[DEVELOPER.md](../DEVELOPER.md)**.
 
 | Path | Purpose |
 |------|---------|
