@@ -43,13 +43,15 @@ func (r *Rules) CanonicalAlias(requested string) string {
 	return r.Aliases[k]
 }
 
-func (r *Rules) NarrowAllowed(intent string, allowed []string, catalog []string) []string {
+// NarrowAllowed applies silo keyword narrowing. The bool is true when a silo matched
+// (including zero-tool results); false means allowed is unchanged and unrestricted for vector search.
+func (r *Rules) NarrowAllowed(intent string, allowed []string, catalog []string) ([]string, bool) {
 	if r == nil || len(r.SiloKeywords) == 0 {
-		return allowed
+		return allowed, false
 	}
 	intentLower := strings.ToLower(strings.TrimSpace(intent))
 	if intentLower == "" {
-		return allowed
+		return allowed, false
 	}
 
 	var prefixes []string
@@ -62,7 +64,7 @@ func (r *Rules) NarrowAllowed(intent string, allowed []string, catalog []string)
 		}
 	}
 	if len(prefixes) == 0 {
-		return allowed
+		return allowed, false
 	}
 
 	match := func(tool string) bool {
@@ -85,7 +87,7 @@ func (r *Rules) NarrowAllowed(intent string, allowed []string, catalog []string)
 				out = append(out, t)
 			}
 		}
-		return out
+		return out, true
 	}
 
 	out := make([]string, 0, len(allowed))
@@ -94,5 +96,5 @@ func (r *Rules) NarrowAllowed(intent string, allowed []string, catalog []string)
 			out = append(out, t)
 		}
 	}
-	return out
+	return out, true
 }

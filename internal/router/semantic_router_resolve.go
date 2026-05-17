@@ -23,13 +23,13 @@ func (sr *SemanticRouter) ResolveToolsCall(ctx context.Context, sig RoutingSigna
 		return "", decStale, err
 	}
 
-	allowed, toolForExact, filter, rl := sr.routingAllowanceAndAlias(sig)
+	allowed, toolForExact, filter, rl, narrowed := sr.routingAllowanceAndAlias(sig)
 
-	if name, ok := sr.tryExactToolResolution(ctx, sig, start, dec, rl, toolForExact, allowed); ok {
+	if name, ok := sr.tryExactToolResolution(ctx, sig, start, dec, rl, toolForExact, allowed, narrowed); ok {
 		return name, dec, nil
 	}
 
-	return sr.resolveByVectorSearch(ctx, sig, start, dec, allowed, toolForExact, filter)
+	return sr.resolveByVectorSearch(ctx, sig, start, dec, allowed, toolForExact, filter, narrowed)
 }
 
 func (sr *SemanticRouter) staleCatalogDecision(sig RoutingSignal, start time.Time) (*RoutingDecision, error) {
@@ -44,14 +44,14 @@ func (sr *SemanticRouter) staleCatalogDecision(sig RoutingSignal, start time.Tim
 	return dec, fmt.Errorf("%w: client %q vs server %q", ErrStaleCatalog, sig.CatalogVersion, sr.CatalogVersion())
 }
 
-func (sr *SemanticRouter) routingAllowanceAndAlias(sig RoutingSignal) (allowed []string, toolForExact string, filter store.VectorSearchFilter, rl *rules.Rules) {
+func (sr *SemanticRouter) routingAllowanceAndAlias(sig RoutingSignal) (allowed []string, toolForExact string, filter store.VectorSearchFilter, rl *rules.Rules, narrowed bool) {
 	sr.mu.RLock()
 	rl = sr.rules
 	sr.mu.RUnlock()
 
 	allowed = append([]string(nil), sig.AllowedTools...)
 	if rl != nil {
-		allowed = rl.NarrowAllowed(sig.IntentText, allowed, sr.listCatalog())
+		allowed, narrowed = rl.NarrowAllowed(sig.IntentText, allowed, sr.listCatalog())
 	}
 
 	toolForExact = sig.ToolName
@@ -63,13 +63,22 @@ func (sr *SemanticRouter) routingAllowanceAndAlias(sig RoutingSignal) (allowed [
 
 	filter = store.VectorSearchFilter{
 		CatalogVersion:   sr.CatalogVersion(),
-		AllowedToolNames: allowed,
+		AllowedToolNames: vectorToolNameFilter(allowed, narrowed),
 	}
-	return allowed, toolForExact, filter, rl
+	return allowed, toolForExact, filter, rl, narrowed
 }
 
-func (sr *SemanticRouter) tryExactToolResolution(ctx context.Context, sig RoutingSignal, start time.Time, dec *RoutingDecision, rl *rules.Rules, toolForExact string, allowed []string) (string, bool) {
-	if toolForExact == "" || !sr.exactInCatalog(toolForExact) || !sr.allowed(toolForExact, allowed) {
+// vectorToolNameFilter maps routing allow-lists to store filter semantics: nil means unrestricted,
+// non-nil empty means silo-narrowed to zero tools.
+func vectorToolNameFilter(allowed []string, narrowed bool) []string {
+	if narrowed || len(allowed) > 0 {
+		return allowed
+	}
+	return nil
+}
+
+func (sr *SemanticRouter) tryExactToolResolution(ctx context.Context, sig RoutingSignal, start time.Time, dec *RoutingDecision, rl *rules.Rules, toolForExact string, allowed []string, narrowed bool) (string, bool) {
+	if toolForExact == "" || !sr.exactInCatalog(toolForExact) || !sr.allowed(toolForExact, allowed, narrowed) {
 		return "", false
 	}
 
@@ -91,14 +100,14 @@ func (sr *SemanticRouter) tryExactToolResolution(ctx context.Context, sig Routin
 	return toolForExact, true
 }
 
-func (sr *SemanticRouter) resolveByVectorSearch(ctx context.Context, sig RoutingSignal, start time.Time, dec *RoutingDecision, allowed []string, toolForExact string, filter store.VectorSearchFilter) (string, *RoutingDecision, error) {
+func (sr *SemanticRouter) resolveByVectorSearch(ctx context.Context, sig RoutingSignal, start time.Time, dec *RoutingDecision, allowed []string, toolForExact string, filter store.VectorSearchFilter, narrowed bool) (string, *RoutingDecision, error) {
 	qtext := index.FormatQuery(sig.ToolName, sig.IntentText, jsonKeys(sig.ArgumentsJSON))
 
 	embCtx, cancel := context.WithTimeout(ctx, sr.cfg.EmbedTimeout)
 	vecs, err := sr.embedder.Embed(embCtx, []string{qtext})
 	cancel()
 	if err != nil {
-		return sr.degradedExactAfterEmbedFailure(ctx, sig, start, dec, toolForExact, allowed, err)
+		return sr.degradedExactAfterEmbedFailure(ctx, sig, start, dec, toolForExact, allowed, narrowed, err)
 	}
 	if len(vecs) != singleQueryEmbeddingCount || len(vecs[0]) != sr.dim {
 		dec.Outcome = OutcomeMissInvalidEmbedding
@@ -139,9 +148,9 @@ func (sr *SemanticRouter) resolveByVectorSearch(ctx context.Context, sig Routing
 	return top.ToolName, dec, nil
 }
 
-func (sr *SemanticRouter) degradedExactAfterEmbedFailure(ctx context.Context, sig RoutingSignal, start time.Time, dec *RoutingDecision, toolForExact string, allowed []string, embedErr error) (string, *RoutingDecision, error) {
+func (sr *SemanticRouter) degradedExactAfterEmbedFailure(ctx context.Context, sig RoutingSignal, start time.Time, dec *RoutingDecision, toolForExact string, allowed []string, narrowed bool, embedErr error) (string, *RoutingDecision, error) {
 	slog.WarnContext(ctx, "router embed failed, degraded exact-only", "err", embedErr)
-	if toolForExact != "" && sr.exactInCatalog(toolForExact) && sr.allowed(toolForExact, allowed) {
+	if toolForExact != "" && sr.exactInCatalog(toolForExact) && sr.allowed(toolForExact, allowed, narrowed) {
 		dec.ToolNameNamespaced = toolForExact
 		dec.UpstreamID = sr.upstreamID(toolForExact)
 		dec.FallbackLayer = "degraded_exact"

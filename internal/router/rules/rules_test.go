@@ -17,19 +17,31 @@ func TestNarrowAllowed_withAllowList(t *testing.T) {
 	catalog := []string{"k8s__get_logs", "aws__list_buckets", "k8s__list_pods"}
 	allowed := []string{"k8s__get_logs", "aws__list_buckets"}
 
-	out := r.NarrowAllowed("fetch kubernetes pod logs", allowed, catalog)
+	out, narrowed := r.NarrowAllowed("fetch kubernetes pod logs", allowed, catalog)
+	require.True(t, narrowed)
 	require.ElementsMatch(t, []string{"k8s__get_logs"}, out)
 }
 
 func TestNarrowAllowed_emptyAllowUsesCatalog(t *testing.T) {
 	r := New(nil, map[string]string{"aws": "aws"})
 	catalog := []string{"k8s__get_logs", "aws__list_buckets"}
-	out := r.NarrowAllowed("list aws buckets", nil, catalog)
+	out, narrowed := r.NarrowAllowed("list aws buckets", nil, catalog)
+	require.True(t, narrowed)
 	require.ElementsMatch(t, []string{"aws__list_buckets"}, out)
 }
 
 func TestNarrowAllowed_noKeywordNoop(t *testing.T) {
 	r := New(nil, map[string]string{"aws": "aws"})
-	out := r.NarrowAllowed("generic intent", []string{"a"}, []string{"a", "b"})
+	out, narrowed := r.NarrowAllowed("generic intent", []string{"a"}, []string{"a", "b"})
+	require.False(t, narrowed)
 	require.Equal(t, []string{"a"}, out)
+}
+
+func TestNarrowAllowed_siloMatchZeroToolsBlocksSearch(t *testing.T) {
+	r := New(nil, map[string]string{"kubernetes": "k8s"})
+	catalog := []string{"aws__list_buckets", "gcp__list_instances"}
+	out, narrowed := r.NarrowAllowed("fetch kubernetes pod logs", nil, catalog)
+	require.True(t, narrowed)
+	require.NotNil(t, out)
+	require.Empty(t, out)
 }

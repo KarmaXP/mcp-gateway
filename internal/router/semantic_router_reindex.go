@@ -18,6 +18,8 @@ func (sr *SemanticRouter) Reindex(ctx context.Context, version string, tools []I
 		return err
 	}
 
+	prevVer := sr.CatalogVersion()
+
 	docs := sr.formatToolDocuments(tools)
 	allEmbeddings, err := sr.embedDocumentsInBatches(ctx, docs)
 	if err != nil {
@@ -29,10 +31,18 @@ func (sr *SemanticRouter) Reindex(ctx context.Context, version string, tools []I
 		return err
 	}
 	if err := sr.st.Upsert(ctx, records); err != nil {
+		if delErr := sr.st.DeleteCatalogVersion(ctx, version); delErr != nil {
+			slog.WarnContext(ctx, "router rollback delete failed after upsert error", "version", version, "err", delErr)
+		}
 		return fmt.Errorf("router: upsert: %w", err)
 	}
 
 	sr.replaceCatalogLocked(version, tools, docs)
+	if prevVer != "" && prevVer != version {
+		if err := sr.st.DeleteCatalogVersion(ctx, prevVer); err != nil {
+			slog.WarnContext(ctx, "router delete old catalog version failed", "version", prevVer, "err", err)
+		}
+	}
 	slog.InfoContext(ctx, "router catalog reindexed", "catalog_version", version, "tools", len(tools))
 	return nil
 }

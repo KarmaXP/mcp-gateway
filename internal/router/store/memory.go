@@ -58,6 +58,12 @@ func (m *InMemoryVectorStore) Query(ctx context.Context, vector []float32, topK 
 	if len(vector) != m.dim {
 		return nil, ErrDimensionMismatch
 	}
+	if filter.CatalogVersion == "" {
+		return nil, nil
+	}
+	if filter.BlocksAllTools() {
+		return nil, nil
+	}
 	if topK <= 0 {
 		topK = defaults.DefaultVectorSearchTopK
 	}
@@ -76,7 +82,7 @@ func (m *InMemoryVectorStore) Query(ctx context.Context, vector []float32, topK 
 	}
 	var cand []scored
 	for _, p := range m.records {
-		if filter.CatalogVersion != "" && p.CatalogVersion != filter.CatalogVersion {
+		if p.CatalogVersion != filter.CatalogVersion {
 			continue
 		}
 		if useAllow {

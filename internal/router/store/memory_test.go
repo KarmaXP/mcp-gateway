@@ -42,10 +42,35 @@ func TestCosineViaQuery(t *testing.T) {
 	_ = m.Upsert(ctx, []ToolVectorRecord{
 		{ID: "1", Vector: []float32{1, 0}, ToolName: "t1", CatalogVersion: "v"},
 	})
-	out, err := m.Query(ctx, []float32{1, 0}, 4, VectorSearchFilter{})
+	out, err := m.Query(ctx, []float32{1, 0}, 4, VectorSearchFilter{CatalogVersion: "v"})
 	require.NoError(t, err)
 	require.Len(t, out, 1)
 	require.InDelta(t, 1.0, out[0].Score, 1e-6)
+}
+
+func TestInMemoryVectorStoreQueryRequiresCatalogVersion(t *testing.T) {
+	ctx := context.Background()
+	m := NewInMemoryVectorStore(2)
+	require.NoError(t, m.Upsert(ctx, []ToolVectorRecord{
+		{ID: "1", Vector: []float32{1, 0}, ToolName: "t1", CatalogVersion: "v"},
+	}))
+	out, err := m.Query(ctx, []float32{1, 0}, 4, VectorSearchFilter{})
+	require.NoError(t, err)
+	require.Empty(t, out)
+}
+
+func TestInMemoryVectorStoreQueryEmptyAllowedBlocksAll(t *testing.T) {
+	ctx := context.Background()
+	m := NewInMemoryVectorStore(2)
+	require.NoError(t, m.Upsert(ctx, []ToolVectorRecord{
+		{ID: "1", Vector: []float32{1, 0}, ToolName: "t1", CatalogVersion: "v"},
+	}))
+	out, err := m.Query(ctx, []float32{1, 0}, 4, VectorSearchFilter{
+		CatalogVersion:   "v",
+		AllowedToolNames: []string{},
+	})
+	require.NoError(t, err)
+	require.Empty(t, out)
 }
 
 func TestInMemoryVectorStoreDeleteCatalogVersion(t *testing.T) {

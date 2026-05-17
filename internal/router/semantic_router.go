@@ -157,9 +157,9 @@ func (sr *SemanticRouter) upstreamID(name string) string {
 	return sr.upstreamByTool[name]
 }
 
-func (sr *SemanticRouter) allowed(tool string, allowed []string) bool {
+func (sr *SemanticRouter) allowed(tool string, allowed []string, narrowed bool) bool {
 	if len(allowed) == 0 {
-		return true
+		return !narrowed
 	}
 	for _, a := range allowed {
 		if a == tool {

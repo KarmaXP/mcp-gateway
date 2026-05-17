@@ -14,7 +14,12 @@ type ToolVectorRecord struct {
 
 type VectorSearchFilter struct {
 	CatalogVersion   string
-	AllowedToolNames []string
+	AllowedToolNames []string // nil = no tool-name filter; non-nil empty = zero candidates
+}
+
+// BlocksAllTools reports a narrowed allow-list that excludes every tool.
+func (f VectorSearchFilter) BlocksAllTools() bool {
+	return f.AllowedToolNames != nil && len(f.AllowedToolNames) == 0
 }
 
 type VectorSearchHit struct {

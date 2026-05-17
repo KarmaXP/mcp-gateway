@@ -33,7 +33,7 @@ func (sr *SemanticRouter) FilterToolsForList(ctx context.Context, sig RoutingSig
 		return nil, true
 	}
 
-	_, _, filter, _ := sr.routingAllowanceAndAlias(sig)
+	_, _, filter, _, _ := sr.routingAllowanceAndAlias(sig)
 	qtext := index.FormatQuery("", sig.IntentText, nil)
 
 	embCtx, cancel := context.WithTimeout(ctx, sr.cfg.EmbedTimeout)

@@ -17,8 +17,8 @@ func TestQdrantVectorStoreUpsertQueryDeleteAgainstMockAPI(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		switch {
-		case r.Method == http.MethodDelete && strings.Contains(path, "/collections/tcol"):
-			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodGet && strings.HasSuffix(path, "/collections/tcol"):
+			w.WriteHeader(http.StatusNotFound)
 		case r.Method == http.MethodPut && strings.HasSuffix(path, "/collections/tcol"):
 			w.WriteHeader(http.StatusOK)
 		case r.Method == http.MethodPut && strings.Contains(path, "/collections/tcol/points"):
@@ -54,6 +54,39 @@ func TestQdrantVectorStoreUpsertQueryDeleteAgainstMockAPI(t *testing.T) {
 	require.InDelta(t, 0.91, res[0].Score, 1e-6)
 
 	require.NoError(t, q.DeleteCatalogVersion(ctx, "v1"))
+}
+
+func TestQdrantVectorStoreSecondUpsertDoesNotDeleteCollection(t *testing.T) {
+	ctx := context.Background()
+	var deleteCollection int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		switch {
+		case r.Method == http.MethodDelete && strings.Contains(path, "/collections/tcol"):
+			deleteCollection++
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodGet && strings.HasSuffix(path, "/collections/tcol"):
+			if deleteCollection == 0 {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodPut && strings.HasSuffix(path, "/collections/tcol"):
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodPut && strings.Contains(path, "/collections/tcol/points"):
+			w.WriteHeader(http.StatusOK)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	q, err := NewQdrantVectorStore(srv.URL, "tcol", 2)
+	require.NoError(t, err)
+	rec := ToolVectorRecord{ID: "v1::a__x", Vector: []float32{1, 0}, ToolName: "a__x", UpstreamID: "b1", CatalogVersion: "v1"}
+	require.NoError(t, q.Upsert(ctx, []ToolVectorRecord{rec}))
+	require.NoError(t, q.Upsert(ctx, []ToolVectorRecord{rec}))
+	require.Equal(t, 0, deleteCollection, "incremental upsert must not delete the collection")
 }
 
 func TestQdrantVectorStoreQueryDimensionMismatch(t *testing.T) {

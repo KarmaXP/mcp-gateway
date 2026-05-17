@@ -3,9 +3,9 @@ package store
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"hash/fnv"
 	"io"
 	"net/http"
 	"strings"
@@ -37,10 +37,22 @@ func NewQdrantVectorStore(baseURL, collection string, vectorDim int) (*QdrantVec
 	}, nil
 }
 
-func pointID(key string) uint64 {
-	h := fnv.New64a()
-	_, _ = h.Write([]byte(key))
-	return h.Sum64()
+const (
+	uuidVersionClearMask = 0x0f // clear version nibble before OR
+	uuidVariantClearMask = 0x3f // clear variant bits before OR
+	uuidVersion4Nibble = 0x40 // RFC 4122 version 4 in byte 6 high nibble
+	uuidVariantNibble = 0x80 // RFC 4122 variant in byte 8 high bits
+)
+
+// pointID returns a stable UUID derived from key (SHA-256) for Qdrant point ids.
+func pointID(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	var b [16]byte
+	copy(b[:], sum[:16])
+	b[6] = (b[6] & uuidVersionClearMask) | uuidVersion4Nibble
+	b[8] = (b[8] & uuidVariantClearMask) | uuidVariantNibble
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
 func (q *QdrantVectorStore) doJSON(ctx context.Context, method, path string, body any, out any) (int, error) {
@@ -87,7 +99,7 @@ func (q *QdrantVectorStore) Upsert(ctx context.Context, records []ToolVectorReco
 	if err := q.validateRecordDims(records); err != nil {
 		return err
 	}
-	if err := q.recreateCollection(ctx); err != nil {
+	if err := q.ensureCollection(ctx); err != nil {
 		return err
 	}
 	return q.upsertPointsBatched(ctx, records)
@@ -102,10 +114,16 @@ func (q *QdrantVectorStore) validateRecordDims(records []ToolVectorRecord) error
 	return nil
 }
 
-func (q *QdrantVectorStore) recreateCollection(ctx context.Context) error {
-	delStatus, _ := q.doJSON(ctx, http.MethodDelete, "/collections/"+q.collection, nil, nil)
-	if delStatus != http.StatusOK && delStatus != http.StatusNotFound {
-		return fmt.Errorf("router/store/qdrant: delete collection: status %d", delStatus)
+func (q *QdrantVectorStore) ensureCollection(ctx context.Context) error {
+	st, err := q.doJSON(ctx, http.MethodGet, "/collections/"+q.collection, nil, nil)
+	if err != nil {
+		return err
+	}
+	if st == http.StatusOK {
+		return nil
+	}
+	if st != http.StatusNotFound {
+		return fmt.Errorf("router/store/qdrant: get collection: status %d", st)
 	}
 	createBody := map[string]any{
 		"vectors": map[string]any{
@@ -113,7 +131,7 @@ func (q *QdrantVectorStore) recreateCollection(ctx context.Context) error {
 			"distance": "Cosine",
 		},
 	}
-	st, err := q.doJSON(ctx, http.MethodPut, "/collections/"+q.collection, createBody, nil)
+	st, err = q.doJSON(ctx, http.MethodPut, "/collections/"+q.collection, createBody, nil)
 	if err != nil {
 		return err
 	}
@@ -188,16 +206,20 @@ func (q *QdrantVectorStore) Query(ctx context.Context, vector []float32, topK in
 	if len(vector) != q.dim {
 		return nil, ErrDimensionMismatch
 	}
+	if filter.CatalogVersion == "" {
+		return nil, nil
+	}
+	if filter.BlocksAllTools() {
+		return nil, nil
+	}
 	if topK <= 0 {
 		topK = defaults.DefaultVectorSearchTopK
 	}
 
 	var must []map[string]any
-	if filter.CatalogVersion != "" {
-		must = append(must, map[string]any{
-			"key": "version", "match": map[string]any{"value": filter.CatalogVersion},
-		})
-	}
+	must = append(must, map[string]any{
+		"key": "version", "match": map[string]any{"value": filter.CatalogVersion},
+	})
 	if len(filter.AllowedToolNames) > 0 {
 		must = append(must, map[string]any{
 			"key": "tool_name", "match": map[string]any{"any": filter.AllowedToolNames},

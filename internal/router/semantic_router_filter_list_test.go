@@ -144,3 +144,32 @@ func TestFilterToolsForListAllowedToolsRestrictsHits(t *testing.T) {
 	require.Contains(t, keep, "a__one")
 	require.NotContains(t, keep, "a__two")
 }
+
+type countingMapEmbed struct {
+	calls int
+	vecs  map[string][]float32
+	dim   int
+}
+
+func (m *countingMapEmbed) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+	m.calls++
+	inner := &mapEmbed{vecs: m.vecs, dim: m.dim}
+	return inner.Embed(ctx, texts)
+}
+
+func TestFilterToolsForListIndexNotReadySkipsEmbed(t *testing.T) {
+	dim := 4
+	st := store.NewInMemoryVectorStore(dim)
+	emb := &countingMapEmbed{vecs: make(map[string][]float32), dim: dim}
+	cfg := DefaultSemanticRouterRuntimeConfig()
+	cfg.Mode = ModeFilterList
+	sr := NewSemanticRouter(cfg, emb, st, dim)
+
+	keep, full := sr.FilterToolsForList(context.Background(), RoutingSignal{
+		IntentText:     "list pods",
+		CatalogVersion: "v1",
+	})
+	require.Nil(t, keep)
+	require.True(t, full)
+	require.Zero(t, emb.calls, "filter_list must not embed when catalog version is unset")
+}
