@@ -8,7 +8,11 @@ MAIN_PATH=cmd/gateway/main.go
 COMPOSE=docker compose -f deployments/docker-compose.yaml --env-file .env
 # Before compose file had `name: mcp-gateway`, the implicit project was `deployments` (directory name).
 COMPOSE_LEGACY=docker compose -f deployments/docker-compose.yaml -p deployments
-GATEWAY_PORT ?= 18080
+GATEWAY_PORT       ?= 8080
+SMOKE_GATEWAY_PORT ?= 18081
+DEMO_CONFIG        := deployments/gateway.demo.yaml
+EXAMPLE_CONFIG     := deployments/gateway.example.yaml
+SRE_CONFIG         := deployments/gateway.sre.example.yaml
 
 # Colors
 BLUE 	:= \033[1;34m
@@ -17,8 +21,10 @@ CYAN    := \033[36m
 RESET   := \033[0m
 
 .DEFAULT_GOAL := help
-.PHONY: help build run stop test test-cover test-integration ci smoke smoke-e2e fmt lint clean tidy \
-        docker-build docker-up docker-up-full docker-down docker-logs docker-clean calibration-up
+.PHONY: help bootstrap demo demo-backends demo-backends-stop demo-full verify-e2e \
+        sre-backends sre-backends-stop sre-up sre-down sre-smoke gen-b12-catalog \
+        build run stop test test-cover test-integration ci smoke smoke-e2e fmt lint clean tidy \
+        docker-build docker-up docker-up-full docker-up-demo docker-up-sre docker-down docker-logs docker-clean calibration-up
 
 # Help: sectioned list of targets (descriptions are defined here only)
 help:
@@ -26,6 +32,17 @@ help:
 	@printf "  make [target]\n\n"
 	@printf "$(BLUE)▶ General$(RESET)\n"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "help" "Show this help message"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "bootstrap" "Copy .env.example to .env if missing"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "demo" "Quick start: one mock upstream + gateway + MCP tools/call (no Docker)"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "demo-backends" "Start alpha/beta mock MCP servers on ports 3101 and 3102"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "demo-backends-stop" "Stop alpha/beta mock servers"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "demo-full" "Two backends + gateway.example.yaml; calls alpha__echo"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "sre-backends" "Start k8s/prom/gh mock MCP servers on ports 3201–3203"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "sre-backends-stop" "Stop k8s/prom/gh mock servers"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "sre-up" "Docker deps (Qdrant, embed) + SRE mock servers"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "sre-smoke" "Gateway + SRE config; tools/call k8s, prom, gh"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "sre-down" "Stop SRE mock servers (Docker deps keep running)"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "verify-e2e" "CI + demo + demo-full + sre-smoke (full local E2E check)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "clean" "Remove binary files and build artifacts"
 	@printf "\n"
 	@printf "$(BLUE)▶ Development$(RESET)\n"
@@ -46,6 +63,8 @@ help:
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-build"    "Build the gateway Docker image"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-up"       "Start mcp-gateway stack deps (Qdrant · OTel · Tempo · Prometheus · Grafana)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-up-full"  "Start full mcp-gateway stack including gateway container"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-up-demo"  "Start compose profile demo (mock alpha/beta on 3101/3102)"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-up-sre"   "Start compose profile sre (mock k8s/prom/gh on 3201–3203)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-down"     "Stop and remove all containers"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-logs"     "Follow logs from all running services"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-clean"    "Remove containers, volumes and built image"
@@ -59,15 +78,77 @@ build:
 	@mkdir -p bin
 	@go build -o bin/$(BINARY_NAME) $(MAIN_PATH)
 
+bootstrap:
+	@if [ ! -f .env ]; then cp -n .env.example .env && printf "Created .env from .env.example\n"; else printf ".env already present\n"; fi
+	@printf "Requires Go (see go.mod). Docker is optional (make docker-up).\n"
+
+demo:
+	@echo "🎯 Plug-and-play demo (no Docker)..."
+	@chmod +x scripts/smoke_test.sh
+	@MCP_GATEWAY_CONFIG=$(DEMO_CONFIG) SMOKE_AUTO_START_GATEWAY=1 DEMO_PRINT_HELP=1 bash scripts/smoke_test.sh
+
+demo-backends:
+	@chmod +x scripts/demo_backends.sh
+	@bash scripts/demo_backends.sh start
+
+demo-backends-stop:
+	@chmod +x scripts/demo_backends.sh
+	@bash scripts/demo_backends.sh stop
+
+demo-full: bootstrap demo-backends
+	@echo "🎯 Multi-backend demo (gateway.example.yaml + alpha__echo)..."
+	@chmod +x scripts/demo_multibackend_smoke.sh
+	@MCP_GATEWAY_CONFIG=$(EXAMPLE_CONFIG) bash scripts/demo_multibackend_smoke.sh
+	@$(MAKE) demo-backends-stop
+
+verify-e2e: ci
+	@echo "Running full E2E checks (demo, multi-backend, SRE)..."
+	@$(MAKE) stop
+	@$(MAKE) demo
+	@$(MAKE) stop
+	@$(MAKE) demo-full
+	@$(MAKE) stop
+	@$(MAKE) sre-up
+	@$(MAKE) sre-smoke
+	@$(MAKE) stop
+	@echo "VERIFY-E2E OK"
+
+sre-backends:
+	@chmod +x scripts/sre_backends.sh
+	@bash scripts/sre_backends.sh start
+
+sre-backends-stop:
+	@chmod +x scripts/sre_backends.sh
+	@bash scripts/sre_backends.sh stop
+
+sre-up: bootstrap sre-backends
+	@echo "🐳 Starting compose dependencies (Qdrant, embed, OTel)..."
+	@$(COMPOSE) up -d || printf "WARN: docker-up failed — start Docker for router=on; mocks on 3201–3203 are up\n"
+	@echo "SRE mocks ready. Run: make sre-smoke (router=on when Qdrant+embed healthy)"
+
+sre-down: sre-backends-stop
+	@echo "SRE mocks stopped (docker compose deps still up; use make docker-down to stop all)"
+
+sre-smoke:
+	@chmod +x scripts/sre_smoke.sh
+	@MCP_GATEWAY_CONFIG=$(SRE_CONFIG) bash scripts/sre_smoke.sh
+
+gen-b12-catalog:
+	@go run ./tools/gen-b12-catalog/main.go > docs/evaluation/b1.2-catalog.json
+	@echo "Wrote docs/evaluation/b1.2-catalog.json"
+
 run:
 	@echo "🚀 Starting $(BINARY_NAME)..."
 	@bash -c 'set -a && ([ -f .env ] && . ./.env || true) && set +a && \
-		: "$${MCP_GATEWAY_CONFIG:=deployments/gateway.example.yaml}" && export MCP_GATEWAY_CONFIG && \
+		: "$${MCP_GATEWAY_CONFIG:=$(DEMO_CONFIG)}" && export MCP_GATEWAY_CONFIG && \
 		exec go run $(MAIN_PATH)'
 
-stop:
+stop: demo-backends-stop sre-backends-stop
 	@echo "🛑 Stopping $(BINARY_NAME)..."
-	@lsof -ti :$(GATEWAY_PORT) | xargs kill 2>/dev/null || echo "No running gateway process found"
+	@lsof -ti :$(GATEWAY_PORT) 2>/dev/null | xargs kill 2>/dev/null || true
+	@lsof -ti :$(SMOKE_GATEWAY_PORT) 2>/dev/null | xargs kill 2>/dev/null || true
+	@lsof -ti :31400 2>/dev/null | xargs kill 2>/dev/null || true
+	@echo "Stopped gateway ports and demo/SRE mocks if any."
 
 test:
 	@echo "🧪 Running vet + tests..."
@@ -142,19 +223,27 @@ docker-up-full: docker-build
 	@echo "🐳 Starting mcp-gateway compose stack (dependencies + gateway app)..."
 	@$(COMPOSE) --profile gateway up -d
 
+docker-up-demo:
+	@echo "🐳 Starting compose profile demo (mock alpha/beta on 3101/3102)..."
+	@$(COMPOSE) --profile demo up -d
+
+docker-up-sre:
+	@echo "🐳 Starting compose profile sre (mock k8s/prom/gh on 3201–3203)..."
+	@$(COMPOSE) --profile sre up -d
+
 docker-down:
 	@echo "🛑 Stopping mcp-gateway compose stack..."
-	@$(COMPOSE) --profile gateway down --remove-orphans
-	@-$(COMPOSE_LEGACY) --profile gateway down --remove-orphans
+	@$(COMPOSE) --profile gateway --profile demo --profile sre down --remove-orphans
+	@-$(COMPOSE_LEGACY) --profile gateway --profile demo --profile sre down --remove-orphans
 
 docker-logs:
 	@$(COMPOSE) --profile gateway logs -f
 
 docker-clean:
 	@echo "🧹 Removing containers, volumes and images..."
-	@$(COMPOSE) --profile gateway down -v --remove-orphans
-	@-$(COMPOSE_LEGACY) --profile gateway down -v --remove-orphans
-	@docker rmi mcp-gateway:dev mcp-gateway-embed:dev 2>/dev/null || true
+	@$(COMPOSE) --profile gateway --profile demo --profile sre down -v --remove-orphans
+	@-$(COMPOSE_LEGACY) --profile gateway --profile demo --profile sre down -v --remove-orphans
+	@docker rmi mcp-gateway:dev mcp-gateway-embed:dev mcp-gateway-mock:dev 2>/dev/null || true
 
 calibration-up: docker-up-full
 	@echo "🧪 Calibration stack status (wait for healthy)..."
