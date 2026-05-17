@@ -13,11 +13,11 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 )
 
-func TestPhase2SyntheticCatalogSize(t *testing.T) {
-	require.GreaterOrEqual(t, len(SyntheticCatalog()), 20, "Phase 2 acceptance expects ≥20 synthetic tools")
+func TestRouterEvalSyntheticCatalogSize(t *testing.T) {
+	require.GreaterOrEqual(t, len(SyntheticCatalog()), 20, "router eval harness expects ≥20 synthetic tools")
 }
 
-func TestPhase2VectorRecallLexical(t *testing.T) {
+func TestRouterEvalVectorRecallLexical(t *testing.T) {
 	ctx := context.Background()
 	dim := 384
 	st := store.NewInMemoryVectorStore(dim)
@@ -57,7 +57,7 @@ func TestPhase2VectorRecallLexical(t *testing.T) {
 	require.GreaterOrEqual(t, recall, 0.95, "golden set should resolve with lexical embed for benchmark harness")
 }
 
-func TestPhase2EmbedAndQueryP95(t *testing.T) {
+func TestRouterEvalEmbedAndQueryP95(t *testing.T) {
 	ctx := context.Background()
 	dim := 384
 	st := store.NewInMemoryVectorStore(dim)
@@ -92,7 +92,7 @@ func TestPhase2EmbedAndQueryP95(t *testing.T) {
 	require.Less(t, p95, 500*time.Millisecond)
 }
 
-func TestPhase2SiloNarrowingRespectsAllowedTools(t *testing.T) {
+func TestRouterEvalSiloNarrowingRespectsAllowedTools(t *testing.T) {
 	ctx := context.Background()
 	dim := 384
 	st := store.NewInMemoryVectorStore(dim)

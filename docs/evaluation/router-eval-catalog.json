@@ -1,0 +1,454 @@
+{
+  "tools": [
+    {
+      "description": "Get Kubernetes pod logs for an incident window and optional previous container stream",
+      "inputSchema": {
+        "properties": {
+          "container": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "pod": {
+            "type": "string"
+          },
+          "previous": {
+            "type": "string"
+          },
+          "since": {
+            "type": "string"
+          },
+          "tail": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "k8s__get_pod_logs"
+    },
+    {
+      "description": "List Kubernetes pods in a namespace with readiness, restart count, and node placement",
+      "inputSchema": {
+        "properties": {
+          "field_selector": {
+            "type": "string"
+          },
+          "label_selector": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "k8s__list_pods"
+    },
+    {
+      "description": "Inspect one Kubernetes pod status with container conditions readiness probes and restart history",
+      "inputSchema": {
+        "properties": {
+          "namespace": {
+            "type": "string"
+          },
+          "pod": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "k8s__describe_pod"
+    },
+    {
+      "description": "List Kubernetes nodes with schedulable state, pressure conditions, and kubelet version",
+      "inputSchema": {
+        "properties": {
+          "label_selector": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "k8s__list_nodes"
+    },
+    {
+      "description": "Describe a Kubernetes node allocatable resources and recent node condition transitions",
+      "inputSchema": {
+        "properties": {
+          "node": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "k8s__describe_node"
+    },
+    {
+      "description": "Check Kubernetes deployment rollout status and unavailable replica progress",
+      "inputSchema": {
+        "properties": {
+          "deployment": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "k8s__rollout_status"
+    },
+    {
+      "description": "Restart a Kubernetes deployment by patching pod template annotations safely",
+      "inputSchema": {
+        "properties": {
+          "deployment": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "k8s__restart_deployment"
+    },
+    {
+      "description": "List namespace-scoped Kubernetes warning and error events sorted by last seen time",
+      "inputSchema": {
+        "properties": {
+          "limit": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "k8s__list_events"
+    },
+    {
+      "description": "Run an instant Prometheus query for a single evaluation timestamp",
+      "inputSchema": {
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "time": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "prom__query_instant"
+    },
+    {
+      "description": "Run a Prometheus range query over start end and step for SLO burn analysis",
+      "inputSchema": {
+        "properties": {
+          "end": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string"
+          },
+          "step": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "prom__query_range"
+    },
+    {
+      "description": "Fetch Prometheus label values to scope dashboard filters during triage",
+      "inputSchema": {
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "match": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "prom__label_values"
+    },
+    {
+      "description": "List Prometheus series matching metric selectors across a bounded time range",
+      "inputSchema": {
+        "properties": {
+          "end": {
+            "type": "string"
+          },
+          "match": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "prom__series"
+    },
+    {
+      "description": "List Prometheus scrape targets and health errors grouped by job",
+      "inputSchema": {
+        "properties": {
+          "state": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "prom__targets"
+    },
+    {
+      "description": "List active Prometheus alerts with severity, state, and fingerprint metadata",
+      "inputSchema": {
+        "properties": {
+          "receiver": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "prom__alerts"
+    },
+    {
+      "description": "List Prometheus alerting and recording rules with evaluation interval details",
+      "inputSchema": {
+        "properties": {
+          "group": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "prom__rules"
+    },
+    {
+      "description": "Query centralized logs by service, namespace, and free text over a time window",
+      "inputSchema": {
+        "properties": {
+          "end": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          },
+          "service": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "logs__query"
+    },
+    {
+      "description": "Tail centralized logs for a service with stream follow and sampling controls",
+      "inputSchema": {
+        "properties": {
+          "follow": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          },
+          "service": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "logs__tail"
+    },
+    {
+      "description": "Fetch surrounding centralized log lines around a specific log record identifier",
+      "inputSchema": {
+        "properties": {
+          "after": {
+            "type": "string"
+          },
+          "before": {
+            "type": "string"
+          },
+          "record_id": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "logs__context"
+    },
+    {
+      "description": "List centralized log facets and top values for fast incident slicing",
+      "inputSchema": {
+        "properties": {
+          "end": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "logs__facets"
+    },
+    {
+      "description": "List saved centralized log searches used in on call runbooks",
+      "inputSchema": {
+        "properties": {
+          "team": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "logs__saved_searches"
+    },
+    {
+      "description": "List centralized log processing pipelines and drop filter configuration",
+      "inputSchema": {
+        "properties": {
+          "environment": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "logs__pipelines"
+    },
+    {
+      "description": "Show centralized log ingestion lag and dropped record counters by source",
+      "inputSchema": {
+        "properties": {
+          "end": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "logs__ingestion_health"
+    },
+    {
+      "description": "List GitHub pull requests for a repository to correlate deploys with incidents",
+      "inputSchema": {
+        "properties": {
+          "limit": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "gh__list_prs"
+    },
+    {
+      "description": "Get GitHub pull request details including checks and merge state",
+      "inputSchema": {
+        "properties": {
+          "number": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "gh__get_pr"
+    },
+    {
+      "description": "List GitHub issues filtered by labels and state for incident triage",
+      "inputSchema": {
+        "properties": {
+          "labels": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "gh__list_issues"
+    },
+    {
+      "description": "Search GitHub code in a repository for error strings and stack trace tokens",
+      "inputSchema": {
+        "properties": {
+          "owner": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "gh__search_code"
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-// Command gen-b12-catalog writes docs/evaluation/b1.2-catalog.json from eval.SyntheticCatalog().
+// Command gen-router-eval-catalog writes docs/evaluation/router-eval-catalog.json from eval.SyntheticCatalog().
 package main
 
 import (

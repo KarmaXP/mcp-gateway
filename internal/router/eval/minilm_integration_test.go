@@ -25,13 +25,13 @@ const (
 	minilmProbeTimeout = 2 * time.Second
 	minilmEmbedTimeout = 60 * time.Second
 	minilmQueryTimeout = 30 * time.Second
-	minilmQdrantCollection = "mcp_router_eval_b13_"
+	minilmQdrantCollection = "mcp_router_eval_itest_"
 	minilmRecall1Threshold = 0.60
 	minilmRecall3Threshold = 0.85
 )
 
-// go test -tags=integration -race ./internal/router/eval -run TestPhase2VectorRecallMiniLM -v
-func TestPhase2VectorRecallMiniLM(t *testing.T) {
+// go test -tags=integration -race ./internal/router/eval -run TestRouterEvalVectorRecallMiniLM -v
+func TestRouterEvalVectorRecallMiniLM(t *testing.T) {
 	ctx := context.Background()
 	qURL := defaultFromEnv("QDRANT_URL", defaults.DefaultQdrantHTTPURL)
 	embURL := defaultFromEnv("EMBED_URL", defaults.DefaultEmbedServiceURL)
@@ -41,8 +41,8 @@ func TestPhase2VectorRecallMiniLM(t *testing.T) {
 	skipUnlessIntegrationDeps(t, probeURL(ctx, embURL+"/healthz"),
 		"embed service not reachable at %s (compose maps embed to host port 8001 by default)", embURL)
 
-	catalog, source := phase2CatalogForIntegration(t)
-	require.GreaterOrEqual(t, len(catalog), 20, "Phase 2 acceptance expects >=20 tools")
+	catalog, source := routerEvalCatalogForIntegration(t)
+	require.GreaterOrEqual(t, len(catalog), 20, "router eval harness expects >=20 tools")
 	cases := goldenCasesFromCatalog(catalog)
 	require.NotEmpty(t, cases, "need at least one labeled intent case")
 
@@ -61,7 +61,7 @@ func TestPhase2VectorRecallMiniLM(t *testing.T) {
 	cfg.QueryTimeout = minilmQueryTimeout
 	sr := router.NewSemanticRouter(cfg, embed.NewClient(embURL), st, defaults.VectorDimension)
 
-	ver := "eval-b13-" + uuid.NewString()
+	ver := "router-eval-itest-" + uuid.NewString()
 	require.NoError(t, sr.Reindex(ctx, ver, catalog))
 	require.Equal(t, ver, sr.CatalogVersion())
 
@@ -95,7 +95,7 @@ func TestPhase2VectorRecallMiniLM(t *testing.T) {
 	total := len(cases)
 	recallAt1 := float64(hitsAt1) / float64(total)
 	recallAt3 := float64(hitsAt3) / float64(total)
-	t.Logf("Phase2 MiniLM+Qdrant (%s): recall@1=%.3f (%d/%d) recall@3=%.3f (%d/%d)",
+	t.Logf("MiniLM+Qdrant router eval (%s): recall@1=%.3f (%d/%d) recall@3=%.3f (%d/%d)",
 		source, recallAt1, hitsAt1, total, recallAt3, hitsAt3, total)
 
 	require.GreaterOrEqual(t, recallAt1, minilmRecall1Threshold, "recall@1 regression")
@@ -123,14 +123,12 @@ func goldenCasesFromCatalog(cat []router.IndexedTool) []recallCase {
 	return cases
 }
 
-func phase2CatalogForIntegration(t *testing.T) ([]router.IndexedTool, string) {
+func routerEvalCatalogForIntegration(t *testing.T) ([]router.IndexedTool, string) {
 	t.Helper()
 
 	candidates := []string{
-		strings.TrimSpace(os.Getenv("PHASE2_CATALOG_PATH")),
-		"../../../docs/evaluation/b1.2-catalog.json",
-		"../../../docs/evaluation/b1_2_catalog.json",
-		"../../../docs/evaluation/phase2-catalog.json",
+		strings.TrimSpace(os.Getenv("ROUTER_EVAL_CATALOG_PATH")),
+		"../../../docs/evaluation/router-eval-catalog.json",
 	}
 
 	for _, path := range candidates {
@@ -139,8 +137,8 @@ func phase2CatalogForIntegration(t *testing.T) ([]router.IndexedTool, string) {
 		}
 		raw, err := os.ReadFile(path)
 		if err != nil {
-			if os.Getenv("PHASE2_CATALOG_PATH") == path {
-				t.Fatalf("read PHASE2_CATALOG_PATH %q: %v", path, err)
+			if os.Getenv("ROUTER_EVAL_CATALOG_PATH") == path {
+				t.Fatalf("read ROUTER_EVAL_CATALOG_PATH %q: %v", path, err)
 			}
 			continue
 		}
@@ -148,10 +146,10 @@ func phase2CatalogForIntegration(t *testing.T) ([]router.IndexedTool, string) {
 			return "b_" + prefix, nil
 		})
 		if err != nil {
-			if os.Getenv("PHASE2_CATALOG_PATH") == path {
-				t.Fatalf("parse PHASE2_CATALOG_PATH %q: %v", path, err)
+			if os.Getenv("ROUTER_EVAL_CATALOG_PATH") == path {
+				t.Fatalf("parse ROUTER_EVAL_CATALOG_PATH %q: %v", path, err)
 			}
-			t.Logf("skipping unreadable phase2 catalog %s: %v", path, err)
+			t.Logf("skipping unreadable router eval catalog %s: %v", path, err)
 			continue
 		}
 		if len(catalog) > 0 {
