@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -34,6 +35,12 @@ type StdioMCPUpstream struct {
 
 	startOnce sync.Once
 	startErr  error
+
+	deadMu  sync.Mutex
+	deadErr error
+
+	closeOnce sync.Once
+	waitOnce  sync.Once
 
 	writeMu sync.Mutex
 	cmd     *exec.Cmd
@@ -80,8 +87,49 @@ func (c *StdioMCPUpstream) SetOnNotification(fn func(*rpc.Request)) {
 }
 
 func (c *StdioMCPUpstream) ensure(ctx context.Context) error {
+	if err := c.deadError(); err != nil {
+		return err
+	}
 	c.startOnce.Do(func() { c.startErr = c.startLocked() })
-	return c.startErr
+	if c.startErr != nil {
+		return c.startErr
+	}
+	return c.deadError()
+}
+
+func (c *StdioMCPUpstream) deadError() error {
+	c.deadMu.Lock()
+	defer c.deadMu.Unlock()
+	return c.deadErr
+}
+
+func (c *StdioMCPUpstream) markDead(err error) {
+	if err == nil {
+		err = errors.New("mcpstdio: upstream unavailable")
+	}
+	c.deadMu.Lock()
+	if c.deadErr == nil {
+		c.deadErr = err
+	}
+	c.deadMu.Unlock()
+	c.failPending()
+}
+
+func (c *StdioMCPUpstream) failPending() {
+	c.pendMu.Lock()
+	defer c.pendMu.Unlock()
+	for key, ch := range c.pending {
+		delete(c.pending, key)
+		close(ch)
+	}
+}
+
+func (c *StdioMCPUpstream) reapProcess() {
+	c.waitOnce.Do(func() {
+		if c.cmd != nil {
+			_ = c.cmd.Wait()
+		}
+	})
 }
 
 func (c *StdioMCPUpstream) startLocked() error {
@@ -114,6 +162,7 @@ func (c *StdioMCPUpstream) startLocked() error {
 }
 
 func (c *StdioMCPUpstream) readLoop() {
+	defer c.onReaderExit()
 	for {
 		line, err := c.br.ReadBytes('\n')
 		if err != nil {
@@ -125,6 +174,11 @@ func (c *StdioMCPUpstream) readLoop() {
 		}
 		c.dispatch(line)
 	}
+}
+
+func (c *StdioMCPUpstream) onReaderExit() {
+	c.reapProcess()
+	c.markDead(fmt.Errorf("mcpstdio %s: process exited", c.id))
 }
 
 func (c *StdioMCPUpstream) dispatch(raw []byte) {
@@ -167,6 +221,9 @@ func idKey(id json.RawMessage) string {
 }
 
 func (c *StdioMCPUpstream) writeLineLocked(payload []byte) error {
+	if err := c.deadError(); err != nil {
+		return err
+	}
 	if _, err := c.stdin.Write(payload); err != nil {
 		return err
 	}
@@ -225,17 +282,24 @@ func (c *StdioMCPUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Res
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case resp := <-ch:
+	case resp, ok := <-ch:
+		if !ok {
+			return nil, c.deadError()
+		}
 		return resp, nil
 	}
 }
 
 func (c *StdioMCPUpstream) close() {
-	if c.stdin != nil {
-		_ = c.stdin.Close()
-	}
-	if c.cmd != nil && c.cmd.Process != nil {
-		_ = c.cmd.Process.Kill()
-	}
-	c.readWG.Wait()
+	c.closeOnce.Do(func() {
+		c.markDead(fmt.Errorf("mcpstdio %s: closed", c.id))
+		if c.stdin != nil {
+			_ = c.stdin.Close()
+		}
+		if c.cmd != nil && c.cmd.Process != nil {
+			_ = c.cmd.Process.Kill()
+		}
+		c.readWG.Wait()
+		c.reapProcess()
+	})
 }

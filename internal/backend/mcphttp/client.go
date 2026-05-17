@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
@@ -23,7 +25,11 @@ import (
 const (
 	weightedSemaphoreTickets int64 = 1
 	pendingJSONRPCChannelCap int = 1
+
+	pendingResponseDeliverTimeout = 2 * time.Second
 )
+
+var responseDeliverTimeout = pendingResponseDeliverTimeout
 
 type HTTPMCPUpstream struct {
 	id     string
@@ -32,14 +38,19 @@ type HTTPMCPUpstream struct {
 	token  string
 
 	lifecycle context.Context
-	client    *http.Client
+	sseClient *http.Client
+	rpcClient *http.Client
 	sem       *semaphore.Weighted
 
+	connMu     sync.Mutex
+	connected  bool
 	sessID     string
+	sseBody    io.Closer
 	readCancel context.CancelFunc
 	readWG     sync.WaitGroup
-	connOnce   sync.Once
 	connErr    error
+
+	droppedResponses atomic.Uint64
 
 	pendMu  sync.Mutex
 	pending map[string]chan *rpc.Response
@@ -59,14 +70,17 @@ func NewHTTPMCPUpstream(lifecycle context.Context, id, prefix, baseURL string, m
 	if baseURL == "" {
 		return nil, nil, fmt.Errorf("mcphttp: empty base url")
 	}
+	transport := http.DefaultTransport
 	c := &HTTPMCPUpstream{
 		id:        id,
 		prefix:    prefix,
 		base:      baseURL,
 		token:     strings.TrimSpace(bearerToken),
 		lifecycle: lifecycle,
-		client: &http.Client{
-			Transport: http.DefaultTransport,
+		sseClient: &http.Client{Transport: transport},
+		rpcClient: &http.Client{
+			Transport: transport,
+			Timeout:   defaults.MultiplexCallTimeout,
 		},
 		sem:     semaphore.NewWeighted(maxConcurrency),
 		pending: make(map[string]chan *rpc.Response),
@@ -77,6 +91,10 @@ func NewHTTPMCPUpstream(lifecycle context.Context, id, prefix, baseURL string, m
 
 func (c *HTTPMCPUpstream) ID() string     { return c.id }
 func (c *HTTPMCPUpstream) Prefix() string { return c.prefix }
+
+func (c *HTTPMCPUpstream) DroppedResponses() uint64 {
+	return c.droppedResponses.Load()
+}
 
 func (c *HTTPMCPUpstream) SetOnNotification(fn func(*rpc.Request)) {
 	c.onNotifMu.Lock()
@@ -95,11 +113,39 @@ func (c *HTTPMCPUpstream) setAuth(req *http.Request) {
 
 func (c *HTTPMCPUpstream) ensureSession(callCtx context.Context) error {
 	_ = callCtx
-	c.connOnce.Do(func() { c.connErr = c.connectLocked() })
-	return c.connErr
+	c.connMu.Lock()
+	if c.connected {
+		c.connMu.Unlock()
+		return nil
+	}
+	c.connMu.Unlock()
+	return c.connect()
 }
 
-func (c *HTTPMCPUpstream) connectLocked() error {
+func (c *HTTPMCPUpstream) stopReaderLocked() {
+	cancel := c.readCancel
+	body := c.sseBody
+	c.readCancel = nil
+	c.sseBody = nil
+	c.connected = false
+	if cancel != nil {
+		cancel()
+	}
+	if body != nil {
+		_ = body.Close()
+	}
+}
+
+func (c *HTTPMCPUpstream) drainReader() {
+	c.connMu.Lock()
+	c.stopReaderLocked()
+	c.connMu.Unlock()
+	c.readWG.Wait()
+}
+
+func (c *HTTPMCPUpstream) connect() error {
+	c.drainReader()
+
 	req, err := http.NewRequestWithContext(c.lifecycle, http.MethodGet, c.sseURL(), nil)
 	if err != nil {
 		return err
@@ -107,7 +153,7 @@ func (c *HTTPMCPUpstream) connectLocked() error {
 	c.setAuth(req)
 	req.Header.Set("Accept", "text/event-stream")
 
-	resp, err := c.client.Do(req)
+	resp, err := c.sseClient.Do(req)
 	if err != nil {
 		if resp != nil && resp.Body != nil {
 			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, defaults.MaxSSEDiscardBodyBytes))
@@ -131,19 +177,45 @@ func (c *HTTPMCPUpstream) connectLocked() error {
 	if sid == "" {
 		return fmt.Errorf("mcphttp %s: missing %s on sse response", c.id, mcpwire.HeaderMCPSessionID)
 	}
-	c.sessID = sid
 
 	readCtx, cancel := context.WithCancel(c.lifecycle)
-	c.readCancel = cancel
-	c.readWG.Add(1)
 	body := resp.Body
+
+	c.connMu.Lock()
+	if c.connected {
+		c.connMu.Unlock()
+		cancel()
+		_ = body.Close()
+		return nil
+	}
+	c.sessID = sid
+	c.connErr = nil
+	c.connected = true
+	c.readCancel = cancel
+	c.sseBody = body
+	c.readWG.Add(1)
+	c.connMu.Unlock()
+
 	handedOff = true
 	go func() {
 		defer c.readWG.Done()
 		defer func() { _ = body.Close() }()
 		c.readSSE(body, readCtx)
+		c.onSSEClosed()
 	}()
 	return nil
+}
+
+func (c *HTTPMCPUpstream) onSSEClosed() {
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+	if !c.connected {
+		return
+	}
+	c.connected = false
+	c.sseBody = nil
+	c.readCancel = nil
+	c.connErr = fmt.Errorf("mcphttp %s: sse stream ended", c.id)
 }
 
 func (c *HTTPMCPUpstream) readSSE(body io.Reader, ctx context.Context) {
@@ -215,9 +287,12 @@ func (c *HTTPMCPUpstream) dispatch(raw []byte) {
 		if ch == nil {
 			return
 		}
+		timer := time.NewTimer(responseDeliverTimeout)
+		defer timer.Stop()
 		select {
 		case ch <- resp:
-		default:
+		case <-timer.C:
+			c.droppedResponses.Add(1)
 		}
 		return
 	}
@@ -241,6 +316,10 @@ func idKey(id json.RawMessage) string {
 }
 
 func (c *HTTPMCPUpstream) postRPC(ctx context.Context, req *rpc.Request) error {
+	c.connMu.Lock()
+	sessID := c.sessID
+	c.connMu.Unlock()
+
 	body, err := rpc.MarshalRequest(req)
 	if err != nil {
 		return err
@@ -250,10 +329,10 @@ func (c *HTTPMCPUpstream) postRPC(ctx context.Context, req *rpc.Request) error {
 		return err
 	}
 	hreq.Header.Set("Content-Type", "application/json")
-	hreq.Header.Set(mcpwire.HeaderMCPSessionID, c.sessID)
+	hreq.Header.Set(mcpwire.HeaderMCPSessionID, sessID)
 	c.setAuth(hreq)
 	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(hreq.Header))
-	resp, err := c.client.Do(hreq)
+	resp, err := c.rpcClient.Do(hreq)
 	if err != nil {
 		return err
 	}
@@ -274,6 +353,17 @@ func (c *HTTPMCPUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Resp
 	if err := c.ensureSession(ctx); err != nil {
 		return nil, err
 	}
+
+	c.connMu.Lock()
+	if !c.connected {
+		err := c.connErr
+		c.connMu.Unlock()
+		if err == nil {
+			err = fmt.Errorf("mcphttp %s: upstream disconnected", c.id)
+		}
+		return nil, err
+	}
+	c.connMu.Unlock()
 
 	if req.IsNotification() {
 		if err := c.postRPC(ctx, req); err != nil {
@@ -311,8 +401,5 @@ func (c *HTTPMCPUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Resp
 }
 
 func (c *HTTPMCPUpstream) close() {
-	if c.readCancel != nil {
-		c.readCancel()
-	}
-	c.readWG.Wait()
+	c.drainReader()
 }
