@@ -184,6 +184,7 @@ func mergeNamespacedToolList(upstreams []backend.Upstream, perUpstream [][]map[s
 		}
 	}
 	merged := make([]map[string]any, 0, mergedCap)
+	seen := make(map[string]struct{}, mergedCap)
 	for i, b := range upstreams {
 		if i >= len(perUpstream) {
 			continue
@@ -201,6 +202,11 @@ func mergeNamespacedToolList(upstreams []backend.Upstream, perUpstream [][]map[s
 				slog.Warn("skip tool (namespace)", "backend_id", b.ID(), "tool", name, "err", err)
 				continue
 			}
+			if _, dup := seen[ns]; dup {
+				slog.Warn("skip duplicate tool name in merge", "name", ns, "backend_id", b.ID())
+				continue
+			}
+			seen[ns] = struct{}{}
 			clone := cloneMap(t)
 			clone["name"] = ns
 			merged = append(merged, clone)
@@ -224,6 +230,12 @@ func (a *Multiplexer) maybeReindexSemanticCatalog(ctx context.Context, merged []
 		return
 	}
 	ver := fmt.Sprintf("%x", sha256.Sum256(outFull))
+	a.catMu.RLock()
+	if a.catVer == ver {
+		a.catMu.RUnlock()
+		return
+	}
+	a.catMu.RUnlock()
 	indexed, err := router.BuildIndexedToolsFromMerged(merged, func(prefix string) (string, error) {
 		b, ok := a.byPrefix[prefix]
 		if !ok {

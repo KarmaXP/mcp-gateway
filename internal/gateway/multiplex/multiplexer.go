@@ -63,6 +63,8 @@ type Multiplexer struct {
 	strictList            bool
 	reportPartialFailures bool
 	globalCallSemaphore   *semaphore.Weighted
+
+	lifecycleCtx context.Context
 }
 
 type Option func(*Multiplexer)
@@ -127,6 +129,21 @@ func WithGlobalMaxInFlight(maxInFlight int) Option {
 		}
 		a.globalCallSemaphore = semaphore.NewWeighted(int64(maxInFlight))
 	}
+}
+
+// WithLifecycleContext bounds background work (e.g. catalog refresh on tools/list_changed).
+func WithLifecycleContext(ctx context.Context) Option {
+	return func(a *Multiplexer) { a.lifecycleCtx = ctx }
+}
+
+func (a *Multiplexer) lifecycleContext(fallback context.Context) context.Context {
+	if a.lifecycleCtx != nil {
+		return a.lifecycleCtx
+	}
+	if fallback != nil {
+		return fallback
+	}
+	return context.Background()
 }
 
 func New(upstreams []backend.Upstream, opts ...Option) (*Multiplexer, error) {
@@ -364,6 +381,9 @@ func (a *Multiplexer) invalidateToolCache() {
 	a.schemaMu.Lock()
 	a.toolValidators = nil
 	a.schemaMu.Unlock()
+	a.catMu.Lock()
+	a.catVer = ""
+	a.catMu.Unlock()
 }
 
 func coalesceArgs(a json.RawMessage) json.RawMessage {

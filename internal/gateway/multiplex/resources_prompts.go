@@ -156,7 +156,12 @@ func (a *Multiplexer) invokeUpstreamGeneric(ctx context.Context, hostID json.Raw
 		muxSpan.SetStatus(codes.Error, "upstream transport")
 		return rpc.NewError(hostID, errcodes.GatewayInternal, "backend call failed", nil), nil
 	}
-	if resp != nil && resp.Error != nil {
+	if resp == nil {
+		bspan.SetStatus(codes.Error, "upstream empty response")
+		muxSpan.SetStatus(codes.Error, "upstream empty response")
+		return rpc.NewError(hostID, errcodes.GatewayInternal, "backend call failed", nil), nil
+	}
+	if resp.Error != nil {
 		bspan.SetStatus(codes.Error, "upstream jsonrpc error")
 	} else {
 		bspan.SetStatus(codes.Ok, "")
@@ -206,6 +211,10 @@ func (a *Multiplexer) callUpstreamResourcesList(ctx context.Context, b backend.U
 		slog.Warn("resources/list backend failed", "backend_id", b.ID(), "err", err)
 		return nil, &PartialFailure{BackendID: b.ID(), Reason: classifyCallFailure(err)}
 	}
+	if resp == nil {
+		slog.Warn("resources/list backend returned nil response", "backend_id", b.ID())
+		return nil, &PartialFailure{BackendID: b.ID(), Reason: PartialFailureOmitted}
+	}
 	if resp.Error != nil {
 		if resp.Error.Code == errcodes.MethodNotFound {
 			return []map[string]any{}, nil
@@ -242,6 +251,10 @@ func (a *Multiplexer) callUpstreamPromptsList(ctx context.Context, b backend.Ups
 	if err != nil {
 		slog.Warn("prompts/list backend failed", "backend_id", b.ID(), "err", err)
 		return nil, &PartialFailure{BackendID: b.ID(), Reason: classifyCallFailure(err)}
+	}
+	if resp == nil {
+		slog.Warn("prompts/list backend returned nil response", "backend_id", b.ID())
+		return nil, &PartialFailure{BackendID: b.ID(), Reason: PartialFailureOmitted}
 	}
 	if resp.Error != nil {
 		if resp.Error.Code == errcodes.MethodNotFound {

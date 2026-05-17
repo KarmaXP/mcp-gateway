@@ -12,9 +12,7 @@ func (a *Multiplexer) HandleToolsListChanged(ctx context.Context) {
 	if a.semantic == nil || !a.semantic.Enabled() {
 		return
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = a.lifecycleContext(ctx)
 	tctx, cancel := context.WithTimeout(ctx, a.listTimeout)
 	defer cancel()
 

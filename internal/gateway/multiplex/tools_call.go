@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -87,6 +88,9 @@ func parseToolsCallParams(hostID json.RawMessage, params json.RawMessage) (tools
 	var p toolsCallParams
 	if err := json.Unmarshal(params, &p); err != nil {
 		return toolsCallParams{}, rpc.NewError(hostID, errcodes.InvalidParams, "invalid tools/call params", nil)
+	}
+	if strings.TrimSpace(p.Name) == "" {
+		return toolsCallParams{}, rpc.NewError(hostID, errcodes.InvalidParams, "tools/call requires name", nil)
 	}
 	return p, nil
 }
