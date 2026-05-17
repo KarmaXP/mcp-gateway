@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -34,6 +35,12 @@ func NewValidator(cfg JWTAuthConfig) (*Validator, error) {
 	if cfg.Mode != "jwt" {
 		return nil, fmt.Errorf("auth: unknown AUTH_MODE %q", cfg.Mode)
 	}
+	if strings.TrimSpace(cfg.PublicKeyPEM) == "" && strings.TrimSpace(cfg.JWKSURL) == "" {
+		return nil, fmt.Errorf("auth: jwt: JWKS URL or JWT_PUBLIC_KEY_PEM required")
+	}
+	if strings.TrimSpace(cfg.PublicKeyPEM) != "" && strings.TrimSpace(cfg.JWKSURL) != "" {
+		slog.Warn("auth: jwt: both JWT_PUBLIC_KEY_PEM and JWKS URL set; static PEM takes precedence")
+	}
 	v := &Validator{
 		cfg: cfg,
 		parser: jwt.NewParser(
@@ -48,6 +55,15 @@ func NewValidator(cfg JWTAuthConfig) (*Validator, error) {
 			return nil, err
 		}
 		v.pemKey = key
+		return v, nil
+	}
+	warmCtx, cancel := context.WithTimeout(context.Background(), defaults.JWKSStartupWarmupTimeout)
+	defer cancel()
+	v.mu.Lock()
+	warmErr := v.fetchJWKSLocked(warmCtx)
+	v.mu.Unlock()
+	if warmErr != nil {
+		return nil, warmErr
 	}
 	return v, nil
 }

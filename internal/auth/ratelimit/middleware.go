@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"go.opentelemetry.io/otel/codes"
 	"golang.org/x/time/rate"
@@ -13,6 +14,11 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
 	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
 )
+
+type bucketEntry struct {
+	lim      *rate.Limiter
+	lastSeen time.Time
+}
 
 // Per-subject (or RemoteAddr) token bucket when cfg.Enabled.
 func HTTPMiddleware(cfg Config) func(http.Handler) http.Handler {
@@ -27,8 +33,20 @@ func HTTPMiddleware(cfg Config) func(http.Handler) http.Handler {
 	if burst <= 0 {
 		burst = defaults.DefaultRateLimitBurst
 	}
+	idleTTL := cfg.BucketIdleTTL
+	if idleTTL <= 0 {
+		idleTTL = defaults.RateLimitBucketIdleTTL
+	}
 	var mu sync.Mutex
-	buckets := make(map[string]*rate.Limiter)
+	buckets := make(map[string]*bucketEntry)
+
+	evictStale := func(now time.Time) {
+		for key, e := range buckets {
+			if now.Sub(e.lastSeen) > idleTTL {
+				delete(buckets, key)
+			}
+		}
+	}
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -37,14 +55,18 @@ func HTTPMiddleware(cfg Config) func(http.Handler) http.Handler {
 				return
 			}
 			key := limiterKey(r)
+			now := time.Now()
 			mu.Lock()
-			b, ok := buckets[key]
+			evictStale(now)
+			e, ok := buckets[key]
 			if !ok {
-				b = rate.NewLimiter(lim, burst)
-				buckets[key] = b
+				e = &bucketEntry{lim: rate.NewLimiter(lim, burst), lastSeen: now}
+				buckets[key] = e
 			}
+			e.lastSeen = now
+			allow := e.lim.Allow()
 			mu.Unlock()
-			if !b.Allow() {
+			if !allow {
 				telemetry.RecordRateLimit(r.Context(), false)
 				telemetry.EndHostRPCSpanIfOpen(r.Context(), codes.Error, "rate limited")
 				http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)

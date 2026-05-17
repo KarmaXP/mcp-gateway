@@ -16,6 +16,12 @@ func TestNewValidatorInvalidPEM(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestNewValidatorJWTRequiresKeyMaterial(t *testing.T) {
+	_, err := NewValidator(JWTAuthConfig{Mode: "jwt"})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "JWKS URL or JWT_PUBLIC_KEY_PEM required")
+}
+
 func TestNewValidatorNoneReturnsNil(t *testing.T) {
 	v, err := NewValidator(JWTAuthConfig{Mode: "none"})
 	require.NoError(t, err)

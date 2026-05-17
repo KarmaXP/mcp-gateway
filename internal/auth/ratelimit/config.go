@@ -4,14 +4,16 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 )
 
 type Config struct {
-	Enabled bool
-	RPS     float64
-	Burst   int
+	Enabled       bool
+	RPS           float64
+	Burst         int
+	BucketIdleTTL time.Duration // zero = defaults.RateLimitBucketIdleTTL
 }
 
 func FromEnvironment() Config {

@@ -4,7 +4,9 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -81,4 +83,34 @@ func TestLimiterKeyUsesSubjectWhenPresent(t *testing.T) {
 	recB := httptest.NewRecorder()
 	h.ServeHTTP(recB, reqB)
 	require.Equal(t, http.StatusOK, recB.Code)
+}
+
+func TestHTTPMiddlewareEvictsStaleBuckets(t *testing.T) {
+	cfg := Config{Enabled: true, RPS: 100, Burst: 100, BucketIdleTTL: 20 * time.Millisecond}
+	var hits atomic.Int32
+	h := HTTPMiddleware(cfg)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp/rpc", nil)
+	req.RemoteAddr = "192.0.2.1:1234"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	time.Sleep(30 * time.Millisecond)
+
+	req2 := httptest.NewRequest(http.MethodPost, "/mcp/rpc", nil)
+	req2.RemoteAddr = "192.0.2.2:5678"
+	rec2 := httptest.NewRecorder()
+	h.ServeHTTP(rec2, req2)
+	require.Equal(t, http.StatusOK, rec2.Code)
+
+	req3 := httptest.NewRequest(http.MethodPost, "/mcp/rpc", nil)
+	req3.RemoteAddr = "192.0.2.1:1234"
+	rec3 := httptest.NewRecorder()
+	h.ServeHTTP(rec3, req3)
+	require.Equal(t, http.StatusOK, rec3.Code)
+	require.Equal(t, int32(3), hits.Load())
 }
