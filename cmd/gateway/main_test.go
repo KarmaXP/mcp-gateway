@@ -68,6 +68,21 @@ func TestConfigureAuditSink_SyslogCleanupClosesSink(t *testing.T) {
 	require.True(t, sink.closed)
 }
 
+func TestPreflightStrictEnabled(t *testing.T) {
+	t.Setenv("GATEWAY_PREFLIGHT_STRICT", "")
+	require.False(t, preflightStrictEnabled())
+
+	t.Setenv("GATEWAY_PREFLIGHT_STRICT", "true")
+	require.True(t, preflightStrictEnabled())
+}
+
+func TestPreflightQdrantSkipsWhenRouterOff(t *testing.T) {
+	err := preflightQdrant(config.GatewayConfig{
+		SemanticRouter: config.SemanticRouterSettings{Mode: "off"},
+	})
+	require.NoError(t, err)
+}
+
 func TestConfigureAuditSink_SyslogInitError(t *testing.T) {
 	t.Cleanup(func() {
 		newSyslogAuditSink = func(network, address string) (auditSinkCloser, error) {

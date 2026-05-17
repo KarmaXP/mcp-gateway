@@ -115,8 +115,9 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 	if s.readiness != nil {
 		if err := s.readiness.CheckReadiness(r.Context()); err != nil {
+			slog.Warn("readiness check failed", "err", err)
 			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte("not ready: " + err.Error()))
+			_, _ = w.Write([]byte("not ready"))
 			return
 		}
 	}
@@ -205,6 +206,11 @@ func (s *Server) handleMCPRPC(w http.ResponseWriter, r *http.Request) {
 	sess, err := s.sessions.Get(sid)
 	if err != nil {
 		httpErr("unknown session", http.StatusNotFound)
+		return
+	}
+	reqSub := hostctx.SubjectIDFromContext(rctx)
+	if !sess.SubjectMatches(reqSub) {
+		httpErr("session subject mismatch", http.StatusForbidden)
 		return
 	}
 	parseStart := time.Now()

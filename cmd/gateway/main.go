@@ -113,24 +113,33 @@ func buildReadinessChecker(cfg config.GatewayConfig) httpserver.ReadinessChecker
 	}
 }
 
-func preflightQdrant(cfg config.GatewayConfig) {
+func preflightStrictEnabled() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("GATEWAY_PREFLIGHT_STRICT")))
+	return v == "1" || v == "true" || v == "yes"
+}
+
+func preflightQdrant(cfg config.GatewayConfig) error {
 	if !routerModeActive(cfg) {
-		return
+		return nil
 	}
 	qURL := strings.TrimSpace(os.Getenv("QDRANT_URL"))
 	if qURL == "" {
-		return
+		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), defaults.PreflightQdrantTimeout)
 	defer cancel()
 	if err := store.PingCollections(ctx, qURL); err != nil {
+		if preflightStrictEnabled() {
+			return fmt.Errorf("qdrant preflight failed (url=%s): %w", qURL, err)
+		}
 		slog.Warn("qdrant preflight failed (continuing; router/index may fail until Qdrant is healthy)",
 			"err", err,
 			"url", qURL,
 		)
-		return
+		return nil
 	}
 	slog.Info("qdrant preflight ok", "url", qURL)
+	return nil
 }
 
 func multiplexerOptions(cfg config.GatewayConfig) ([]multiplex.Option, error) {
@@ -271,7 +280,10 @@ func main() {
 		defer auditCleanup()
 	}
 
-	preflightQdrant(cfg)
+	if err := preflightQdrant(cfg); err != nil {
+		slog.Error("preflight", "err", err)
+		os.Exit(1)
+	}
 
 	port := strings.TrimSpace(os.Getenv("PORT"))
 	if port == "" {
@@ -310,6 +322,7 @@ func main() {
 	mpxOpts = append(mpxOpts, multiplex.WithArgumentValidateLimits(cfg.PolicyArgumentLimits()))
 	mpxOpts = append(mpxOpts, multiplex.WithAggregationStrict(cfg.Aggregation.StrictInitialize, cfg.Aggregation.StrictList))
 	mpxOpts = append(mpxOpts, multiplex.WithReportPartialFailures(cfg.Aggregation.ReportPartialFailures))
+	mpxOpts = append(mpxOpts, multiplex.WithLifecycleContext(rootCtx))
 	mpx, err := multiplex.New(upstreams, mpxOpts...)
 	if err != nil {
 		slog.Error("multiplexer", "err", err)
@@ -332,7 +345,7 @@ func main() {
 				return
 			}
 			if mcpwire.IsToolsListChangedNotification(req.Method) {
-				mpx.HandleToolsListChanged(context.Background())
+				mpx.HandleToolsListChanged(rootCtx)
 			}
 			srv.BroadcastNotification(req)
 		})
@@ -342,15 +355,20 @@ func main() {
 	go func() {
 		ch := make(chan os.Signal, 1)
 		signal.Notify(ch, syscall.SIGHUP)
-		for range ch {
-			cfg2, err := config.Load()
-			if err != nil {
-				slog.Error("policy reload skipped: config load failed", "err", err)
-				continue
+		for {
+			select {
+			case <-rootCtx.Done():
+				return
+			case <-ch:
+				cfg2, err := config.Load()
+				if err != nil {
+					slog.Error("policy reload skipped: config load failed", "err", err)
+					continue
+				}
+				policy.ReloadEngine(polHolder, cfg2)
+				slog.Warn("SIGHUP applies policy-only reload", "reloaded", "config.Load + policy.ReloadEngine", "not_reloaded", "rate_limit, allowed_origins, aggregation, audit_sink, backends, max_in_flight")
+				slog.Info("policy reloaded from config", "policy_version", cfg2.Policy.Version)
 			}
-			policy.ReloadEngine(polHolder, cfg2)
-			slog.Warn("SIGHUP applies policy-only reload", "reloaded", "config.Load + policy.ReloadEngine", "not_reloaded", "rate_limit, allowed_origins, aggregation, audit_sink, backends, max_in_flight")
-			slog.Info("policy reloaded from config", "policy_version", cfg2.Policy.Version)
 		}
 	}()
 
@@ -369,7 +387,7 @@ func main() {
 	defer cancel()
 	if err := srv.Shutdown(sctx); err != nil {
 		slog.Error("http shutdown", "err", err)
-		os.Exit(1)
+		return
 	}
 	slog.Info("shutdown complete")
 }

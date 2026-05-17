@@ -97,6 +97,30 @@ func PolicyVersionFromContext(ctx context.Context) string {
 	return s
 }
 
+// MergeRequestValues copies host-scoped values from req onto parent. Parent cancellation and deadlines are unchanged.
+func MergeRequestValues(parent, req context.Context) context.Context {
+	if parent == nil {
+		parent = context.Background()
+	}
+	if req == nil || req == parent {
+		return parent
+	}
+	out := parent
+	if intent := ClientIntentFromContext(req); intent != "" {
+		out = WithClientIntent(out, intent)
+	}
+	if tools := AllowedToolNamesFromContext(req); len(tools) > 0 {
+		out = WithAllowedToolNames(out, tools)
+	}
+	if sub := SubjectIDFromContext(req); sub != "" {
+		out = WithSubjectID(out, sub)
+	}
+	if ver := PolicyVersionFromContext(req); ver != "" {
+		out = WithPolicyVersion(out, ver)
+	}
+	return out
+}
+
 func normalizeAllowedToolNames(in []string) []string {
 	if len(in) == 0 {
 		return nil

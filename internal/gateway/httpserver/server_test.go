@@ -105,8 +105,8 @@ func TestReadyzUsesReadinessChecker(t *testing.T) {
 		require.Equal(t, http.StatusServiceUnavailable, res.StatusCode)
 		body, err := io.ReadAll(res.Body)
 		require.NoError(t, err)
-		require.Contains(t, string(body), "not ready")
-		require.Contains(t, string(body), "qdrant unreachable")
+		require.Equal(t, "not ready", strings.TrimSpace(string(body)))
+		require.NotContains(t, string(body), "qdrant")
 		require.True(t, checker.called)
 		require.NoError(t, res.Body.Close())
 	})
@@ -125,6 +125,44 @@ func TestPostRPCMissingSessionHeader(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusBadRequest, res.StatusCode)
 	require.NoError(t, res.Body.Close())
+}
+
+func TestPostRPCRejectsWrongSessionSubject(t *testing.T) {
+	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
+	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
+	require.NoError(t, err)
+	srv := New(agg, "", WithHTTPMiddleware(func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch {
+			case r.Method == http.MethodGet && r.URL.Path == PathMCPSSE:
+				r = r.WithContext(hostctx.WithSubjectID(r.Context(), "user-a"))
+			case r.Method == http.MethodPost && r.URL.Path == PathMCPRPC:
+				r = r.WithContext(hostctx.WithSubjectID(r.Context(), "user-b"))
+			}
+			h.ServeHTTP(w, r)
+		})
+	}))
+	ts := httptest.NewServer(srv)
+	defer ts.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sseReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+PathMCPSSE, nil)
+	sseResp, err := ts.Client().Do(sseReq)
+	require.NoError(t, err)
+	sid := sseResp.Header.Get(HeaderMCPSessionID)
+	require.NotEmpty(t, sid)
+	go func() { _, _ = io.Copy(io.Discard, sseResp.Body) }()
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+PathMCPRPC, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`))
+	req.Header.Set(HeaderMCPSessionID, sid)
+	req.Header.Set("Content-Type", "application/json")
+	res, err := ts.Client().Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusForbidden, res.StatusCode)
+	require.NoError(t, res.Body.Close())
+	cancel()
+	_ = sseResp.Body.Close()
 }
 
 func TestPostRPCUnknownSession(t *testing.T) {
