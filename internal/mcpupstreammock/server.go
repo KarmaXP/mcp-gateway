@@ -144,6 +144,8 @@ func (s *server) handleRPC(w http.ResponseWriter, r *http.Request) {
 		}
 		raw, _ := json.Marshal(map[string]any{"tools": tools})
 		s.push(rpc.NewResult(req.ID, raw))
+	case "notifications/initialized", "initialized":
+		// Host notification; no JSON-RPC response on upstream SSE.
 	case "tools/call":
 		var callParams struct {
 			Name string `json:"name"`

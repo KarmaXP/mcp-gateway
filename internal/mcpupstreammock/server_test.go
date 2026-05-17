@@ -104,6 +104,18 @@ func TestInvalidRPCBody(t *testing.T) {
 	postRPC(t, ts.URL, sid, `{not json`, http.StatusBadRequest)
 }
 
+func TestInitializedNotificationAcceptedWithoutError(t *testing.T) {
+	ts, sid, sseBody := startMockHTTPServer(t, Config{Tools: []Tool{{Name: "echo"}}})
+	postRPC(t, ts.URL, sid, `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}`, http.StatusAccepted)
+	require.Eventually(t, func() bool { return strings.Contains(sseBody(), `"id":1`) }, 2*time.Second, 20*time.Millisecond)
+
+	postRPC(t, ts.URL, sid, `{"jsonrpc":"2.0","method":"notifications/initialized"}`, http.StatusAccepted)
+	time.Sleep(50 * time.Millisecond)
+	body := sseBody()
+	require.NotContains(t, body, `"code":`)
+	require.NotContains(t, body, "not found")
+}
+
 func TestUnknownMethod(t *testing.T) {
 	ts, sid, sseBody := startMockHTTPServer(t, Config{Tools: []Tool{{Name: "echo"}}})
 	postRPC(t, ts.URL, sid, `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}`, http.StatusAccepted)
