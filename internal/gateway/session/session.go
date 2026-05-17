@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -73,33 +75,39 @@ func (sm *SessionManager) BroadcastNotification(req *rpc.Request) {
 	}
 	sm.mu.RUnlock()
 	for _, s := range sessions {
-		_ = s.EnqueueNotification(req)
+		sess := s
+		go func() { _ = sess.EnqueueNotification(req) }()
 	}
 }
 
 type Session struct {
-	id     string
-	ctx    context.Context
-	cancel context.CancelFunc
+	id       string
+	ownerSub string
+	ctx      context.Context
+	cancel   context.CancelFunc
 
 	multiplexer *multiplex.Multiplexer
 
 	middlewares []Middleware
 
-	mu            sync.Mutex
-	initCompleted bool
-	ready         bool
+	mu                   sync.Mutex
+	initCompleted        bool
+	ready                bool
+	upstreamInitNotified bool
 
 	// toolHist stores successful tools/call names (namespaced), oldest first, capped for router context.
 	toolHist []string
 
 	out chan []byte
+
+	droppedOutbound atomic.Uint64
 }
 
 func NewSession(parent context.Context, id string, mpx *multiplex.Multiplexer, mws []Middleware) *Session {
 	ctx, cancel := context.WithCancel(parent)
 	return &Session{
 		id:          id,
+		ownerSub:    hostctx.SubjectIDFromContext(parent),
 		ctx:         ctx,
 		cancel:      cancel,
 		multiplexer: mpx,
@@ -109,6 +117,14 @@ func NewSession(parent context.Context, id string, mpx *multiplex.Multiplexer, m
 }
 
 func (s *Session) ID() string { return s.id }
+
+// SubjectMatches reports whether requestSub may use this session (AUTH_MODE=none: both empty).
+func (s *Session) SubjectMatches(requestSub string) bool {
+	if s.ownerSub == "" && requestSub == "" {
+		return true
+	}
+	return s.ownerSub != "" && s.ownerSub == requestSub
+}
 
 // RecordSuccessfulToolCall implements hostctx.SuccessfulToolCallRecorder.
 func (s *Session) RecordSuccessfulToolCall(namespaced string) {
@@ -142,17 +158,31 @@ func (s *Session) Close() {
 	s.cancel()
 }
 
+func (s *Session) DroppedOutbound() uint64 {
+	return s.droppedOutbound.Load()
+}
+
+func (s *Session) enqueueOutbound(payload []byte) error {
+	timeout := defaults.SessionOutboundEnqueueTimeout
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-s.ctx.Done():
+		return s.ctx.Err()
+	case s.out <- payload:
+		return nil
+	case <-timer.C:
+		s.droppedOutbound.Add(1)
+		return fmt.Errorf("session: outbound buffer full")
+	}
+}
+
 func (s *Session) EnqueueResponse(resp *rpc.Response) error {
 	b, err := resp.Marshal()
 	if err != nil {
 		return fmt.Errorf("session: marshal response: %w", err)
 	}
-	select {
-	case <-s.ctx.Done():
-		return s.ctx.Err()
-	case s.out <- b:
-	}
-	return nil
+	return s.enqueueOutbound(b)
 }
 
 func (s *Session) EnqueueNotification(req *rpc.Request) error {
@@ -168,19 +198,14 @@ func (s *Session) EnqueueNotification(req *rpc.Request) error {
 	if err != nil {
 		return fmt.Errorf("session: marshal notification: %w", err)
 	}
-	select {
-	case <-s.ctx.Done():
-		return s.ctx.Err()
-	case s.out <- b:
-	}
-	return nil
+	return s.enqueueOutbound(b)
 }
 
 func (s *Session) Dispatch(reqCtx context.Context, req *rpc.Request) error {
 	if reqCtx == nil {
 		reqCtx = context.Background()
 	}
-	ctx, cancel := mergedCancel(s.ctx, reqCtx)
+	ctx, cancel := mergeDispatchContext(s.ctx, reqCtx)
 	defer cancel()
 
 	if err := s.runMiddlewares(ctx, req); err != nil {
@@ -232,9 +257,10 @@ func (s *Session) runMiddlewares(ctx context.Context, req *rpc.Request) error {
 	return nil
 }
 
-func mergedCancel(parent, reqCtx context.Context) (context.Context, context.CancelFunc) {
-	ctx, cancel := context.WithCancel(parent)
+func mergeDispatchContext(sessionCtx, reqCtx context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(sessionCtx)
 	stop := context.AfterFunc(reqCtx, cancel)
+	ctx = hostctx.MergeRequestValues(ctx, reqCtx)
 	return ctx, func() {
 		stop()
 		cancel()
@@ -248,7 +274,10 @@ func (s *Session) handleNotification(ctx context.Context, req *rpc.Request) erro
 		s.mu.Lock()
 		if s.initCompleted {
 			s.ready = true
-			notifyUpstreams = true
+			if !s.upstreamInitNotified {
+				s.upstreamInitNotified = true
+				notifyUpstreams = true
+			}
 		}
 		s.mu.Unlock()
 		if notifyUpstreams {
