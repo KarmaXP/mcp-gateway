@@ -49,6 +49,12 @@ for _ in $(seq 1 60); do
   sleep 0.25
 done
 curl -sf "${GATEWAY_URL}/healthz" >/dev/null
+if [[ "${ROUTER_MODE_EFFECTIVE}" == "on" ]]; then
+  curl -sf "${GATEWAY_URL}/readyz" >/dev/null || {
+    echo "readyz failed (Qdrant/embed must be healthy when router=on)"
+    exit 1
+  }
+fi
 
 SSE_HDR="$(mktemp)"
 SSE_OUT="$(mktemp)"

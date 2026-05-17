@@ -6,6 +6,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 PIDFILE="${DEMO_BACKENDS_PIDFILE:-/tmp/mcp-gateway-demo-backends.pids}"
+LOCKDIR="${DEMO_BACKENDS_LOCKDIR:-/tmp/mcp-gateway-demo-backends.lock.d}"
 ALPHA_PORT="${MOCK_ALPHA_PORT:-3101}"
 BETA_PORT="${MOCK_BETA_PORT:-3102}"
 
@@ -35,6 +36,10 @@ stop_pids() {
 
 case "${1:-}" in
   start)
+    if ! mkdir "${LOCKDIR}" 2>/dev/null; then
+      echo "demo backends already starting or running (lock ${LOCKDIR})"
+      exit 1
+    fi
     stop_pids
     rm -f "${PIDFILE}"
     echo "Starting mock upstream alpha on :${ALPHA_PORT} and beta on :${BETA_PORT}"
@@ -51,6 +56,7 @@ case "${1:-}" in
     if [[ "${ready}" -ne 1 ]]; then
       echo "mock upstream failed to bind :${ALPHA_PORT} or :${BETA_PORT} within 15s"
       stop_pids
+      rmdir "${LOCKDIR}" 2>/dev/null || true
       exit 1
     fi
     echo "demo backends running (pidfile ${PIDFILE})"
@@ -58,6 +64,7 @@ case "${1:-}" in
   stop)
     echo "Stopping demo backends"
     stop_pids
+    rmdir "${LOCKDIR}" 2>/dev/null || true
     echo "demo backends stopped"
     ;;
   *)

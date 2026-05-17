@@ -24,6 +24,10 @@ if ! lsof -ti ":3101" >/dev/null 2>&1; then
   echo "alpha mock not listening on 3101 — run: make demo-backends"
   exit 1
 fi
+if ! lsof -ti ":3102" >/dev/null 2>&1; then
+  echo "beta mock not listening on 3102 — run: make demo-backends"
+  exit 1
+fi
 
 echo "==> gateway PORT=${GATEWAY_PORT} config=${CONFIG}"
 MCP_GATEWAY_CONFIG="${CONFIG}" AUTH_MODE=none PORT="${GATEWAY_PORT}" \

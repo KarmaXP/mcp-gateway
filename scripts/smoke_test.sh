@@ -49,6 +49,35 @@ cleanup() {
 }
 trap cleanup EXIT
 
+wait_http_ok() {
+  local url="$1"
+  local attempts="${2:-40}"
+  local delay="${3:-0.15}"
+  local i
+  for ((i = 1; i <= attempts; i++)); do
+    if curl -sf "${url}" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep "${delay}"
+  done
+  return 1
+}
+
+wait_sse_contains() {
+  local file="$1"
+  local pattern="$2"
+  local attempts="${3:-30}"
+  local delay="${4:-0.15}"
+  local i
+  for ((i = 1; i <= attempts; i++)); do
+    if grep -q "${pattern}" "${file}" 2>/dev/null; then
+      return 0
+    fi
+    sleep "${delay}"
+  done
+  return 1
+}
+
 # Best-effort free upstream (stale smoke_upstream) and dedicated auto-start gateway port.
 if [[ "${SMOKE_CLEAN_PORTS:-1}" == "1" ]]; then
   lsof -ti ":${UPSTREAM_PORT}" 2>/dev/null | xargs kill -9 2>/dev/null || true
@@ -105,13 +134,7 @@ if [[ "${SMOKE_AUTO_START_GATEWAY:-}" == "1" ]]; then
   AUTH_MODE=none PORT="${GATEWAY_PORT}" \
     go run ./cmd/gateway/main.go &
   GW_PID=$!
-  for _ in $(seq 1 40); do
-    if curl -sf "${GATEWAY_URL}/healthz" >/dev/null 2>&1; then
-      break
-    fi
-    sleep 0.15
-  done
-  curl -sf "${GATEWAY_URL}/healthz" >/dev/null || {
+  wait_http_ok "${GATEWAY_URL}/healthz" || {
     echo "gateway failed to become healthy"
     exit 1
   }
@@ -143,8 +166,7 @@ post_rpc() {
 
 echo "==> initialize"
 post_rpc '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"smoke","version":"1.0.0"}}}'
-sleep 0.4
-grep -q '"result"' "${SSE_OUT}" || {
+wait_sse_contains "${SSE_OUT}" '"result"' || {
   echo "expected initialize result on SSE stream:"
   head -30 "${SSE_OUT}"
   exit 1
@@ -156,13 +178,12 @@ post_rpc '{"jsonrpc":"2.0","method":"notifications/initialized"}'
 
 echo "==> ping (MCP spec)"
 post_rpc '{"jsonrpc":"2.0","id":2,"method":"ping"}'
-sleep 0.35
-grep -q '"id":2' "${SSE_OUT}" || {
+wait_sse_contains "${SSE_OUT}" '"id":2' || {
   echo "expected ping response id 2 on SSE stream:"
   head -40 "${SSE_OUT}"
   exit 1
 }
-grep -q '"result":{}' "${SSE_OUT}" || {
+wait_sse_contains "${SSE_OUT}" '"result":{}' || {
   echo "expected ping empty result object on SSE stream:"
   head -40 "${SSE_OUT}"
   exit 1
@@ -171,8 +192,7 @@ echo "==> ping: empty JSON-RPC result (spec compliance)"
 
 echo "==> tools/list"
 post_rpc '{"jsonrpc":"2.0","id":3,"method":"tools/list"}'
-sleep 0.4
-grep -q 'smoke__echo' "${SSE_OUT}" || {
+wait_sse_contains "${SSE_OUT}" 'smoke__echo' || {
   echo "expected aggregated namespaced tool smoke__echo:"
   cat "${SSE_OUT}"
   exit 1
@@ -181,8 +201,7 @@ echo "==> tools/list: smoke__echo present (proves upstream tools/list via mcphtt
 
 echo "==> tools/call smoke__echo"
 post_rpc '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"smoke__echo","arguments":{}}}'
-sleep 0.4
-grep -q 'smoke-ok' "${SSE_OUT}" || {
+wait_sse_contains "${SSE_OUT}" 'smoke-ok' || {
   echo "expected upstream text smoke-ok:"
   cat "${SSE_OUT}"
   exit 1
