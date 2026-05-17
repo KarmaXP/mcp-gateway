@@ -36,6 +36,18 @@ func TestCheckArgumentJSON_AcceptsSmallObject(t *testing.T) {
 	require.NoError(t, CheckArgumentJSON(raw, lim))
 }
 
+func TestDefaultLimits_NonZero(t *testing.T) {
+	lim := DefaultLimits()
+	require.Positive(t, lim.MaxBytes)
+	require.Positive(t, lim.MaxDepth)
+	require.Positive(t, lim.MaxKeys)
+}
+
+func TestCheckArgumentJSON_UsesDefaultWhenMaxBytesZero(t *testing.T) {
+	raw := json.RawMessage(`{"a":1}`)
+	require.NoError(t, CheckArgumentJSON(raw, Limits{}))
+}
+
 func TestCheckArgumentJSON_ErrArgumentsTooLarge(t *testing.T) {
 	lim := Limits{MaxBytes: 4, MaxDepth: 8, MaxKeys: 32}
 	raw := json.RawMessage(`{"a":1}`)
