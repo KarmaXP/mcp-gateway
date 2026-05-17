@@ -6,13 +6,13 @@
  *
  * Usage:
  *   k6 run --vus 20 --duration 60s scripts/loadtest/k6_http_baseline.js
- *   BASE_URL=http://127.0.0.1:18080 k6 run scripts/loadtest/k6_http_baseline.js
+ *   BASE_URL=http://127.0.0.1:8080 k6 run scripts/loadtest/k6_http_baseline.js
  */
 import http from "k6/http";
 import { check, sleep } from "k6";
 import { Trend, Rate } from "k6/metrics";
 
-const base = __ENV.BASE_URL || "http://127.0.0.1:18080";
+const base = __ENV.BASE_URL || "http://127.0.0.1:8080";
 
 const healthLatency = new Trend("healthz_latency_ms");
 const readyLatency = new Trend("readyz_latency_ms");

@@ -5,7 +5,7 @@
 #   bash scripts/smoke_e2e.sh
 #
 #   # Custom gateway URL:
-#   GATEWAY_URL=http://127.0.0.1:18080 bash scripts/smoke_e2e.sh
+#   GATEWAY_URL=http://127.0.0.1:8080 bash scripts/smoke_e2e.sh
 #
 #   # JWT-protected gateway:
 #   SMOKE_JWT="$(tools/gen-jwt ...)" bash scripts/smoke_e2e.sh

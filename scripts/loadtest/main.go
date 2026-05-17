@@ -1,6 +1,6 @@
 // Command loadtest benchmarks tools/call latency until the matching JSON-RPC result appears on SSE.
 //
-// Examples: go run ./scripts/loadtest -url http://127.0.0.1:18080 -mode direct -workers 8 -duration 30s
+// Examples: go run ./scripts/loadtest -url http://127.0.0.1:8080 -mode direct -workers 8 -duration 30s
 //
 // Semantic mode needs ROUTER_MODE=on and a healthy embed sidecar.
 package main
@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	defaultLoadtestGatewayURL = "http://127.0.0.1:18080"
+	defaultLoadtestGatewayURL = "http://127.0.0.1:8080"
 	defaultLoadtestWorkers = 8
 	defaultWarmupIterations = 2
 	defaultTestWindow = 30 * time.Second

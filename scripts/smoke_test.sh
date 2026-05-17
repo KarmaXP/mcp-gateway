@@ -21,7 +21,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 UPSTREAM_PORT="${SMOKE_UPSTREAM_PORT:-31400}"
-# Auto-start uses 18081 by default so we do not collide with a dev gateway on 8080/18080.
+# Auto-start uses 18081 by default so we do not collide with a dev gateway on 8080.
 if [[ "${SMOKE_AUTO_START_GATEWAY:-}" == "1" ]]; then
   GATEWAY_PORT="${SMOKE_GATEWAY_PORT:-18081}"
 else
@@ -30,6 +30,7 @@ fi
 GATEWAY_URL="${SMOKE_GATEWAY_URL:-http://127.0.0.1:${GATEWAY_PORT}}"
 
 TMPYAML=""
+USE_DEMO_CONFIG=0
 SSE_HDR=""
 SSE_OUT=""
 UP_PID=""
@@ -40,7 +41,9 @@ cleanup() {
   [[ -n "${SSE_PID:-}" ]] && kill "${SSE_PID}" 2>/dev/null || true
   [[ -n "${UP_PID:-}" ]] && kill "${UP_PID}" 2>/dev/null || true
   [[ -n "${GW_PID:-}" ]] && kill "${GW_PID}" 2>/dev/null || true
-  [[ -n "${TMPYAML}" && -f "${TMPYAML}" ]] && rm -f "${TMPYAML}"
+  if [[ "${USE_DEMO_CONFIG}" -eq 0 && -n "${TMPYAML}" && -f "${TMPYAML}" ]]; then
+    rm -f "${TMPYAML}"
+  fi
   [[ -n "${SSE_HDR}" && -f "${SSE_HDR}" ]] && rm -f "${SSE_HDR}"
   [[ -n "${SSE_OUT}" && -f "${SSE_OUT}" ]] && rm -f "${SSE_OUT}"
 }
@@ -54,8 +57,12 @@ if [[ "${SMOKE_CLEAN_PORTS:-1}" == "1" ]]; then
   fi
 fi
 
-TMPYAML="$(mktemp)"
-cat >"${TMPYAML}" <<EOF
+if [[ -n "${MCP_GATEWAY_CONFIG:-}" && -f "${MCP_GATEWAY_CONFIG}" ]]; then
+  echo "==> using MCP_GATEWAY_CONFIG=${MCP_GATEWAY_CONFIG}"
+  USE_DEMO_CONFIG=1
+else
+  TMPYAML="$(mktemp)"
+  cat >"${TMPYAML}" <<EOF
 backends:
   - id: smoke
     prefix: smoke
@@ -68,6 +75,8 @@ embed:
 qdrant:
   collection: mcp_tool_catalog
 EOF
+  export MCP_GATEWAY_CONFIG="${TMPYAML}"
+fi
 
 echo "==> starting smoke upstream on 127.0.0.1:${UPSTREAM_PORT}"
 go run ./scripts/smoke_upstream/main.go -listen "127.0.0.1:${UPSTREAM_PORT}" &
@@ -92,8 +101,8 @@ else
 fi
 
 if [[ "${SMOKE_AUTO_START_GATEWAY:-}" == "1" ]]; then
-  echo "==> auto-starting gateway PORT=${GATEWAY_PORT} (JSON logs on stdout)"
-  MCP_GATEWAY_CONFIG="${TMPYAML}" AUTH_MODE=none PORT="${GATEWAY_PORT}" \
+  echo "==> auto-starting gateway PORT=${GATEWAY_PORT} config=${MCP_GATEWAY_CONFIG} (JSON logs on stdout)"
+  AUTH_MODE=none PORT="${GATEWAY_PORT}" \
     go run ./cmd/gateway/main.go &
   GW_PID=$!
   for _ in $(seq 1 40); do
@@ -182,3 +191,16 @@ echo "==> tools/call: smoke-ok (proves strip-prefix forward to upstream)"
 
 echo ""
 echo "SMOKE OK — inspect gateway stdout for slog lines (e.g. mcp.dispatch, semantic spans) or OTLP if enabled."
+
+if [[ "${DEMO_PRINT_HELP:-}" == "1" ]]; then
+  echo ""
+  echo "=== Demo complete ==="
+  echo "Gateway URL:  ${GATEWAY_URL}"
+  echo "Health:       curl -s ${GATEWAY_URL}/healthz"
+  echo "MCP SSE:      curl -N ${GATEWAY_URL}/mcp/sse"
+  echo "Example RPC:  curl -s -H 'Mcp-Session-Id: <from-sse>' -H 'Content-Type: application/json' \\"
+  echo "                -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"smoke__echo\",\"arguments\":{}}}' \\"
+  echo "                ${GATEWAY_URL}/mcp/rpc"
+  echo "Config:       ${MCP_GATEWAY_CONFIG}"
+  echo "Stop gateway: make stop   (frees port 8080 when using make run; demo auto-start uses ${GATEWAY_PORT})"
+fi

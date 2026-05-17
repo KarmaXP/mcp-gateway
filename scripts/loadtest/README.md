@@ -34,5 +34,5 @@ Exercises **GET /healthz** and **GET /readyz** with default k6 percentile summar
 
 ```bash
 k6 run --vus 30 --duration 60s scripts/loadtest/k6_http_baseline.js
-BASE_URL=http://127.0.0.1:18080 k6 run --vus 30 --duration 60s scripts/loadtest/k6_http_baseline.js
+BASE_URL=http://127.0.0.1:8080 k6 run --vus 30 --duration 60s scripts/loadtest/k6_http_baseline.js
 ```
