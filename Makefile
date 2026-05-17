@@ -22,7 +22,7 @@ RESET   := \033[0m
 
 .DEFAULT_GOAL := help
 .PHONY: help bootstrap demo demo-backends demo-backends-stop demo-full verify-e2e \
-        sre-backends sre-backends-stop sre-up sre-down sre-smoke gen-b12-catalog \
+        sre-backends sre-backends-stop sre-up sre-down sre-smoke gen-router-eval-catalog \
         build run stop test test-cover test-integration ci smoke smoke-e2e fmt lint clean tidy \
         docker-build docker-up docker-up-full docker-up-demo docker-up-sre docker-down docker-logs docker-clean calibration-up
 
@@ -57,6 +57,7 @@ help:
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "fmt" "gofmt -w . then normalize const/var '=' spacing (gofmt re-aligns; see .ai/rules/go.md)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "lint" "Run golangci-lint + check for column-aligned '=' in Go sources"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "ci" "Same checks as GitHub Actions lint-and-unit job (lint + vet + race tests, -count=1)"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "gen-router-eval-catalog" "Write docs/evaluation/router-eval-catalog.json from SyntheticCatalog()"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "tidy" "Clean up and verify Go modules"
 	@printf "\n"
 	@printf "$(BLUE)▶ MCP Gateway (Docker Compose)$(RESET)\n"
@@ -133,9 +134,9 @@ sre-smoke:
 	@chmod +x scripts/sre_smoke.sh
 	@MCP_GATEWAY_CONFIG=$(SRE_CONFIG) bash scripts/sre_smoke.sh
 
-gen-b12-catalog:
-	@go run ./tools/gen-b12-catalog/main.go > docs/evaluation/b1.2-catalog.json
-	@echo "Wrote docs/evaluation/b1.2-catalog.json"
+gen-router-eval-catalog:
+	@go run ./tools/gen-router-eval-catalog/main.go > docs/evaluation/router-eval-catalog.json
+	@echo "Wrote docs/evaluation/router-eval-catalog.json"
 
 run:
 	@echo "🚀 Starting $(BINARY_NAME)..."
@@ -143,10 +144,13 @@ run:
 		: "$${MCP_GATEWAY_CONFIG:=$(DEMO_CONFIG)}" && export MCP_GATEWAY_CONFIG && \
 		exec go run $(MAIN_PATH)'
 
+SMOKE_JWT_GATEWAY_PORT ?= 18082
+
 stop: demo-backends-stop sre-backends-stop
 	@echo "🛑 Stopping $(BINARY_NAME)..."
 	@lsof -ti :$(GATEWAY_PORT) 2>/dev/null | xargs kill 2>/dev/null || true
 	@lsof -ti :$(SMOKE_GATEWAY_PORT) 2>/dev/null | xargs kill 2>/dev/null || true
+	@lsof -ti :$(SMOKE_JWT_GATEWAY_PORT) 2>/dev/null | xargs kill 2>/dev/null || true
 	@lsof -ti :31400 2>/dev/null | xargs kill 2>/dev/null || true
 	@echo "Stopped gateway ports and demo/SRE mocks if any."
 
