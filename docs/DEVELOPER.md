@@ -45,12 +45,12 @@ flowchart LR
  Gateway -. traces / metrics .-> OTel
 ```
 
-- **Ingress:** `GET /mcp/sse` opens the session; JSON-RPC **responses** (for requests with `id`) are pushed as **SSE named events** `event: jsonrpc` with a single-line JSON-RPC object in `data:` (see OpenAPI). `POST /mcp/rpc` accepts one request per call (`202` when accepted).
+- **Ingress:** `GET /mcp/sse` opens the session; JSON-RPC **responses** (for requests with `id`) are pushed as **SSE named events** `event: jsonrpc` with a single-line JSON-RPC object in `data:` (see OpenAPI). `POST /mcp/rpc` returns **`202 Accepted`** when the request is queued for that session; the JSON-RPC **result or error** is delivered on the SSE stream (not in the HTTP response body).
 - **Intent for routing:** Optional header **`X-MCP-Intent`** on `POST /mcp/rpc` is stored in `hostctx` and forwarded as `RoutingSignal.IntentText` for **`tools/call`** and, when `ROUTER_MODE=filter_list`, for **`tools/list`** subsetting. Omitted header means empty intent (see below).
 - **Agent token metadata:** Optional header **`X-Agent-Tokens-Used`** on `POST /mcp/rpc` (non-negative integer) is recorded on the host request span as OTel attribute **`mcp.agent.tokens_used`** when valid. Empty or invalid values are ignored.
 - **Core:** `internal/gateway/multiplex` (`Multiplexer`) merges `initialize` and `tools/list`; `tools/call` is forwarded with stable namespacing (`prefix__tool`).
 - **Router:** `internal/router` optionally rewrites ambiguous tool names using embeddings + vector search (see [ADR 0001](adr/0001-architecture-decisions.md)). **`filter_list`** (intent-filtered `tools/list`) is implemented behind `ROUTER_MODE=filter_list` / `router.mode: filter_list`, [ADR 0002](adr/0002-filter-list-mode.md). With **`filter_list`**, empty intent returns the **full** merged catalog (after JWT/RAR allow-list only), same as `assist_list` for that request; there is no reuse of intent from earlier RPCs. Vector/embed failures or catalog/index mismatch **degrade** to the full allow-listed catalog (warn logs).
-- **Security (RAR ∩ JWT, fail mode):** [ADR 0003](adr/0003-security-rar-jwt-merge-failmode.md) documents the canonical `authorization_details` shape for MCP tools, merge rules for JWT vs RAR allow lists, and fail-closed vs opt-in degradation. [ADR 0004](adr/0004-gateway-scope.md) defines method scope boundaries: JWT/RAR AuthZ is tools-only; `resources/*` and `prompts/*` are pass-through after AuthN.
+- **Security (RAR ∩ JWT, fail mode):** [ADR 0003](adr/0003-security-rar-jwt-merge-failmode.md) documents the canonical `authorization_details` shape for MCP tools, merge rules for JWT vs RAR allow lists, and fail-closed vs opt-in degradation. **Empty JWT `mcp_tools` allow-list** (after merge) exposes the **full merged tool catalog** (SEC2 — intentional for dev; lock down in production). [ADR 0004](adr/0004-gateway-scope.md) defines method scope boundaries: JWT/RAR AuthZ is **tools-only**; `resources/*` and `prompts/*` are pass-through after AuthN (no change planned unless a new ADR says otherwise).
 
 ## Why this stack
 
@@ -75,8 +75,9 @@ make demo        # recommended first run: no Docker, E2E MCP on localhost
 |------|---------|------|
 | **8080** | Gateway (`PORT` / `GATEWAY_PORT`) | `make run`, `make stop` |
 | **18081** | Gateway (smoke auto-start only) | `make demo` / `make smoke` with `SMOKE_AUTO_START_GATEWAY=1` |
+| **18082** | Gateway (JWT smoke) | `scripts/smoke_jwt.sh`; freed by `make stop` |
 | **31400** | `scripts/smoke_upstream` | Default upstream for `deployments/gateway.demo.yaml` |
-| **3101** / **3102** | Alpha / beta mocks | `gateway.example.yaml` after `make demo-backends` |
+| **3101** / **3102** | Alpha / beta mocks | Host: `gateway.example.yaml` + `make demo-backends`. Compose gateway: `gateway.example.docker.yaml` |
 | **3201, 3203** | SRE mocks (k8s / prom / gh) | `gateway.sre.example.yaml` after `make sre-backends` or `make docker-up-sre` |
 
 See [`docs/local-ports.md`](local-ports.md) for the port and mock upstream reference.
@@ -92,7 +93,7 @@ make sre-smoke     # three tools/call: k8s__get_pod_logs, prom__query_instant, g
 make verify-e2e     # CI + demo + demo-full + sre-smoke (full local E2E check)
 make bootstrap     # .env from .env.example if missing
 make docker-up     # Qdrant, embed sidecar, OTel collector, Tempo, Prometheus, Grafana
-make docker-up-demo   # compose profile demo: mock alpha/beta containers on 3101/3102
+make docker-up-demo   # compose profile demo: mock-alpha / mock-beta (3101/3102 on host)
 make run        # gateway on 8080; default MCP_GATEWAY_CONFIG=gateway.demo.yaml
 make test        # vet + race + unit tests
 make ci         # same as GitHub Actions lint-and-unit (lint + vet + race, -count=1)
@@ -111,10 +112,10 @@ For `router.mode: on` you need Qdrant and the embed sidecar (`make docker-up`), 
 backends:
  - id: backend-alpha
   prefix: alpha
-  url: http://127.0.0.1:3101
+  url: http://mock-alpha:3101   # in compose; on host use 127.0.0.1:3101 or /etc/hosts aliases
  - id: backend-beta
   prefix: beta
-  url: http://127.0.0.1:3102
+  url: http://mock-beta:3102
 router:
  mode: on
 qdrant:
@@ -154,7 +155,7 @@ Summary:
 - **Auth**, `AUTH_MODE=none|jwt`; tool allow-lists via JWT/RAR; errors in [errors.md](errors.md).
 - **Router**, `ROUTER_MODE` + `QDRANT_URL` + `EMBED_URL`; modes in [CONNECTING_AGENTS.md](CONNECTING_AGENTS.md#semantic-routing).
 - **Telemetry**, `OTEL_EXPORTER_OTLP_ENDPOINT`.
-- **Policy reload**, `SIGHUP` reloads policy only; backends and most wiring require restart ([configuration.md § Reload](configuration.md#reload-vs-restart)).
+- **Policy reload**, `SIGHUP` reloads the in-process policy engine only; backends and most wiring require restart ([configuration.md § Reload](configuration.md#reload-vs-restart)). Open SSE sessions keep the same `Mcp-Session-Id` and owner `sub`; **JWT allow-list and `X-MCP-Intent` on each `POST /mcp/rpc`** are applied per request. Reconnect the SSE client if your host caches policy/version client-side.
 
 ## Protocol and dependencies
 
@@ -180,6 +181,36 @@ Direct Go dependencies (`go.mod`) at a glance:
  - Embed sidecar: `EMBED_URL/healthz`.
 - Probes use short per-request timeouts and return `503` with a hint (`not ready: ...`) if any required dependency is not healthy.
 - Upstream MCP backends are intentionally not probed from `/readyz`: there is no universal, side-effect-free readiness endpoint across stdio and HTTP upstream transports, and a failing backend is handled as partial failure at request time.
+
+## Docker / compose networking
+
+Compose services on `mcp-gateway-net` reach each other by **service name**, not `127.0.0.1` (inside a container, localhost is that container only).
+
+| Service | In-network URL | Host-published port (default) |
+|---------|----------------|-------------------------------|
+| `qdrant` | `http://qdrant:6333` | `6333` |
+| `embed` | `http://embed:8001` | `8001` |
+| `otel-collector` | `http://otel-collector:4318` | `4318` |
+| `mock-alpha` | `http://mock-alpha:3101` | `3101` |
+| `mock-beta` | `http://mock-beta:3102` | `3102` |
+| `gateway` | `http://gateway:8080` | `8080` (profile `gateway`) |
+
+[`deployments/gateway.example.yaml`](../deployments/gateway.example.yaml) uses `127.0.0.1:3101/3102` for **host-native** `make run` / `make demo-full`. The **gateway container** mounts [`gateway.example.docker.yaml`](../deployments/gateway.example.docker.yaml) (`mock-alpha` / `mock-beta` on the compose network). The gateway service sets `QDRANT_URL`, `EMBED_URL`, and `OTEL_EXPORTER_OTLP_ENDPOINT` to in-network URLs in [`deployments/docker-compose.yaml`](../deployments/docker-compose.yaml).
+
+**Gateway in Docker + demo mocks**
+
+```bash
+make docker-up-demo                    # profile demo: mock-alpha, mock-beta
+docker compose -f deployments/docker-compose.yaml --profile gateway --profile demo up -d
+# or: make docker-build && docker compose -f deployments/docker-compose.yaml --env-file .env --profile gateway --profile demo up -d
+curl -sf http://127.0.0.1:8080/healthz
+```
+
+**Host-native gateway** (`make run`, `make demo-full`) with mocks on the host (`make demo-backends`): use `gateway.example.yaml` as-is (`127.0.0.1:3101/3102`).
+
+**Host gateway + compose mocks** (`make docker-up-demo` then `make run` on the host): mocks are on the host loopback via published ports — use `http://127.0.0.1:3101` / `3102` in your config (or the `/etc/hosts` alias above with the example YAML).
+
+`deployments/gateway.demo.yaml` is unchanged: single smoke upstream on **31400** for `make demo` (host-only).
 
 ## Observability (Prometheus · Grafana · Tempo)
 

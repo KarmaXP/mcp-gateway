@@ -52,3 +52,4 @@ Start with the [repository README](../README.md), then use this map.
 | Minimal MCP host client | [scripts/mcp_host_demo/README.md](../scripts/mcp_host_demo/README.md) |
 | MCP smoke (curl) | `make demo`, `scripts/smoke_test.sh` |
 | Load testing | [scripts/loadtest/README.md](../scripts/loadtest/README.md) |
+| Regenerate router eval catalog JSON | `make gen-router-eval-catalog` |

@@ -1,6 +1,6 @@
 # Calibration run (full stack: Qdrant + embed + gateway + OTel)
 
-Repeatable procedure to record **live** router and gateway latency numbers with real Qdrant + embedding + telemetry wiring (not synthetic in-tree defaults). Use this after `docs/architecture/mcp_gateway.plan.md` §6 and §3.B.8.
+Repeatable procedure to record **live** router and gateway latency numbers with real Qdrant + embedding + telemetry wiring (not synthetic in-tree defaults). See the architecture plan for the latency budget and semantic router acceptance criteria.
 
 ## End-to-end boot sequence
 
@@ -69,13 +69,13 @@ curl -fsS "http://127.0.0.1:${PORT}/readyz" >/dev/null \
   make test-integration
   ```
   (Uses `-tags=integration` as defined in the Makefile.)
-3. **B1.3 recall calibration:** run the MiniLM+Qdrant recall harness (recall@1 + recall@3):
+3. **Vector recall (MiniLM + Qdrant):** run the integration recall harness (recall@1 + recall@3):
   ```bash
   QDRANT_URL=http://127.0.0.1:6333 EMBED_URL=http://127.0.0.1:8001 \
-   go test -tags=integration -race ./internal/router/eval -run TestPhase2VectorRecallMiniLM -v
+   go test -tags=integration -race ./internal/router/eval -run TestRouterEvalVectorRecallMiniLM -v
   ```
-  - Optional B1.2 catalog input: set `PHASE2_CATALOG_PATH=/absolute/path/to/b1.2-catalog.json`.
-  - Default file in-repo: `docs/evaluation/b1.2-catalog.json` (from `go run ./tools/gen-b12-catalog > docs/evaluation/b1.2-catalog.json`).
+  - Optional catalog override: set `ROUTER_EVAL_CATALOG_PATH=/absolute/path/to/router-eval-catalog.json`.
+  - Default file in-repo: `docs/evaluation/router-eval-catalog.json` (`make gen-router-eval-catalog`).
   - If no catalog file is found, the test falls back to `SyntheticCatalog()`.
 4. **Optional load / soak:** if you use `scripts/loadtest`, document command line, duration, and concurrent clients.
 
@@ -94,7 +94,7 @@ Quick run:
 go test ./internal/router/eval/... -run TestGoldenCasesMRRAndNDCG -v
 ```
 
-## B2.6 Loadtest commands (direct vs semantic)
+## Load testing (direct vs semantic)
 
 Run from the `mcp-gateway/` module root in two terminals.
 
@@ -155,7 +155,7 @@ ToolName: <incoming_tool_name_or_(none)>
 ArgumentKeys: <sorted_comma_separated_argument_keys_or_(none)>
 ```
 
-For reproducible runs, record both the catalog identifier and template version together (for example: `catalog=eval-b1.2-sre template=v1`).
+For reproducible runs, record both the catalog identifier and template version together (for example: `catalog=router-eval-sre template=v1`).
 
 ## Record (template)
 
@@ -168,13 +168,13 @@ Fill in after each run. Do not invent numbers, leave cells blank if a step was n
 | MRR@5 (GoldenCases) | `go test ./internal/router/eval/... -run TestGoldenCasesMRRAndNDCG -v` | | Reciprocal rank of first highest-relevance hit |
 | nDCG@5 (GoldenCases) | `go test ./internal/router/eval/... -run TestGoldenCasesMRRAndNDCG -v` | | Graded ranking quality (normalized to ideal order) |
 | Router decision p95 (embed+vector path) | Prometheus / Grafana from `mcp.gateway.semantic_router.duration_seconds` or traces | | Layer breakdown (`exact` vs `vector`) |
-| Internal hop p95 | `mcp.gateway.internal.duration_seconds` by `phase` (`parse`, `security`, `router`, `mux`) | | Align with plan §6 < 50 ms p95 goal for gateway-only work |
+| Internal hop p95 | `mcp.gateway.internal.duration_seconds` by `phase` (`parse`, `security`, `router`, `mux`) | | Align with architecture latency budget for gateway-only work |
 | Embed service p95 | Your sidecar metrics or traces | | |
 | Qdrant query p95 | Qdrant metrics or gateway `mcp.router.semantic` span children | | |
 
-Use `docs/evaluation/calibration-results.md` as the canonical place to copy the measured recall values from `TestPhase2VectorRecallMiniLM` and keep run metadata (date, env, catalog source).
+Use `docs/evaluation/calibration-results.md` as the canonical place to copy the measured recall values from `TestRouterEvalVectorRecallMiniLM` and keep run metadata (date, env, catalog source).
 
-## B2.4 Internal p95 script check
+## Internal p95 gate script
 
 Run from `mcp-gateway/`:
 
@@ -195,24 +195,24 @@ Behavior:
 - Limitation: loadtest fallback is **approximate** and includes end-to-end client-observed latency (SSE + JSON-RPC roundtrip), so it is not a pure gateway-internal phase metric.
 - CI/manual runs that should not fail on missing metrics can set `SKIP_IF_NO_METRICS=1` and `ALLOW_LOADTEST_FALLBACK=0`.
 
-## B2.5 Verify histogram exemplars (Grafana -> Tempo)
+## Histogram exemplars (Grafana to Tempo)
 
 Operator checklist to confirm trace exemplars are linked from histogram panels:
 
 1. Start stack (`make docker-up`) and ensure Grafana, Prometheus, Tempo, and OTel collector are healthy.
-2. Generate traffic (for example, one direct and one semantic run from **B2.6**) so histogram buckets receive samples.
+2. Generate traffic (for example, one direct and one semantic load test from the section above) so histogram buckets receive samples.
 3. In Grafana, open a histogram-backed panel/query such as `mcp_gateway_internal_duration_seconds_bucket` (or your translated name) and enable exemplar markers.
 4. Click an exemplar marker on the histogram series and open the linked Tempo trace.
 5. Verify the trace contains gateway spans for the same request window (`mcp.host.request` and child spans like security/router/mux).
 6. If exemplar markers are absent, note datasource/link configuration and keep this check pending.
 
-If the full stack is not runnable in your environment, document this as: **"capture during B1.1 stack run"**.
+If the full stack is not runnable in your environment, document this as: **"capture during full-stack calibration run"**.
 
 ## Prometheus (OTel → Prom naming)
 
 The application registers `mcp.gateway.internal.duration_seconds`. After OTel → Prometheus translation, series often appear as `mcp_gateway_internal_duration_seconds_bucket` (histogram). Use your scrape/relayer’s actual metric names when writing queries.
 
-### B2.1 Extract p50 / p95 / p99 by internal phase
+### Internal phase quantiles (p50 / p95 / p99)
 
 Use this procedure to report gateway-only latency for `parse`, `security`, `router`, and `mux`.
 
@@ -265,7 +265,7 @@ histogram_quantile(
 
 If your exporter keeps dot names instead of underscore mapping, adapt metric names to your OTel -> Prometheus translation.
 
-### B2.2 Separate gateway-internal vs upstream latency (Tempo)
+### Gateway-internal vs upstream latency (Tempo)
 
 Use Tempo traces to decompose each request latency into gateway internal work vs upstream waiting time.
 
@@ -292,16 +292,16 @@ Procedure:
   - Fan-out path: report both
    - `T_upstream_sum = sum(all mcp.backend.call spans)`.
    - `T_internal_exclusive = T_total - backend critical path`.
-5. Cross-check that trace-derived internal latency trends match Prometheus phase quantiles from B2.1.
+5. Cross-check that trace-derived internal latency trends match Prometheus phase quantiles from the internal phase quantiles section above.
 
 Store one Tempo trace URL (or screenshot) per run next to the quantitative results so decomposition is auditable.
 
 ## Post-baseline (optional)
 
-- **B1.6:** RRF vs `hybrid_alpha` ablation, only after completing the B1.3-B1.4 baseline.
-- **B5.3:** Qdrant HNSW tuning, only if recall/latency results justify the extra tuning pass.
+- **Hybrid reranking:** RRF vs `hybrid_alpha` ablation, only after completing the baseline recall and hyperparameter pass.
+- **Vector index tuning:** Qdrant HNSW tuning, only if recall/latency results justify the extra tuning pass.
 
 ## References
 
-- `docs/architecture/mcp_gateway.plan.md`, §3.B modes (`filter_list`), §3.D metrics, §6 latency budget.
+- `docs/architecture/mcp_gateway.plan.md`: semantic router modes (`filter_list`), metrics, latency budget.
 - `docs/DEVELOPER.md`, `ROUTER_MODE`, observability, integration tests.

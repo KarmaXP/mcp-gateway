@@ -39,8 +39,8 @@ Load testing: [`scripts/loadtest/README.md`](../../scripts/loadtest/README.md).
 
 | File | Purpose |
 |------|---------|
-| [b1.2-catalog.json](b1.2-catalog.json) | Static tool catalog for integration recall tests |
-| Regenerate | `make gen-b12-catalog` |
+| [router-eval-catalog.json](router-eval-catalog.json) | Static tool catalog for integration recall tests |
+| Regenerate | `make gen-router-eval-catalog` |
 
 ---
 

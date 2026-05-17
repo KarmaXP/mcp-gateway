@@ -84,7 +84,7 @@ curl -sS -o /dev/null -w "%{http_code}\n" \
   -H "Authorization: Bearer ${JWT}" \
   -H "Mcp-Session-Id: ${SID}" \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"jwt-b3-3","version":"1.0.0"}}}' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"jwt-allowlist-walkthrough","version":"1.0.0"}}}' \
   "http://127.0.0.1:8080/mcp/rpc"
 
 curl -sS -o /dev/null -w "%{http_code}\n" \

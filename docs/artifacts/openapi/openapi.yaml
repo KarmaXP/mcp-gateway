@@ -152,7 +152,7 @@ paths:
     get:
       tags: [Health]
       summary: Readiness probe
-      description: Phase 1 — no external dependency checks; returns OK when process serves traffic.
+      description: Readiness check; when a readiness checker is configured, validates dependencies (for example Qdrant and embed when semantic routing is enabled). Returns OK when the gateway can accept traffic.
       operationId: getReadyz
       security: []
       responses:

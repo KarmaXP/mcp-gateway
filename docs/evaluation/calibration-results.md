@@ -13,7 +13,7 @@ Empty cells are normal until you complete a calibration run.
 | Date (UTC) | |
 | Gateway commit | |
 | Environment (host / Docker / CI) | |
-| Catalog source (`PHASE2_CATALOG_PATH` or default `b1.2-catalog.json`) | |
+| Catalog source (`ROUTER_EVAL_CATALOG_PATH` or default `router-eval-catalog.json`) | |
 | Qdrant URL | |
 | Embed URL | |
 | Gateway mode (`ROUTER_MODE`) | |
@@ -27,7 +27,7 @@ Command:
 
 ```bash
 QDRANT_URL=http://127.0.0.1:6333 EMBED_URL=http://127.0.0.1:8001 \
- go test -tags=integration -race ./internal/router/eval -run TestPhase2VectorRecallMiniLM -v
+ go test -tags=integration -race ./internal/router/eval -run TestRouterEvalVectorRecallMiniLM -v
 ```
 
 | Metric | Value |
