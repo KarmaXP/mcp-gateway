@@ -1,0 +1,25 @@
+# Docker Compose variant of gateway.example.yaml (profile gateway + demo).
+# Mounted by deployments/docker-compose.yaml. Backends use Compose DNS (mock-alpha, mock-beta).
+# Host-native: use gateway.example.yaml + make demo-backends (127.0.0.1:3101/3102).
+
+backends:
+  - id: backend-alpha
+    prefix: alpha
+    url: http://mock-alpha:3101
+    max_concurrency: 8
+  - id: backend-beta
+    prefix: beta
+    url: http://mock-beta:3102
+    max_concurrency: 4
+
+router:
+  mode: off
+  top_k: 8
+  score_min: 0.35
+  hybrid_alpha: 0.2
+
+qdrant:
+  collection: mcp_tool_catalog
+
+embed:
+  url: http://embed:8001

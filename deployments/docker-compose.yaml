@@ -1,6 +1,8 @@
 # Local mcp-gateway stack: Qdrant, ONNX embed, OTel collector, Tempo, Prometheus, Grafana.
 # Default: dependencies only (make docker-up). Gateway container: profile gateway (make docker-up-full).
-# Profile demo: mock alpha/beta upstreams on 3101/3102 (make docker-up-demo); pair with make run on the host.
+# Profile demo: mock-alpha / mock-beta on 3101/3102 (make docker-up-demo).
+# Gateway container (profile gateway) reaches mocks by service name; use --profile demo with --profile gateway.
+# Host gateway + compose mocks: published 3101/3102 on localhost (see docs/DEVELOPER.md § Docker networking).
 # Profile sre: mock k8s/prom/gh upstreams on 3201–3203 (make docker-up-sre); pair with gateway.sre.example.yaml on host.
 # URLs: Grafana :3000 (admin/admin), Prometheus :9090, Qdrant :6333, embed :8001, gateway :8080 (profile).
 
@@ -245,12 +247,12 @@ services:
       PORT: "8080" # fixed in-container; map host with HOST_PORT_GATEWAY (ignore host .env PORT)
       AUTH_MODE: "${AUTH_MODE:-none}"
       MCP_GATEWAY_CONFIG: /etc/mcp-gateway/gateway.yaml
-      ROUTER_MODE: "${ROUTER_MODE:-assist_list}"
+      # router.mode comes from mounted gateway.yaml; set ROUTER_MODE in .env only to override.
       QDRANT_URL: http://qdrant:6333
       EMBED_URL: http://embed:8001
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     volumes:
-      - ./gateway.example.yaml:/etc/mcp-gateway/gateway.yaml:ro
+      - ./gateway.example.docker.yaml:/etc/mcp-gateway/gateway.yaml:ro
     ports:
       # Override: HOST_PORT_GATEWAY=9090
       - "${HOST_PORT_GATEWAY:-8080}:8080"
@@ -263,6 +265,12 @@ services:
         condition: service_healthy
       otel-collector:
         condition: service_healthy
+      mock-alpha:
+        condition: service_started
+        required: false
+      mock-beta:
+        condition: service_started
+        required: false
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz >/dev/null && wget -qO- http://localhost:8080/readyz >/dev/null || exit 1"]
       interval: 15s
