@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -188,6 +189,12 @@ func (c *GatewayConfig) Validate() error {
 	if c.SemanticRouter.HybridAlpha < 0 || c.SemanticRouter.HybridAlpha > 1 {
 		return fmt.Errorf("config: router.hybrid_alpha must be between 0 and 1")
 	}
+	if c.SemanticRouter.TopK < 0 {
+		return fmt.Errorf("config: router.top_k must be >= 0")
+	}
+	if c.SemanticRouter.ScoreMin < 0 || c.SemanticRouter.ScoreMin > 1 {
+		return fmt.Errorf("config: router.score_min must be between 0 and 1")
+	}
 	return nil
 }
 
@@ -204,25 +211,43 @@ func (c *GatewayConfig) ApplyEnvOverrides() {
 	}
 
 	if v := strings.TrimSpace(os.Getenv("ROUTER_MODE")); v != "" {
-		c.SemanticRouter.Mode = v
+		mode := strings.ToLower(v)
+		switch mode {
+		case "off", "on", "assist_list", "filter_list":
+			c.SemanticRouter.Mode = mode
+		default:
+			warnIgnoredEnv("ROUTER_MODE", v)
+		}
 	}
 	if v := os.Getenv("ROUTER_VECTOR_DIM"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+		n, err := strconv.Atoi(v)
+		if err != nil || n <= 0 {
+			warnIgnoredEnv("ROUTER_VECTOR_DIM", v)
+		} else {
 			c.SemanticRouter.VectorDim = n
 		}
 	}
 	if v := os.Getenv("ROUTER_TOP_K"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			warnIgnoredEnv("ROUTER_TOP_K", v)
+		} else {
 			c.SemanticRouter.TopK = n
 		}
 	}
 	if v := os.Getenv("ROUTER_SCORE_MIN"); v != "" {
-		if f, err := strconv.ParseFloat(v, 64); err == nil {
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			warnIgnoredEnv("ROUTER_SCORE_MIN", v)
+		} else {
 			c.SemanticRouter.ScoreMin = f
 		}
 	}
 	if v := strings.TrimSpace(os.Getenv("ROUTER_HYBRID_ALPHA")); v != "" {
-		if f, err := strconv.ParseFloat(v, 64); err == nil {
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			warnIgnoredEnv("ROUTER_HYBRID_ALPHA", v)
+		} else {
 			c.SemanticRouter.HybridAlpha = f
 		}
 	}
@@ -277,15 +302,25 @@ func (c *GatewayConfig) ApplyEnvOverrides() {
 		}
 	}
 	if v := strings.TrimSpace(os.Getenv("RATE_LIMIT_RPS")); v != "" {
-		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil || f <= 0 {
+			warnIgnoredEnv("RATE_LIMIT_RPS", v)
+		} else {
 			c.RateLimitCfg.RPS = f
 		}
 	}
 	if v := strings.TrimSpace(os.Getenv("RATE_LIMIT_BURST")); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+		n, err := strconv.Atoi(v)
+		if err != nil || n <= 0 {
+			warnIgnoredEnv("RATE_LIMIT_BURST", v)
+		} else {
 			c.RateLimitCfg.Burst = n
 		}
 	}
+}
+
+func warnIgnoredEnv(key, value string) {
+	slog.Warn("config: ignoring invalid environment value", "env", key, "value", value)
 }
 
 func (c *GatewayConfig) ForwardToolsListChanged() bool {

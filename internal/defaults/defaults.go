@@ -8,8 +8,9 @@ const (
 	RouterTopK = 8
 	RouterScoreMin = 0.35
 	ReindexEmbedBatchSize = 64
-	UpstreamMaxConcurrency     int64 = 8
+	UpstreamMaxConcurrency        int64 = 8
 	SessionOutboundChannelSize = 64
+	SessionOutboundEnqueueTimeout = 2 * time.Second
 	// SessionToolHistoryMax is the maximum successful tools/call names kept per SSE session for router context.
 	SessionToolHistoryMax = 8
 
@@ -63,6 +64,7 @@ var (
 	EmbedTCPKeepAlive = 30 * time.Second
 
 	DefaultJWKSCacheTTL = 5 * time.Minute
+	JWKSStartupWarmupTimeout = 15 * time.Second
 
 	OTLPMetricExportInterval = 15 * time.Second
 
@@ -70,4 +72,5 @@ var (
 
 	DefaultRateLimitRPS = 100
 	DefaultRateLimitBurst = 200
+	RateLimitBucketIdleTTL = 30 * time.Minute
 )

@@ -48,6 +48,23 @@ func TestLoadGatewayExampleYAML(t *testing.T) {
 	require.Equal(t, "http://127.0.0.1:3102", cfg.Upstreams[1].URL)
 }
 
+func TestLoadGatewayExampleDockerYAML(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", ".."))
+	dockerPath := filepath.Join(repoRoot, "deployments", "gateway.example.docker.yaml")
+	_, err := os.Stat(dockerPath)
+	require.NoError(t, err)
+
+	t.Setenv("MCP_GATEWAY_CONFIG", dockerPath)
+	t.Setenv("MCP_GATEWAY_BACKENDS", "")
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Len(t, cfg.Upstreams, 2)
+	require.Equal(t, "http://mock-alpha:3101", cfg.Upstreams[0].URL)
+	require.Equal(t, "http://mock-beta:3102", cfg.Upstreams[1].URL)
+}
+
 func TestLoadGatewaySREExampleYAML(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	require.True(t, ok)

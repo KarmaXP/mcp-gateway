@@ -17,6 +17,7 @@ func TestLoadAllPlugAndPlayGatewayYAML(t *testing.T) {
 	files := []string{
 		"gateway.demo.yaml",
 		"gateway.example.yaml",
+		"gateway.example.docker.yaml",
 		"gateway.sre.example.yaml",
 	}
 	for _, name := range files {
