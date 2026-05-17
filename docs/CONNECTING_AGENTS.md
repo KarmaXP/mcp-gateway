@@ -1,0 +1,318 @@
+# Connecting agents and MCP hosts
+
+This guide explains how any **MCP host** (IDE, script, or multi-step agent framework) talks to the gateway. The gateway is not an LLM; it multiplexes MCP traffic to your [backends](ADDING_BACKENDS.md).
+
+**Contract reference:** [OpenAPI](artifacts/openapi/openapi.yaml) (authoritative for HTTP status, headers, and errors).
+
+---
+
+## Roles
+
+```mermaid
+flowchart LR
+ host[MCP host / agent]
+ gw[mcp-gateway]
+ k8s[k8s MCP]
+ prom[prom MCP]
+ gh[gh MCP]
+ other[other backends…]
+
+ host <-->|SSE + POST /mcp/rpc| gw
+ gw <-->|prefix__ tools| k8s
+ gw <-->|prefix__ tools| prom
+ gw <-->|prefix__ tools| gh
+ gw <-->|prefix__ tools| other
+```
+
+| Role | Responsibility |
+|------|----------------|
+| **Host / agent** | Reasoning, tool choice, session with the gateway (this doc). |
+| **Gateway** | Auth, merge catalogs, route ambiguous `tools/call`, forward RPCs. |
+| **Backend** | Real MCP tools (cluster API, metrics, GitHub, …). |
+
+In the intended SRE setup, a framework such as **LangGraph** acts as the host: one graph node issues MCP calls through the gateway URL. This repository does not ship a LangGraph project yet; the flow below is what you implement in your agent repo.
+
+---
+
+## Gateway URL
+
+| Environment | Base URL |
+|-------------|----------|
+| Local dev (`make run`) | `http://127.0.0.1:8080` |
+| Docker compose gateway profile | `http://127.0.0.1:${HOST_PORT_GATEWAY:-8080}` |
+
+Endpoints:
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/healthz` | Liveness |
+| `GET` | `/readyz` | Readiness (Qdrant/embed when router on) |
+| `GET` | `/mcp/sse` | Open session; read `Mcp-Session-Id` header |
+| `POST` | `/mcp/rpc` | Send one JSON-RPC message per request |
+
+---
+
+## Session flow (required)
+
+Every host must follow this sequence:
+
+1. **`GET /mcp/sse`** with `Accept: text/event-stream`. Keep the connection open.
+2. Read response header **`Mcp-Session-Id`** (UUID).
+3. **`POST /mcp/rpc`** with body `initialize` (include `id`). Read the **result on the SSE stream**, not in the POST body.
+4. **`POST /mcp/rpc`** notification `notifications/initialized` (no `id`).
+5. Call multiplexed methods (`tools/list`, `tools/call`, …) with the same `Mcp-Session-Id` on every POST.
+
+For each request that has an `id`:
+
+- POST returns **`202 Accepted`** (empty body).
+- Matching **`result` or `error`** arrives on SSE as `event: jsonrpc` with one JSON object in `data:`.
+
+Skipping step 4 causes **`HandshakeIncomplete` (-32001)** on later tool RPCs.
+
+```mermaid
+sequenceDiagram
+ participant Host as MCP host
+ participant GW as mcp-gateway
+ participant BE as Backends
+
+ Host->>GW: GET /mcp/sse
+ GW-->>Host: 200 + Mcp-Session-Id
+
+ Host->>GW: POST initialize (id=1)
+ GW-->>Host: 202 Accepted
+ GW-->>Host: SSE event jsonrpc (result id=1)
+
+ Host->>GW: POST notifications/initialized
+ GW-->>Host: 202 Accepted
+
+ Host->>GW: POST tools/list (id=2)
+ GW->>BE: fan-out list
+ BE-->>GW: catalogs
+ GW-->>Host: SSE result (merged tools)
+
+ Host->>GW: POST tools/call (id=3)
+ GW->>BE: forward native tool
+ BE-->>GW: result
+ GW-->>Host: SSE result (id=3)
+```
+
+---
+
+## Request headers
+
+| Header | When | Purpose |
+|--------|------|---------|
+| `Mcp-Session-Id` | Every `POST /mcp/rpc` | Must match the SSE session from step 1. |
+| `Content-Type: application/json` | Every POST | JSON-RPC body. |
+| `Authorization: Bearer <JWT>` | When `AUTH_MODE=jwt` | Required on SSE and POST. |
+| `X-MCP-Intent` | Optional on POST | Natural-language hint for semantic router / `filter_list` tools/list. |
+| `X-Agent-Tokens-Used` | Optional on POST | Non-negative int; recorded on trace `mcp.agent.tokens_used`. |
+| `traceparent` / `tracestate` | Optional | W3C trace propagation to upstreams. |
+
+---
+
+## Quick test with the included host client
+
+The repo ships a minimal MCP host in Go (not an LLM agent):
+
+```bash
+# Terminal 1: gateway + backends
+make demo-backends
+MCP_GATEWAY_CONFIG=deployments/gateway.example.yaml AUTH_MODE=none make run
+
+# Terminal 2: host client
+GATEWAY_URL=http://127.0.0.1:8080 \
+ TOOL_NAME=alpha__echo \
+ go run ./scripts/mcp_host_demo
+```
+
+Details: [`scripts/mcp_host_demo/README.md`](../scripts/mcp_host_demo/README.md).
+
+Smoke scripts (curl-based): `scripts/smoke_test.sh`, `scripts/smoke_e2e.sh`, `make sre-smoke`.
+
+---
+
+## Auth (`AUTH_MODE=jwt`)
+
+1. Set `AUTH_MODE=jwt` and configure `JWT_PUBLIC_KEY_PEM` or `JWT_JWKS_URL` (see `.env.example`).
+2. Send `Authorization: Bearer <token>` on **both** `GET /mcp/sse` and every `POST /mcp/rpc`.
+3. Restrict tools with JWT claims:
+  - `mcp_tools`: array of namespaced tool ids, e.g. `["k8s__get_pod_logs"]`
+  - `authorization_details`: RAR-style entries (see [ADR 0003](adr/0003-security-rar-jwt-merge-failmode.md))
+  - `mcp_tool_groups`: expanded via `policy.tool_groups` in gateway YAML
+
+`tools/call` on a tool not in the allow-list returns **`PermissionDenied` (-32003)**.
+
+Local dev without auth: `AUTH_MODE=none` (default in examples).
+
+---
+
+## Semantic routing
+
+| `router.mode` / `ROUTER_MODE` | Host behavior |
+|-------------------------------|---------------|
+| `off` | Exact tool names only; full `tools/list`. |
+| `on` / `assist_list` | Full `tools/list`; router may rewrite ambiguous `tools/call` names. |
+| `filter_list` | Narrowed `tools/list` when `X-MCP-Intent` is set. |
+
+Requires `QDRANT_URL` and embed sidecar (`make docker-up`). See [ADDING_BACKENDS.md](ADDING_BACKENDS.md) § Semantic router.
+
+**Exact names win:** if the host sends `k8s__get_pod_logs` exactly, the gateway uses the deterministic path without vector search.
+
+---
+
+## SRE incident flow (target use case)
+
+With backends and mocks from [ADDING_BACKENDS.md](ADDING_BACKENDS.md):
+
+```bash
+make sre-up     # Qdrant + embed + k8s/prom/gh mocks
+make sre-smoke    # verifies three tools/call in one session
+```
+
+Typical agent sequence (same MCP session):
+
+```mermaid
+sequenceDiagram
+ participant Agent as Agent / LangGraph
+ participant GW as mcp-gateway
+
+ Note over Agent,GW: One SSE session (Mcp-Session-Id)
+
+ Agent->>GW: tools/list
+ GW-->>Agent: k8s__*, prom__*, gh__*
+
+ Agent->>GW: tools/call k8s__get_pod_logs
+ GW-->>Agent: pod logs
+
+ Agent->>GW: tools/call prom__query_instant
+ GW-->>Agent: metrics
+
+ Agent->>GW: tools/call gh__list_prs
+ GW-->>Agent: pull requests
+```
+
+Walkthrough and traces: [evaluation/scenario-sre-multibackend.md](evaluation/scenario-sre-multibackend.md).
+
+Canonical tool names: `k8s__get_pod_logs`, `prom__query_instant`, `gh__list_prs` (see [local-ports.md](local-ports.md)).
+
+---
+
+## Integrating LangGraph (or similar frameworks)
+
+There is **no LangGraph app in this repository** yet. Integrate in **your agent project** by treating the gateway as a remote MCP server:
+
+### 1. Configuration
+
+```bash
+export MCP_GATEWAY_URL=http://127.0.0.1:8080
+export MCP_GATEWAY_CONFIG=deployments/gateway.sre.example.yaml # on gateway process only
+```
+
+### 2. MCP client in the graph
+
+Use any MCP client library that supports:
+
+- Long-lived SSE (or your stack’s equivalent stream)
+- POST per JSON-RPC message
+- Session header `Mcp-Session-Id`
+
+Wire one **tool node** (or shared client) to:
+
+- Base URL = gateway
+- Tool names = **namespaced** ids from `tools/list` (`k8s__get_pod_logs`, not `get_pod_logs`)
+
+### 3. Multi-agent layout (recommended pattern)
+
+```mermaid
+flowchart TB
+ eng[On-call engineer]
+ coord[Coordinator agent]
+ diag[Diagnostics agent]
+ chg[Change / release agent]
+ gw[mcp-gateway]
+
+ eng --> coord
+ coord --> gw
+ diag --> gw
+ chg --> gw
+ gw --> k8s[k8s backend]
+ gw --> prom[prom backend]
+ gw --> gh[gh backend]
+```
+
+| Agent node | Typical tools (via gateway) |
+|------------|----------------------------|
+| Coordinator | `tools/list`, delegates sub-goals |
+| Diagnostics | `k8s__*`, `prom__*` |
+| Change / release | `gh__*` |
+
+All nodes share the **same gateway URL**; JWT/RAR can scope each principal to different `mcp_tools` if needed.
+
+### 4. Intent header
+
+For ambiguous natural-language tool selection, set on `tools/call` (and `filter_list` `tools/list`):
+
+```http
+X-MCP-Intent: high error rate on checkout service after deploy
+```
+
+### 5. Pseudocode shape
+
+```python
+# Illustrative: adapt to your MCP SDK
+session = mcp_client.connect_sse(f"{GATEWAY_URL}/mcp/sse", headers=auth_headers)
+session.initialize()
+session.notify_initialized()
+tools = session.tools_list()
+result = session.tools_call(
+  name="k8s__get_pod_logs",
+  arguments={"namespace": "prod", "pod": "checkout-0"},
+  extra_headers={"X-MCP-Intent": user_message},
+)
+```
+
+### 6. Verify before LangGraph
+
+1. `make sre-smoke`, gateway + mocks without an LLM.
+2. `go run ./scripts/mcp_host_demo`, minimal host client.
+3. Then point LangGraph at the same `GATEWAY_URL`.
+
+---
+
+## Other hosts (Cursor, Claude Desktop, custom apps)
+
+Any client that speaks this gateway’s HTTP+SSE MCP binding can connect:
+
+1. Register the gateway URL in the host’s MCP server settings.
+2. Provide JWT if required.
+3. Use namespaced tool names from `tools/list`.
+
+Exact UI steps depend on the product; the wire contract is in [OpenAPI](artifacts/openapi/openapi.yaml).
+
+---
+
+## Troubleshooting
+
+See also the **[error reference](errors.md)** for HTTP status codes and JSON-RPC codes.
+
+| Symptom | Likely cause |
+|---------|----------------|
+| `-32001` HandshakeIncomplete | Missing `notifications/initialized`. |
+| `404` on POST | Wrong or expired `Mcp-Session-Id`. |
+| `401` | JWT missing/invalid or policy merge failed. |
+| `-32003` PermissionDenied | Tool not in JWT/RAR allow-list. |
+| `-32004` ToolRoutingAmbiguous | Router could not pick one tool; use exact name or clearer `X-MCP-Intent`. |
+| Empty `tools/list` entry | Backend down or returned `MethodNotFound` for list. |
+| POST `202` but no SSE result | SSE connection closed or not read in parallel. |
+
+---
+
+## Related docs
+
+- [ADDING_BACKENDS.md](ADDING_BACKENDS.md)
+- [configuration.md](configuration.md)
+- [errors.md](errors.md)
+- [mcp-capabilities.md](mcp-capabilities.md)
+- [DEVELOPER.md](DEVELOPER.md)
+- [README.md](README.md): documentation index

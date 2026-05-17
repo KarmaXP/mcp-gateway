@@ -1,0 +1,54 @@
+# Documentation index
+
+Start with the [repository README](../README.md), then use this map.
+
+## Getting started
+
+| Goal | Document |
+|------|----------|
+| Run the gateway locally in one command | [README § Quick start](../README.md) |
+| Understand local ports and example configs | [local-ports.md](local-ports.md) |
+| Register upstream MCP servers | [ADDING_BACKENDS.md](ADDING_BACKENDS.md) |
+| Connect an IDE, script, or agent | [CONNECTING_AGENTS.md](CONNECTING_AGENTS.md) |
+
+## Reference
+
+| Goal | Document |
+|------|----------|
+| Environment variables and YAML options | [configuration.md](configuration.md) |
+| JSON-RPC and HTTP error codes | [errors.md](errors.md) |
+| MCP methods (tools, resources, prompts) | [mcp-capabilities.md](mcp-capabilities.md) |
+| HTTP API contract (OpenAPI) | [artifacts/openapi/openapi.yaml](artifacts/openapi/openapi.yaml) |
+
+## Architecture
+
+| Goal | Document |
+|------|----------|
+| Overview and where to read next | [architecture/README.md](architecture/README.md) |
+| Full technical specification | [architecture/mcp_gateway.plan.md](architecture/mcp_gateway.plan.md) |
+| Design decisions (ADRs) | [adr/](adr/) |
+
+## Operations
+
+| Goal | Document |
+|------|----------|
+| Day-2 operations, observability, CI | [DEVELOPER.md](DEVELOPER.md) |
+| Docker Compose and deployment notes | [deployment.md](deployment.md) |
+| Router / latency measurement | [evaluation/calibration-run.md](evaluation/calibration-run.md) |
+
+## Walkthroughs and test scenarios
+
+| Scenario | Document |
+|----------|----------|
+| Index of evaluation guides | [evaluation/README.md](evaluation/README.md) |
+| Multi-backend SRE routing | [evaluation/scenario-sre-multibackend.md](evaluation/scenario-sre-multibackend.md) |
+| JWT tool allow-list | [evaluation/scenario-jwt-allowlist.md](evaluation/scenario-jwt-allowlist.md) |
+| Backend unavailable | [evaluation/scenario-backend-down.md](evaluation/scenario-backend-down.md) |
+
+## Tools in the repo
+
+| Tool | Location |
+|------|----------|
+| Minimal MCP host client | [scripts/mcp_host_demo/README.md](../scripts/mcp_host_demo/README.md) |
+| MCP smoke (curl) | `make demo`, `scripts/smoke_test.sh` |
+| Load testing | [scripts/loadtest/README.md](../scripts/loadtest/README.md) |
