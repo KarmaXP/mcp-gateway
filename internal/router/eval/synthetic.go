@@ -32,6 +32,10 @@ func SyntheticCatalog() []router.IndexedTool {
 		{"logs", "saved_searches", "List saved centralized log searches used in on call runbooks", []string{"team"}},
 		{"logs", "pipelines", "List centralized log processing pipelines and drop filter configuration", []string{"environment"}},
 		{"logs", "ingestion_health", "Show centralized log ingestion lag and dropped record counters by source", []string{"source", "start", "end"}},
+		{"gh", "list_prs", "List GitHub pull requests for a repository to correlate deploys with incidents", []string{"owner", "repo", "state", "limit"}},
+		{"gh", "get_pr", "Get GitHub pull request details including checks and merge state", []string{"owner", "repo", "number"}},
+		{"gh", "list_issues", "List GitHub issues filtered by labels and state for incident triage", []string{"owner", "repo", "labels", "state"}},
+		{"gh", "search_code", "Search GitHub code in a repository for error strings and stack trace tokens", []string{"owner", "repo", "query"}},
 	}
 	out := make([]router.IndexedTool, 0, len(rows))
 	for _, r := range rows {
