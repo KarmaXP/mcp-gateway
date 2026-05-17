@@ -1,5 +1,7 @@
 # Local mcp-gateway stack: Qdrant, ONNX embed, OTel collector, Tempo, Prometheus, Grafana.
 # Default: dependencies only (make docker-up). Gateway container: profile gateway (make docker-up-full).
+# Profile demo: mock alpha/beta upstreams on 3101/3102 (make docker-up-demo); pair with make run on the host.
+# Profile sre: mock k8s/prom/gh upstreams on 3201–3203 (make docker-up-sre); pair with gateway.sre.example.yaml on host.
 # URLs: Grafana :3000 (admin/admin), Prometheus :9090, Qdrant :6333, embed :8001, gateway :8080 (profile).
 
 name: mcp-gateway
@@ -158,6 +160,76 @@ services:
       retries: 5
       start_period: 20s
 
+  mock-alpha:
+    profiles: ["demo"]
+    build:
+      context: ..
+      dockerfile: deployments/mock-mcp/Dockerfile
+    image: mcp-gateway-mock:dev
+    container_name: mcp-gateway-mock-alpha
+    restart: unless-stopped
+    command: ["-listen", "0.0.0.0:3101", "-tools", "echo", "-marker", "alpha-ok", "-name", "alpha-upstream"]
+    ports:
+      - "${HOST_PORT_MOCK_ALPHA:-3101}:3101"
+    networks:
+      - mcp-gateway-net
+
+  mock-beta:
+    profiles: ["demo"]
+    build:
+      context: ..
+      dockerfile: deployments/mock-mcp/Dockerfile
+    image: mcp-gateway-mock:dev
+    container_name: mcp-gateway-mock-beta
+    restart: unless-stopped
+    command: ["-listen", "0.0.0.0:3102", "-tools", "echo,ping", "-marker", "beta-ok", "-name", "beta-upstream"]
+    ports:
+      - "${HOST_PORT_MOCK_BETA:-3102}:3102"
+    networks:
+      - mcp-gateway-net
+
+  mock-k8s:
+    profiles: ["sre"]
+    build:
+      context: ..
+      dockerfile: deployments/mock-mcp/Dockerfile
+    image: mcp-gateway-mock:dev
+    container_name: mcp-gateway-mock-k8s
+    restart: unless-stopped
+    command: ["-listen", "0.0.0.0:3201", "-tools", "get_pod_logs,list_pods,describe_pod,list_events", "-marker", "k8s-ok", "-name", "k8s-upstream"]
+    ports:
+      - "${HOST_PORT_MOCK_K8S:-3201}:3201"
+    networks:
+      - mcp-gateway-net
+
+  mock-prom:
+    profiles: ["sre"]
+    build:
+      context: ..
+      dockerfile: deployments/mock-mcp/Dockerfile
+    image: mcp-gateway-mock:dev
+    container_name: mcp-gateway-mock-prom
+    restart: unless-stopped
+    command: ["-listen", "0.0.0.0:3202", "-tools", "query_instant,query_range,alerts,targets", "-marker", "prom-ok", "-name", "prom-upstream"]
+    ports:
+      - "${HOST_PORT_MOCK_PROM:-3202}:3202"
+    networks:
+      - mcp-gateway-net
+
+  mock-gh:
+    profiles: ["sre"]
+    build:
+      context: ..
+      dockerfile: deployments/mock-mcp/Dockerfile
+    image: mcp-gateway-mock:dev
+    container_name: mcp-gateway-mock-gh
+    restart: unless-stopped
+    command: ["-listen", "0.0.0.0:3203", "-tools", "list_prs,get_pr", "-marker", "gh-ok", "-name", "gh-upstream"]
+    ports:
+      - "${HOST_PORT_MOCK_GH:-3203}:3203"
+    networks:
+      - mcp-gateway-net
+
   # Gateway (profile gateway); local dev usually uses make run instead.
   gateway:
     profiles: ["gateway"]
@@ -180,7 +252,7 @@ services:
     volumes:
       - ./gateway.example.yaml:/etc/mcp-gateway/gateway.yaml:ro
     ports:
-      # Override: HOST_PORT_GATEWAY=18080
+      # Override: HOST_PORT_GATEWAY=9090
       - "${HOST_PORT_GATEWAY:-8080}:8080"
     networks:
       - mcp-gateway-net

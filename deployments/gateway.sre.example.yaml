@@ -1,0 +1,27 @@
+# SRE example: mocks on 3201–3203 (make sre-backends). Agents: docs/CONNECTING_AGENTS.md
+
+backends:
+  - id: backend-k8s
+    prefix: k8s
+    url: http://127.0.0.1:3201
+    max_concurrency: 8
+  - id: backend-prom
+    prefix: prom
+    url: http://127.0.0.1:3202
+    max_concurrency: 8
+  - id: backend-gh
+    prefix: gh
+    url: http://127.0.0.1:3203
+    max_concurrency: 4
+
+router:
+  mode: on
+  top_k: 8
+  score_min: 0.35
+  hybrid_alpha: 0.2
+
+qdrant:
+  collection: mcp_tool_catalog
+
+embed:
+  url: http://127.0.0.1:8001

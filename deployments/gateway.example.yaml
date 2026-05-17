@@ -1,5 +1,8 @@
 # Example MCP Gateway upstream table. Copy to gateway.yaml or set MCP_GATEWAY_CONFIG.
 #
+# Quick start: deployments/gateway.demo.yaml + make demo
+# Add backends: docs/ADDING_BACKENDS.md — mocks: make demo-backends (ports 3101/3102)
+#
 # Each backend uses either:
 #   - url: MCP server with GET /mcp/sse + POST /mcp/rpc (same contract as this gateway), or
 #   - command: stdio MCP server (newline-delimited JSON-RPC on stdin/stdout).
@@ -63,11 +66,11 @@
 backends:
   - id: backend-alpha
     prefix: alpha
-    url: http://127.0.0.1:3101
+    url: http://127.0.0.1:3101  # requires mock on 3101 (make demo-backends)
     max_concurrency: 8
   - id: backend-beta
     prefix: beta
-    url: http://127.0.0.1:3102
+    url: http://127.0.0.1:3102  # requires mock on 3102 (make demo-backends)
     max_concurrency: 4
   # - id: local-stdio
   #   prefix: demo
@@ -78,7 +81,7 @@ backends:
 # When mode is on, assist_list, or filter_list, set QDRANT_URL (and EMBED_URL) in the environment.
 router:
   mode: off
-  # B1.4 baseline pending B1.3 live calibration (internal/defaults + eval harness seed).
+  # Baseline hyperparameters; tune after calibration (docs/evaluation/calibration-run.md).
   top_k: 8
   score_min: 0.35
   hybrid_alpha: 0.2
