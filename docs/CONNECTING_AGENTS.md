@@ -141,7 +141,7 @@ Smoke scripts (curl-based): `scripts/smoke_test.sh`, `scripts/smoke_e2e.sh`, `ma
   - `authorization_details`: RAR-style entries (see [ADR 0003](adr/0003-security-rar-jwt-merge-failmode.md))
   - `mcp_tool_groups`: expanded via `policy.tool_groups` in gateway YAML
 
-`tools/call` on a tool not in the allow-list returns **`PermissionDenied` (-32003)**.
+`tools/call` on a tool not in the allow-list returns **`PermissionDenied` (-32003)** on the SSE stream, including when the semantic router is enabled (AuthZ on the **requested** name runs before routing).
 
 Local dev without auth: `AUTH_MODE=none` (default in examples).
 
@@ -152,12 +152,16 @@ Local dev without auth: `AUTH_MODE=none` (default in examples).
 | `router.mode` / `ROUTER_MODE` | Host behavior |
 |-------------------------------|---------------|
 | `off` | Exact tool names only; full `tools/list`. |
-| `on` / `assist_list` | Full `tools/list`; router may rewrite ambiguous `tools/call` names. |
-| `filter_list` | Narrowed `tools/list` when `X-MCP-Intent` is set. |
+| `on` / `assist_list` | Full `tools/list`; router may rewrite ambiguous `tools/call` names when `allow_auto_rename` is true. |
+| `filter_list` | Narrowed `tools/list` when `X-MCP-Intent` is set; degrades to full catalog when routing is unavailable (JWT filter still applies). |
 
-Requires `QDRANT_URL` and embed sidecar (`make docker-up`). See [ADDING_BACKENDS.md](ADDING_BACKENDS.md) § Semantic router.
+Requires `QDRANT_URL` and embed sidecar (`make docker-up`). Integration tests probe **`POST /embed`**, not only `/healthz`. See [ADDING_BACKENDS.md](ADDING_BACKENDS.md) § Semantic router.
 
 **Exact names win:** if the host sends `k8s__get_pod_logs` exactly, the gateway uses the deterministic path without vector search.
+
+**Allow-list vs rename:** with `allow_auto_rename: false` (default), a disallowed tool name is rejected with **-32003** even if the router would have picked another tool. With `allow_auto_rename: true`, AuthZ applies to the **resolved** tool name after routing.
+
+**Catalog change hints** (`notifications/tools/list_changed`) are best-effort on SSE; refresh with `tools/list` if a hint may have been dropped under load.
 
 ---
 

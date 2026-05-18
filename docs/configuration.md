@@ -42,7 +42,7 @@ Requires **`QDRANT_URL`** when `router.mode` / `ROUTER_MODE` is `on`, `assist_li
 | `ROUTER_TOP_K` / `top_k` | `8` | Vector search top-K |
 | `ROUTER_SCORE_MIN` / `score_min` | `0.35` | Minimum similarity threshold |
 | `ROUTER_HYBRID_ALPHA` / `hybrid_alpha` | `0.2` | BM25 rerank weight in hybrid score |
-| `ROUTER_ALLOW_AUTO_RENAME` / `allow_auto_rename` | `false` | Allow router to adjust tool name on call |
+| `ROUTER_ALLOW_AUTO_RENAME` / `allow_auto_rename` | `false` | When `true`, router may change the tool name on `tools/call` before upstream; JWT/RAR AuthZ runs on the **resolved** name. When `false`, a call for a disallowed name returns **-32003** before router rename errors (**-32004**). |
 | `ROUTER_VECTOR_DIM` / `vector_dim` | `384` | Embedding dimension (must match model) |
 | `embed_timeout`, `query_timeout` | see defaults package | Per-phase timeouts in YAML |
 
@@ -55,6 +55,10 @@ Requires **`QDRANT_URL`** when `router.mode` / `ROUTER_MODE` is `on`, `assist_li
 | `filter_list` | Subset when `X-MCP-Intent` is set | Same as `on` |
 
 Exact tool names skip vector search. See [Connecting agents § Semantic routing](CONNECTING_AGENTS.md#semantic-routing).
+
+**`filter_list` degradation:** if the catalog is stale, embed/query fails, or no tool clears `score_min`, the router returns the full merged catalog in memory; the gateway still applies JWT/RAR filtering on the response (`tools/list` never bypasses AuthZ).
+
+**SSE catalog notifications:** `notifications/tools/list_changed` (and resource/prompt variants) are delivered on a **best-effort** broadcast queue (bounded workers + queue). Under heavy load some sessions may miss a hint; hosts should refresh via `tools/list` when needed. Metrics: `mcp.gateway.session.broadcast_tasks_dropped`, `mcp.gateway.session.notifications_dropped`.
 
 ---
 
