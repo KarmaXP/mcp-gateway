@@ -86,7 +86,7 @@ func HTTPMiddleware(cfg JWTAuthConfig, v *Validator, pol *policy.Holder) func(ht
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
-			ctx2 := hostctx.WithAllowedToolNames(ctx, tools)
+			ctx2 := hostctx.AttachPolicyAllowList(ctx, tools)
 			if sub := claims.Subject(); sub != "" {
 				ctx2 = hostctx.WithSubjectID(ctx2, sub)
 			}

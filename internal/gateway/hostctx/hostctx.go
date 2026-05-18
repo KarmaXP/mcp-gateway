@@ -30,28 +30,81 @@ func ClientIntentFromContext(ctx context.Context) string {
 
 type allowedToolNamesKey struct{}
 
-// Namespaced tool ids the principal may call (from JWT and/or policy merge).
+// AllowListMode describes JWT/RAR merged allow-list propagation (ADR 0003 / SEC2).
+type AllowListMode int
+
+const (
+	// AllowListUnrestricted — no allow-list in context (SEC2, full catalog for principal).
+	AllowListUnrestricted AllowListMode = iota
+	// AllowListDenyAll — explicit empty intersection or empty policy list (deny every tool).
+	AllowListDenyAll
+	// AllowListRestricted — non-empty allow-list.
+	AllowListRestricted
+)
+
+type allowListState struct {
+	mode  AllowListMode
+	names []string
+}
+
+// AttachPolicyAllowList records the effective JWT/RAR allow list for this authenticated HTTP request.
+// toolNames nil ⇒ explicit unrestricted (overwrites a restricted parent on merge). Non-nil empty ⇒ deny-all.
+func AttachPolicyAllowList(parent context.Context, toolNames []string) context.Context {
+	if parent == nil {
+		parent = context.Background()
+	}
+	if toolNames == nil {
+		return context.WithValue(parent, allowedToolNamesKey{}, allowListState{mode: AllowListUnrestricted})
+	}
+	return WithAllowedToolNames(parent, toolNames)
+}
+
+// WithAllowedToolNames attaches the merged JWT/RAR allow list.
+// toolNames nil ⇒ unrestricted (no value stored). Non-nil empty slice ⇒ deny-all.
 func WithAllowedToolNames(parent context.Context, toolNames []string) context.Context {
 	if parent == nil {
 		parent = context.Background()
 	}
-	cp := normalizeAllowedToolNames(toolNames)
-	if len(cp) == 0 {
+	if toolNames == nil {
 		return parent
 	}
-	return context.WithValue(parent, allowedToolNamesKey{}, cp)
+	if len(toolNames) == 0 {
+		return context.WithValue(parent, allowedToolNamesKey{}, allowListState{mode: AllowListDenyAll})
+	}
+	cp := normalizeAllowedToolNames(toolNames)
+	if len(cp) == 0 {
+		return context.WithValue(parent, allowedToolNamesKey{}, allowListState{mode: AllowListDenyAll})
+	}
+	return context.WithValue(parent, allowedToolNamesKey{}, allowListState{
+		mode:  AllowListRestricted,
+		names: cp,
+	})
 }
 
-func AllowedToolNamesFromContext(ctx context.Context) []string {
+// AllowListModeFromContext returns how tools/list and tools/call should apply AuthZ.
+func AllowListModeFromContext(ctx context.Context) (AllowListMode, []string) {
 	if ctx == nil {
-		return nil
+		return AllowListUnrestricted, nil
 	}
-	tools, _ := ctx.Value(allowedToolNamesKey{}).([]string)
-	if len(tools) == 0 {
-		return nil
+	st, ok := ctx.Value(allowedToolNamesKey{}).(allowListState)
+	if !ok {
+		return AllowListUnrestricted, nil
 	}
-	out := append([]string(nil), tools...)
-	return out
+	switch st.mode {
+	case AllowListDenyAll:
+		return AllowListDenyAll, []string{}
+	case AllowListRestricted:
+		return AllowListRestricted, append([]string(nil), st.names...)
+	default:
+		return AllowListUnrestricted, nil
+	}
+}
+
+// AllowedToolNamesFromContext returns the allow-list slice for policy checks and router signals.
+// nil ⇒ unrestricted; non-nil empty ⇒ deny-all; otherwise a copy of restricted names.
+func AllowedToolNamesFromContext(ctx context.Context) []string {
+	_, names := AllowListModeFromContext(ctx)
+	return names
 }
 
 type subjectIDKey struct{}
@@ -106,11 +159,11 @@ func MergeRequestValues(parent, req context.Context) context.Context {
 		return parent
 	}
 	out := parent
-	if intent := ClientIntentFromContext(req); intent != "" {
-		out = WithClientIntent(out, intent)
+	if _, ok := req.Value(clientIntentKey{}).(string); ok {
+		out = WithClientIntent(out, ClientIntentFromContext(req))
 	}
-	if tools := AllowedToolNamesFromContext(req); len(tools) > 0 {
-		out = WithAllowedToolNames(out, tools)
+	if st, ok := req.Value(allowedToolNamesKey{}).(allowListState); ok {
+		out = context.WithValue(out, allowedToolNamesKey{}, st)
 	}
 	if sub := SubjectIDFromContext(req); sub != "" {
 		out = WithSubjectID(out, sub)
