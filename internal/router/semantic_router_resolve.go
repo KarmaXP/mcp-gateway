@@ -16,8 +16,20 @@ func (sr *SemanticRouter) ResolveToolsCall(ctx context.Context, sig RoutingSigna
 	if sr == nil || !sr.Enabled() {
 		return sig.ToolName, &RoutingDecision{FallbackLayer: "none", Outcome: OutcomeNone}, nil
 	}
+	if sig.AllowListAuthz == AllowListAuthzDenyAll {
+		return sig.ToolName, &RoutingDecision{FallbackLayer: "authz", Outcome: OutcomeNone}, nil
+	}
 	start := time.Now()
 	dec := &RoutingDecision{FallbackLayer: "vector"}
+
+	serverVer := sr.CatalogVersion()
+	if sig.CatalogVersion != "" && serverVer != "" && sig.CatalogVersion != serverVer {
+		decStale, err := sr.staleCatalogDecisionResult(sig, start)
+		return "", decStale, err
+	}
+	if serverVer != "" {
+		sig.CatalogVersion = serverVer
+	}
 
 	if decStale, err := sr.staleCatalogDecision(sig, start); err != nil {
 		return "", decStale, err
@@ -36,6 +48,10 @@ func (sr *SemanticRouter) staleCatalogDecision(sig RoutingSignal, start time.Tim
 	if sig.CatalogVersion == "" || sr.CatalogVersion() == "" || sig.CatalogVersion == sr.CatalogVersion() {
 		return nil, nil
 	}
+	return sr.staleCatalogDecisionResult(sig, start)
+}
+
+func (sr *SemanticRouter) staleCatalogDecisionResult(sig RoutingSignal, start time.Time) (*RoutingDecision, error) {
 	dec := &RoutingDecision{
 		FallbackLayer: "vector",
 		Outcome:       OutcomeMissStaleCatalog,
@@ -48,6 +64,14 @@ func (sr *SemanticRouter) routingAllowanceAndAlias(sig RoutingSignal) (allowed [
 	sr.mu.RLock()
 	rl = sr.rules
 	sr.mu.RUnlock()
+
+	if sig.AllowListAuthz == AllowListAuthzDenyAll {
+		filter = store.VectorSearchFilter{
+			CatalogVersion:   sr.CatalogVersion(),
+			AllowedToolNames: []string{},
+		}
+		return nil, sig.ToolName, filter, rl, true
+	}
 
 	allowed = append([]string(nil), sig.AllowedTools...)
 	if rl != nil {

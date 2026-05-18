@@ -18,9 +18,9 @@ func TestFilterToolsForListEmptyIntentReturnsFull(t *testing.T) {
 	cfg.Mode = ModeFilterList
 	sr := NewSemanticRouter(cfg, emb, st, dim)
 	row := index.ToolRow{Name: "pre__tool", Description: "d", ParamKeys: nil}
-	require.NoError(t, sr.Reindex(context.Background(), "v1", []IndexedTool{
+	reindexAndApply(t, sr, context.Background(), "v1", []IndexedTool{
 		{ToolRow: row, UpstreamID: "b1"},
-	}))
+	})
 	keep, full := sr.FilterToolsForList(context.Background(), RoutingSignal{IntentText: "   "})
 	require.Nil(t, keep)
 	require.True(t, full)
@@ -43,10 +43,10 @@ func TestFilterToolsForListSubsetsByIntent(t *testing.T) {
 	cfg.TopK = 4
 	cfg.ScoreMin = 0.99
 	sr := NewSemanticRouter(cfg, emb, st, dim)
-	require.NoError(t, sr.Reindex(context.Background(), "v1", []IndexedTool{
+	reindexAndApply(t, sr, context.Background(), "v1", []IndexedTool{
 		{ToolRow: t1, UpstreamID: "b1"},
 		{ToolRow: t2, UpstreamID: "b1"},
-	}))
+	})
 
 	q := index.FormatQuery("", "match first", nil)
 	emb.vecs[q] = []float32{1, 0, 0, 0}
@@ -69,9 +69,9 @@ func TestFilterToolsForListStaleCatalogReturnsFull(t *testing.T) {
 	cfg.Mode = ModeFilterList
 	sr := NewSemanticRouter(cfg, emb, st, dim)
 	row := index.ToolRow{Name: "pre__tool", Description: "d", ParamKeys: nil}
-	require.NoError(t, sr.Reindex(context.Background(), "v1", []IndexedTool{
+	reindexAndApply(t, sr, context.Background(), "v1", []IndexedTool{
 		{ToolRow: row, UpstreamID: "b1"},
-	}))
+	})
 	keep, full := sr.FilterToolsForList(context.Background(), RoutingSignal{
 		IntentText:     "any",
 		CatalogVersion: "stale-not-v1",
@@ -95,10 +95,10 @@ func TestFilterToolsForListScoreMinExcludesAllReturnsFull(t *testing.T) {
 	cfg.TopK = 4
 	cfg.ScoreMin = 1.01
 	sr := NewSemanticRouter(cfg, emb, st, dim)
-	require.NoError(t, sr.Reindex(context.Background(), "v1", []IndexedTool{
+	reindexAndApply(t, sr, context.Background(), "v1", []IndexedTool{
 		{ToolRow: t1, UpstreamID: "b1"},
 		{ToolRow: t2, UpstreamID: "b1"},
-	}))
+	})
 	q := index.FormatQuery("", "match first", nil)
 	emb.vecs[q] = []float32{1, 0, 0, 0}
 	keep, full := sr.FilterToolsForList(context.Background(), RoutingSignal{
@@ -126,10 +126,10 @@ func TestFilterToolsForListAllowedToolsRestrictsHits(t *testing.T) {
 	cfg.TopK = 4
 	cfg.ScoreMin = 0.5
 	sr := NewSemanticRouter(cfg, emb, st, dim)
-	require.NoError(t, sr.Reindex(context.Background(), "v1", []IndexedTool{
+	reindexAndApply(t, sr, context.Background(), "v1", []IndexedTool{
 		{ToolRow: t1, UpstreamID: "b1"},
 		{ToolRow: t2, UpstreamID: "b1"},
-	}))
+	})
 
 	q := index.FormatQuery("", "match first", nil)
 	emb.vecs[q] = []float32{1, 0, 0, 0}

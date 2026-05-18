@@ -10,6 +10,9 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 )
 
+// Reindex embeds tools and upserts vectors for version. It does not update the
+// in-memory catalog; the multiplexer must call ApplyCatalog after a successful
+// Reindex in the same critical section as its catVer bump.
 func (sr *SemanticRouter) Reindex(ctx context.Context, version string, tools []IndexedTool) error {
 	if sr == nil || !sr.Enabled() {
 		return nil
@@ -18,8 +21,16 @@ func (sr *SemanticRouter) Reindex(ctx context.Context, version string, tools []I
 		return err
 	}
 
-	prevVer := sr.CatalogVersion()
+	sr.reindexMu.Lock()
+	defer sr.reindexMu.Unlock()
 
+	_, err, _ := sr.reindexFlight.Do(version, func() (any, error) {
+		return nil, sr.reindexLocked(ctx, version, tools)
+	})
+	return err
+}
+
+func (sr *SemanticRouter) reindexLocked(ctx context.Context, version string, tools []IndexedTool) error {
 	docs := sr.formatToolDocuments(tools)
 	allEmbeddings, err := sr.embedDocumentsInBatches(ctx, docs)
 	if err != nil {
@@ -37,14 +48,28 @@ func (sr *SemanticRouter) Reindex(ctx context.Context, version string, tools []I
 		return fmt.Errorf("router: upsert: %w", err)
 	}
 
+	slog.InfoContext(ctx, "router catalog vectors upserted", "catalog_version", version, "tools", len(tools))
+	return nil
+}
+
+// ApplyCatalog swaps the in-memory catalog to version/tools. The multiplexer
+// must call this in the same critical section as its catVer update so clients
+// never observe mux.catVer ahead of (or behind) sr.catalogVer.
+func (sr *SemanticRouter) ApplyCatalog(ctx context.Context, version string, tools []IndexedTool) {
+	if sr == nil || !sr.Enabled() || version == "" {
+		return
+	}
+
+	prevVer := sr.CatalogVersion()
+	docs := sr.formatToolDocuments(tools)
 	sr.replaceCatalogLocked(version, tools, docs)
-	if prevVer != "" && prevVer != version {
+
+	if prevVer != "" && prevVer != version && sr.st != nil {
 		if err := sr.st.DeleteCatalogVersion(ctx, prevVer); err != nil {
 			slog.WarnContext(ctx, "router delete old catalog version failed", "version", prevVer, "err", err)
 		}
 	}
-	slog.InfoContext(ctx, "router catalog reindexed", "catalog_version", version, "tools", len(tools))
-	return nil
+	slog.InfoContext(ctx, "router catalog applied", "catalog_version", version, "tools", len(tools))
 }
 
 func (sr *SemanticRouter) validateReindexPreconditions(version string) error {

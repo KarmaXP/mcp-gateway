@@ -37,10 +37,10 @@ func TestReindexDeletesPreviousCatalogVersion(t *testing.T) {
 	sr := NewSemanticRouter(cfg, emb, st, 4)
 
 	toolsV1 := []IndexedTool{{ToolRow: index.ToolRow{Name: "a__one", Description: "one"}, UpstreamID: "b1"}}
-	require.NoError(t, sr.Reindex(ctx, "v1", toolsV1))
+	reindexAndApply(t, sr, ctx, "v1", toolsV1)
 
 	toolsV2 := []IndexedTool{{ToolRow: index.ToolRow{Name: "a__two", Description: "two"}, UpstreamID: "b1"}}
-	require.NoError(t, sr.Reindex(ctx, "v2", toolsV2))
+	reindexAndApply(t, sr, ctx, "v2", toolsV2)
 
 	hits, err := st.Query(ctx, []float32{1, 0, 0, 0}, 4, store.VectorSearchFilter{CatalogVersion: "v1"})
 	require.NoError(t, err)

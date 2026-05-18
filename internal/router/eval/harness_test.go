@@ -30,7 +30,9 @@ func TestRouterEvalVectorRecallLexical(t *testing.T) {
 	sr := router.NewSemanticRouter(cfg, emb, st, dim)
 
 	cat := SyntheticCatalog()
-	require.NoError(t, sr.Reindex(ctx, "eval-v1", cat))
+	catVer := "eval-v1"
+	require.NoError(t, sr.Reindex(ctx, catVer, cat))
+	sr.ApplyCatalog(ctx, catVer, cat)
 	ver := sr.CatalogVersion()
 	require.Equal(t, "eval-v1", ver)
 
@@ -68,7 +70,10 @@ func TestRouterEvalEmbedAndQueryP95(t *testing.T) {
 	cfg.ScoreMin = 0.08
 	cfg.AllowAutoRename = true
 	sr := router.NewSemanticRouter(cfg, emb, st, dim)
-	require.NoError(t, sr.Reindex(ctx, "eval-v1", SyntheticCatalog()))
+	catVer := "eval-v1"
+	catalog := SyntheticCatalog()
+	require.NoError(t, sr.Reindex(ctx, catVer, catalog))
+	sr.ApplyCatalog(ctx, catVer, catalog)
 	ver := sr.CatalogVersion()
 
 	cases := GoldenCases()
@@ -104,7 +109,10 @@ func TestRouterEvalSiloNarrowingRespectsAllowedTools(t *testing.T) {
 	cfg.AllowAutoRename = true
 	sr := router.NewSemanticRouter(cfg, emb, st, dim)
 	sr.SetRules(rules.New(nil, map[string]string{"kubernetes": "k8s"}))
-	require.NoError(t, sr.Reindex(ctx, "eval-v2", SyntheticCatalog()))
+	catVer := "eval-v2"
+	catalog := SyntheticCatalog()
+	require.NoError(t, sr.Reindex(ctx, catVer, catalog))
+	sr.ApplyCatalog(ctx, catVer, catalog)
 	ver := sr.CatalogVersion()
 
 	sig := router.RoutingSignal{
@@ -131,7 +139,10 @@ func TestGoldenCasesMRRAndNDCG(t *testing.T) {
 	cfg.AllowAutoRename = true
 	sr := router.NewSemanticRouter(cfg, emb, st, dim)
 
-	require.NoError(t, sr.Reindex(ctx, "eval-v1", SyntheticCatalog()))
+	catVer := "eval-v1"
+	catalog := SyntheticCatalog()
+	require.NoError(t, sr.Reindex(ctx, catVer, catalog))
+	sr.ApplyCatalog(ctx, catVer, catalog)
 	ver := sr.CatalogVersion()
 	cases := GoldenCases()
 

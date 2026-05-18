@@ -54,7 +54,7 @@ func TestSemanticRouterStoreQueryFails(t *testing.T) {
 	cfg.TopK = testRouterTopK
 	cfg.ScoreMin = testRouterMinHit
 	sr := NewSemanticRouter(cfg, emb, st, dim)
-	require.NoError(t, sr.Reindex(context.Background(), "v1", []IndexedTool{{ToolRow: row, UpstreamID: "b1"}}))
+	reindexAndApply(t, sr, context.Background(), "v1", []IndexedTool{{ToolRow: row, UpstreamID: "b1"}})
 
 	_, dec, err := sr.ResolveToolsCall(context.Background(), RoutingSignal{ToolName: "typo"})
 	require.Error(t, err)

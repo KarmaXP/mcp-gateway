@@ -49,9 +49,9 @@ func TestResolveToolsCallSiloNarrowedZeroToolsSkipsVectorSearch(t *testing.T) {
 	cfg.ScoreMin = 0.5
 	sr := NewSemanticRouter(cfg, emb, st, dim)
 	sr.SetRules(rules.New(nil, map[string]string{"kubernetes": "k8s"}))
-	require.NoError(t, sr.Reindex(context.Background(), "v1", []IndexedTool{
+	reindexAndApply(t, sr, context.Background(), "v1", []IndexedTool{
 		{ToolRow: aws, UpstreamID: "b1"},
-	}))
+	})
 
 	_, dec, err := sr.ResolveToolsCall(context.Background(), RoutingSignal{
 		ToolName:   "wrong__tool",

@@ -41,8 +41,8 @@ func TestSemanticVectorRoutingWithQdrantAndMiniLM(t *testing.T) {
 
 	skipUnlessIntegrationDeps(t, probeURL(ctx, qURL+"/collections"),
 		"Qdrant not reachable at %s — start compose (qdrant service)", qURL)
-	skipUnlessIntegrationDeps(t, probeURL(ctx, embURL+"/healthz"),
-		"embed service not reachable at %s (compose maps embed to host port 8001 by default)", embURL)
+	skipUnlessIntegrationDeps(t, probeEmbedService(ctx, embURL),
+		"embed service not reachable at %s — need POST /embed (healthz alone is insufficient; start compose embed on port 8001)", embURL)
 
 	coll := integrationQdrantCollectionPrefix + strings.ReplaceAll(uuid.NewString(), "-", "_")
 	st, err := store.NewQdrantVectorStore(qURL, coll, defaults.VectorDimension)
@@ -76,7 +76,7 @@ func TestSemanticVectorRoutingWithQdrantAndMiniLM(t *testing.T) {
 	require.NoError(t, err)
 
 	ver := "itest-" + uuid.NewString()
-	require.NoError(t, sr.Reindex(ctx, ver, indexed))
+	reindexAndApply(t, sr, ctx, ver, indexed)
 
 	tool, dec, err := sr.ResolveToolsCall(ctx, RoutingSignal{
 		ToolName:   "repeat user text back to them",
@@ -101,6 +101,14 @@ func probeURL(ctx context.Context, u string) bool {
 	}
 	_ = res.Body.Close()
 	return res.StatusCode < http.StatusInternalServerError
+}
+
+func probeEmbedService(ctx context.Context, embURL string) bool {
+	ctx, cancel := context.WithTimeout(ctx, integrationProbeTimeout)
+	defer cancel()
+	c := embed.NewClient(embURL)
+	_, err := c.Embed(ctx, []string{"integration probe"})
+	return err == nil
 }
 
 func skipUnlessIntegrationDeps(t *testing.T, ok bool, format string, args ...any) {

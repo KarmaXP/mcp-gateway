@@ -7,6 +7,8 @@ import (
 	"sort"
 	"sync"
 
+	"golang.org/x/sync/singleflight"
+
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/namespace"
 	"github.com/KarmaXP/mcp-gateway/internal/router/bm25"
@@ -42,6 +44,9 @@ type SemanticRouter struct {
 	toolDoc        map[string]string
 
 	rules *rules.Rules
+
+	reindexMu     sync.Mutex
+	reindexFlight singleflight.Group
 }
 
 func NewSemanticRouter(cfg SemanticRouterRuntimeConfig, e embed.Embedder, st store.Store, vectorDim int) *SemanticRouter {
@@ -70,6 +75,10 @@ func (sr *SemanticRouter) SetRules(r *rules.Rules) {
 
 func (sr *SemanticRouter) Enabled() bool {
 	return sr != nil && sr.cfg.Mode != ModeOff
+}
+
+func (sr *SemanticRouter) AllowAutoRename() bool {
+	return sr != nil && sr.cfg.AllowAutoRename
 }
 
 func (sr *SemanticRouter) CatalogVersion() string {

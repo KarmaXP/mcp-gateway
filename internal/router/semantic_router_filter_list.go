@@ -21,6 +21,9 @@ func (sr *SemanticRouter) FilterToolsForList(ctx context.Context, sig RoutingSig
 	if sr == nil || !sr.FilterListActive() {
 		return nil, true
 	}
+	if sig.AllowListAuthz == AllowListAuthzDenyAll {
+		return map[string]struct{}{}, false
+	}
 	if strings.TrimSpace(sig.IntentText) == "" {
 		return nil, true
 	}

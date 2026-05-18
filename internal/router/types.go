@@ -29,6 +29,15 @@ const (
 	OutcomeMissStoreError       RoutingOutcome = "miss_store_error"
 )
 
+// AllowListAuthz mirrors gateway hostctx allow-list modes (no hostctx import in router).
+type AllowListAuthz int
+
+const (
+	AllowListAuthzUnrestricted AllowListAuthz = iota
+	AllowListAuthzDenyAll
+	AllowListAuthzRestricted
+)
+
 type RoutingSignal struct {
 	SessionID       string
 	Method          string
@@ -36,6 +45,7 @@ type RoutingSignal struct {
 	ArgumentsJSON   json.RawMessage
 	IntentText      string
 	AllowedTools    []string
+	AllowListAuthz  AllowListAuthz
 	CatalogVersion  string
 	RecentToolNames []string
 }
