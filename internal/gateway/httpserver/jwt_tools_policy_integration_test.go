@@ -165,3 +165,147 @@ func TestIntegrationJWTPermissionDeniedSkipsBackend(t *testing.T) {
 	cancelSSE()
 	wg.Wait()
 }
+
+// TestIntegrationJWTEmptyIntersectionDenyAll verifies disjoint JWT mcp_tools and RAR tool_name
+// yields deny-all: tools/list is empty on SSE and tools/call is -32003 without forwarding to upstream.
+func TestIntegrationJWTEmptyIntersectionDenyAll(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in -short mode")
+	}
+
+	priv, pubPEM := testRSAKeyPair(t)
+	const iss = "https://p1.integration.denyall.test"
+	const aud = "mcp-gateway-p1-denyall"
+
+	ad, err := json.Marshal([]map[string]any{
+		{"type": "mcp_tool", "tool_name": "beta__other"},
+	})
+	require.NoError(t, err)
+
+	claims := &auth.TokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    iss,
+			Audience:  jwt.ClaimStrings{aud},
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(2 * time.Hour)),
+		},
+		McpTools:             []string{"alpha__echo"},
+		AuthorizationDetails: ad,
+	}
+	token := signTokenClaims(t, priv, claims)
+
+	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo", "other"})
+	b2 := mock.NewMockUpstream("b2", "beta", []string{"other"})
+	agg, err := multiplex.New([]backend.Upstream{b1, b2}, multiplex.WithListTTL(0))
+	require.NoError(t, err)
+
+	authCfg := auth.JWTAuthConfig{
+		Mode:         "jwt",
+		Issuer:       iss,
+		Audience:     aud,
+		PublicKeyPEM: pubPEM,
+	}
+	v, err := auth.NewValidator(authCfg)
+	require.NoError(t, err)
+
+	opts := orchestrator.HTTPServerOptions("mcp-gateway-p1-denyall-it", authCfg, v, policy.NewHolder(policy.NewEngine(config.PolicySettings{})), ratelimit.Config{})
+	srv := httpserver.New(agg, "", opts...)
+	ts := httptest.NewServer(srv.AsHandler())
+	defer ts.Close()
+
+	ctx, cancelSSE := context.WithCancel(context.Background())
+	defer cancelSSE()
+	client := ts.Client()
+
+	sseReq, err := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+httpserver.PathMCPSSE, nil)
+	require.NoError(t, err)
+	sseReq.Header.Set("Authorization", "Bearer "+token)
+	sseResp, err := client.Do(sseReq)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, sseResp.StatusCode)
+	sid := sseResp.Header.Get(httpserver.HeaderMCPSessionID)
+	require.NotEmpty(t, sid)
+
+	dataCh := make(chan string, 8)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer sseResp.Body.Close()
+		br := bufio.NewReader(sseResp.Body)
+		for {
+			line, err := br.ReadString('\n')
+			if err != nil {
+				return
+			}
+			if strings.HasPrefix(line, "data: ") {
+				dataCh <- strings.TrimSpace(strings.TrimPrefix(line, "data: "))
+			}
+		}
+	}()
+
+	post := func(jsonBody string) {
+		req, err := http.NewRequest(http.MethodPost, ts.URL+httpserver.PathMCPRPC, strings.NewReader(jsonBody))
+		require.NoError(t, err)
+		req.Header.Set(httpserver.HeaderMCPSessionID, sid)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		pr, err := client.Do(req)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusAccepted, pr.StatusCode)
+		_, _ = io.Copy(io.Discard, pr.Body)
+		require.NoError(t, pr.Body.Close())
+	}
+
+	post(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}`)
+	select {
+	case d := <-dataCh:
+		var jr rpc.Response
+		require.NoError(t, json.Unmarshal([]byte(d), &jr))
+		require.Nil(t, jr.Error)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout initialize")
+	}
+
+	post(`{"jsonrpc":"2.0","method":"notifications/initialized"}`)
+
+	post(`{"jsonrpc":"2.0","id":3,"method":"tools/list"}`)
+	select {
+	case d := <-dataCh:
+		var jr rpc.Response
+		require.NoError(t, json.Unmarshal([]byte(d), &jr))
+		require.Nil(t, jr.Error)
+		require.JSONEq(t, `3`, string(jr.ID))
+		var list struct {
+			Tools []json.RawMessage `json:"tools"`
+		}
+		require.Contains(t, string(jr.Result), `"tools":[]`)
+		require.NoError(t, json.Unmarshal(jr.Result, &list))
+		require.Empty(t, list.Tools)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout tools/list deny-all")
+	}
+
+	require.Equal(t, uint64(0), b1.ToolsListInvocationCount(), "deny-all tools/list must not fan out to upstream")
+	require.Equal(t, uint64(0), b2.ToolsListInvocationCount(), "deny-all tools/list must not fan out to upstream")
+	require.Equal(t, uint64(0), b1.ToolsCallInvocationCount())
+	require.Equal(t, uint64(0), b2.ToolsCallInvocationCount())
+
+	post(`{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"alpha__echo","arguments":{}}}`)
+	select {
+	case d := <-dataCh:
+		var jr rpc.Response
+		require.NoError(t, json.Unmarshal([]byte(d), &jr))
+		require.NotNil(t, jr.Error)
+		require.Equal(t, errcodes.PermissionDenied, jr.Error.Code)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout tools/call deny-all")
+	}
+
+	require.Equal(t, uint64(0), b1.ToolsCallInvocationCount())
+	require.Equal(t, uint64(0), b2.ToolsCallInvocationCount())
+	require.Equal(t, uint64(0), b1.ToolsListInvocationCount())
+	require.Equal(t, uint64(0), b2.ToolsListInvocationCount())
+
+	cancelSSE()
+	wg.Wait()
+}
