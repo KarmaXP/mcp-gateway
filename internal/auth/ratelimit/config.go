@@ -9,11 +9,14 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 )
 
+const defaultMaxBuckets = 10_000
+
 type Config struct {
 	Enabled       bool
 	RPS           float64
 	Burst         int
 	BucketIdleTTL time.Duration // zero = defaults.RateLimitBucketIdleTTL
+	MaxBuckets    int           // zero = defaultMaxBuckets
 }
 
 func FromEnvironment() Config {
@@ -31,5 +34,11 @@ func FromEnvironment() Config {
 			burst = n
 		}
 	}
-	return Config{Enabled: enabled, RPS: rps, Burst: burst}
+	maxBuckets := defaultMaxBuckets
+	if s := strings.TrimSpace(os.Getenv("RATE_LIMIT_MAX_BUCKETS")); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			maxBuckets = n
+		}
+	}
+	return Config{Enabled: enabled, RPS: rps, Burst: burst, MaxBuckets: maxBuckets}
 }

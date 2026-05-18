@@ -3,7 +3,6 @@ package ratelimit
 import (
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel/codes"
@@ -37,16 +36,18 @@ func HTTPMiddleware(cfg Config) func(http.Handler) http.Handler {
 	if idleTTL <= 0 {
 		idleTTL = defaults.RateLimitBucketIdleTTL
 	}
-	var mu sync.Mutex
-	buckets := make(map[string]*bucketEntry)
-
-	evictStale := func(now time.Time) {
-		for key, e := range buckets {
-			if now.Sub(e.lastSeen) > idleTTL {
-				delete(buckets, key)
-			}
-		}
+	maxBuckets := cfg.MaxBuckets
+	if maxBuckets <= 0 {
+		maxBuckets = defaultMaxBuckets
 	}
+	store := newBucketMap(maxBuckets, idleTTL)
+	go func() {
+		ticker := time.NewTicker(evictionInterval(idleTTL))
+		defer ticker.Stop()
+		for now := range ticker.C {
+			store.sweepStale(now)
+		}
+	}()
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -55,18 +56,7 @@ func HTTPMiddleware(cfg Config) func(http.Handler) http.Handler {
 				return
 			}
 			key := limiterKey(r)
-			now := time.Now()
-			mu.Lock()
-			evictStale(now)
-			e, ok := buckets[key]
-			if !ok {
-				e = &bucketEntry{lim: rate.NewLimiter(lim, burst), lastSeen: now}
-				buckets[key] = e
-			}
-			e.lastSeen = now
-			allow := e.lim.Allow()
-			mu.Unlock()
-			if !allow {
+			if !store.allow(key, lim, burst, time.Now()) {
 				telemetry.RecordRateLimit(r.Context(), false)
 				telemetry.EndHostRPCSpanIfOpen(r.Context(), codes.Error, "rate limited")
 				http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
@@ -79,7 +69,7 @@ func HTTPMiddleware(cfg Config) func(http.Handler) http.Handler {
 }
 
 func shouldSkipRateLimit(path string) bool {
-	if path == mcpwire.PathHealthz || path == mcpwire.PathReadyz {
+	if path == mcpwire.PathMCPSSE || path == mcpwire.PathHealthz || path == mcpwire.PathReadyz {
 		return true
 	}
 	return strings.HasPrefix(path, mcpwire.PathHealthz+"/") || strings.HasPrefix(path, mcpwire.PathReadyz+"/")
