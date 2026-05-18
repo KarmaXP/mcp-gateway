@@ -30,6 +30,9 @@ const (
 	MetricBytesRejectReasonHTTPBody = "http_body_too_large"
 	MetricBytesRejectReasonToolArgs = "tool_args_too_large"
 
+	MetricSessionDropReasonBroadcastQueue = "broadcast_queue_full"
+	MetricSessionDropReasonNotificationOutbound = "notification_outbound_full"
+
 	// Internal hop histogram (§3.D): phases and pre-parse method label.
 	MetricInternalMethodUnknown = "unknown"
 	MetricInternalPhaseParse = "parse"

@@ -11,6 +11,10 @@ const (
 	UpstreamMaxConcurrency        int64 = 8
 	SessionOutboundChannelSize = 64
 	SessionOutboundEnqueueTimeout = 2 * time.Second
+	// SessionBroadcastMaxConcurrency caps concurrent EnqueueNotification calls per broadcast burst.
+	SessionBroadcastMaxConcurrency = 32
+	// SessionBroadcastWorkQueueSize bounds pending broadcast tasks before best-effort drop.
+	SessionBroadcastWorkQueueSize = 256
 	// SessionToolHistoryMax is the maximum successful tools/call names kept per SSE session for router context.
 	SessionToolHistoryMax = 8
 

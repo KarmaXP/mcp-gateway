@@ -33,4 +33,6 @@ func TestSecurityMetricsRecordersNoPanic(t *testing.T) {
 	RecordPayloadBytesRejected(ctx, defaults.MetricBytesRejectReasonHTTPBody)
 	RecordPayloadBytesRejected(ctx, defaults.MetricBytesRejectReasonToolArgs)
 	RecordPayloadBytesRejected(ctx, "unknown-reason")
+	RecordBroadcastTaskDropped(ctx)
+	RecordSessionNotificationDropped(ctx)
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -18,25 +19,42 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
 )
 
-var ErrUnknownSession = errors.New("session: unknown id")
+var (
+	ErrUnknownSession = errors.New("session: unknown id")
+	errOutboundBufferFull = errors.New("session: outbound buffer full")
+)
 
 type Middleware func(ctx context.Context, req *rpc.Request) error
+
+type broadcastTask struct {
+	sess *Session
+	req  *rpc.Request
+}
 
 type SessionManager struct {
 	mu          sync.RWMutex
 	sessions    map[string]*Session
 	multiplexer *multiplex.Multiplexer
 	middlewares []Middleware
+
+	broadcastOnce         sync.Once
+	broadcastTasks        chan broadcastTask
+	broadcastInflight     atomic.Int32
+	broadcastPeak         atomic.Int32
+	broadcastTasksDropped atomic.Uint64
 }
 
 func NewSessionManager(mpx *multiplex.Multiplexer, mws ...Middleware) *SessionManager {
-	return &SessionManager{
+	sm := &SessionManager{
 		sessions:    make(map[string]*Session),
 		multiplexer: mpx,
 		middlewares: append([]Middleware(nil), mws...),
 	}
+	sm.startBroadcastWorkers()
+	return sm
 }
 
 func (sm *SessionManager) Create(ctx context.Context) *Session {
@@ -64,10 +82,37 @@ func (sm *SessionManager) Remove(id string) {
 	sm.mu.Unlock()
 }
 
+func (sm *SessionManager) startBroadcastWorkers() {
+	sm.broadcastOnce.Do(func() {
+		sm.broadcastTasks = make(chan broadcastTask, defaults.SessionBroadcastWorkQueueSize)
+		for i := 0; i < defaults.SessionBroadcastMaxConcurrency; i++ {
+			go sm.broadcastWorker()
+		}
+	})
+}
+
+func (sm *SessionManager) broadcastWorker() {
+	for task := range sm.broadcastTasks {
+		cur := sm.broadcastInflight.Add(1)
+		for {
+			peak := sm.broadcastPeak.Load()
+			if cur <= peak {
+				break
+			}
+			if sm.broadcastPeak.CompareAndSwap(peak, cur) {
+				break
+			}
+		}
+		_ = task.sess.EnqueueNotification(task.req)
+		sm.broadcastInflight.Add(-1)
+	}
+}
+
 func (sm *SessionManager) BroadcastNotification(req *rpc.Request) {
 	if req == nil {
 		return
 	}
+	sm.startBroadcastWorkers()
 	sm.mu.RLock()
 	sessions := make([]*Session, 0, len(sm.sessions))
 	for _, s := range sm.sessions {
@@ -75,9 +120,35 @@ func (sm *SessionManager) BroadcastNotification(req *rpc.Request) {
 	}
 	sm.mu.RUnlock()
 	for _, s := range sessions {
-		sess := s
-		go func() { _ = sess.EnqueueNotification(req) }()
+		sm.enqueueBroadcastTask(s, req)
 	}
+}
+
+func (sm *SessionManager) enqueueBroadcastTask(s *Session, req *rpc.Request) bool {
+	if sm == nil || s == nil || req == nil {
+		return false
+	}
+	select {
+	case sm.broadcastTasks <- broadcastTask{sess: s, req: req}:
+		return true
+	default:
+		sm.broadcastTasksDropped.Add(1)
+		telemetry.RecordBroadcastTaskDropped(context.Background())
+		slog.Warn("session: broadcast work queue full, dropping notification task",
+			"session_id", s.ID(),
+			"method", req.Method,
+			"queue_cap", defaults.SessionBroadcastWorkQueueSize,
+		)
+		return false
+	}
+}
+
+// BroadcastTasksDropped returns tasks dropped because broadcastTasks was full (best-effort fan-out).
+func (sm *SessionManager) BroadcastTasksDropped() uint64 {
+	if sm == nil {
+		return 0
+	}
+	return sm.broadcastTasksDropped.Load()
 }
 
 type Session struct {
@@ -173,7 +244,7 @@ func (s *Session) enqueueOutbound(payload []byte) error {
 		return nil
 	case <-timer.C:
 		s.droppedOutbound.Add(1)
-		return fmt.Errorf("session: outbound buffer full")
+		return errOutboundBufferFull
 	}
 }
 
@@ -183,6 +254,74 @@ func (s *Session) EnqueueResponse(resp *rpc.Response) error {
 		return fmt.Errorf("session: marshal response: %w", err)
 	}
 	return s.enqueueOutbound(b)
+}
+
+// enqueueDispatchResponse delivers resp on the SSE stream. When the outbound buffer is
+// full it emits a JSON-RPC error on SSE and returns nil so POST stays 202 Accepted (M25).
+func (s *Session) enqueueDispatchResponse(resp *rpc.Response) error {
+	if resp == nil {
+		return fmt.Errorf("session: nil rpc response")
+	}
+	b, err := resp.Marshal()
+	if err != nil {
+		return fmt.Errorf("session: marshal response: %w", err)
+	}
+	if cap(s.out) > 0 && len(s.out) >= cap(s.out) {
+		return s.enqueueBackpressureError(resp.ID)
+	}
+	if err := s.enqueueOutbound(b); err != nil {
+		if errors.Is(err, errOutboundBufferFull) {
+			return s.enqueueBackpressureError(resp.ID)
+		}
+		return err
+	}
+	return nil
+}
+
+func (s *Session) deliverMuxResponse(reqID json.RawMessage, resp *rpc.Response, muxErr error, failMsg string) error {
+	if muxErr != nil {
+		return s.enqueueDispatchResponse(rpc.NewError(reqID, errcodes.GatewayInternal, failMsg, nil))
+	}
+	if resp == nil {
+		return s.enqueueDispatchResponse(rpc.NewError(reqID, errcodes.GatewayInternal, failMsg, nil))
+	}
+	return s.enqueueDispatchResponse(resp)
+}
+
+func (s *Session) enqueueBackpressureError(id json.RawMessage) error {
+	bp := rpc.NewError(id, errcodes.GatewayInternal, "session outbound buffer full", nil)
+	payload, err := bp.Marshal()
+	if err != nil {
+		return nil
+	}
+	if !s.forceEnqueueOutbound(payload) {
+		s.droppedOutbound.Add(1)
+	}
+	return nil
+}
+
+// forceEnqueueOutbound drops the oldest queued frame when needed so a critical frame can be sent.
+func (s *Session) forceEnqueueOutbound(payload []byte) bool {
+	select {
+	case <-s.ctx.Done():
+		return false
+	case s.out <- payload:
+		return true
+	default:
+	}
+	select {
+	case <-s.out:
+		s.droppedOutbound.Add(1)
+	default:
+	}
+	select {
+	case <-s.ctx.Done():
+		return false
+	case s.out <- payload:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Session) EnqueueNotification(req *rpc.Request) error {
@@ -198,7 +337,17 @@ func (s *Session) EnqueueNotification(req *rpc.Request) error {
 	if err != nil {
 		return fmt.Errorf("session: marshal notification: %w", err)
 	}
-	return s.enqueueOutbound(b)
+	if err := s.enqueueOutbound(b); err != nil {
+		if errors.Is(err, errOutboundBufferFull) {
+			telemetry.RecordSessionNotificationDropped(s.ctx)
+			slog.Warn("session: notification dropped, outbound buffer full",
+				"session_id", s.id,
+				"method", req.Method,
+			)
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *Session) Dispatch(reqCtx context.Context, req *rpc.Request) error {
@@ -238,7 +387,7 @@ func (s *Session) Dispatch(reqCtx context.Context, req *rpc.Request) error {
 	case "prompts/get":
 		return s.handlePromptsGet(ctx, req)
 	default:
-		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.MethodNotFound, fmt.Sprintf("method not found: %s", req.Method), nil))
+		return s.enqueueDispatchResponse(rpc.NewError(req.ID, errcodes.MethodNotFound, fmt.Sprintf("method not found: %s", req.Method), nil))
 	}
 }
 
@@ -251,7 +400,7 @@ func (s *Session) runMiddlewares(ctx context.Context, req *rpc.Request) error {
 			if req.IsNotification() {
 				return err
 			}
-			return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.RequestRejected, err.Error(), nil))
+			return s.enqueueDispatchResponse(rpc.NewError(req.ID, errcodes.RequestRejected, err.Error(), nil))
 		}
 	}
 	return nil
@@ -290,17 +439,21 @@ func (s *Session) handleNotification(ctx context.Context, req *rpc.Request) erro
 }
 
 func (s *Session) handleInitialize(ctx context.Context, req *rpc.Request) error {
+	ctx = multiplex.WithHostInitializeParams(ctx, req.Params)
 	resp, err := s.multiplexer.Initialize(ctx, req.ID)
 	if err != nil {
-		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.GatewayInternal, "initialize failed", nil))
+		return s.enqueueDispatchResponse(rpc.NewError(req.ID, errcodes.GatewayInternal, "initialize failed", nil))
+	}
+	if resp == nil {
+		return s.enqueueDispatchResponse(rpc.NewError(req.ID, errcodes.GatewayInternal, "initialize failed", nil))
 	}
 	if resp.Error != nil {
-		return s.EnqueueResponse(resp)
+		return s.enqueueDispatchResponse(resp)
 	}
 	s.mu.Lock()
 	s.initCompleted = true
 	s.mu.Unlock()
-	return s.EnqueueResponse(resp)
+	return s.enqueueDispatchResponse(resp)
 }
 
 func (s *Session) handlePing(ctx context.Context, req *rpc.Request) error {
@@ -308,73 +461,55 @@ func (s *Session) handlePing(ctx context.Context, req *rpc.Request) error {
 	if req.IsNotification() {
 		return nil
 	}
-	return s.EnqueueResponse(rpc.NewResult(req.ID, json.RawMessage("{}")))
+	return s.enqueueDispatchResponse(rpc.NewResult(req.ID, json.RawMessage("{}")))
 }
 
 func (s *Session) handleToolsList(ctx context.Context, req *rpc.Request) error {
 	if err := s.requireReady(); err != nil {
-		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.HandshakeIncomplete, err.Error(), nil))
+		return s.enqueueDispatchResponse(rpc.NewError(req.ID, errcodes.HandshakeIncomplete, err.Error(), nil))
 	}
 	resp, err := s.multiplexer.ToolsList(ctx, req.ID)
-	if err != nil {
-		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.GatewayInternal, "tools/list failed", nil))
-	}
-	return s.EnqueueResponse(resp)
+	return s.deliverMuxResponse(req.ID, resp, err, "tools/list failed")
 }
 
 func (s *Session) handleToolsCall(ctx context.Context, req *rpc.Request) error {
 	if err := s.requireReady(); err != nil {
-		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.HandshakeIncomplete, err.Error(), nil))
+		return s.enqueueDispatchResponse(rpc.NewError(req.ID, errcodes.HandshakeIncomplete, err.Error(), nil))
 	}
 	resp, err := s.multiplexer.ToolsCall(ctx, req.ID, req.Params)
-	if err != nil {
-		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.GatewayInternal, "tools/call failed", nil))
-	}
-	return s.EnqueueResponse(resp)
+	return s.deliverMuxResponse(req.ID, resp, err, "tools/call failed")
 }
 
 func (s *Session) handleResourcesList(ctx context.Context, req *rpc.Request) error {
 	if err := s.requireReady(); err != nil {
-		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.HandshakeIncomplete, err.Error(), nil))
+		return s.enqueueDispatchResponse(rpc.NewError(req.ID, errcodes.HandshakeIncomplete, err.Error(), nil))
 	}
 	resp, err := s.multiplexer.ResourcesList(ctx, req.ID)
-	if err != nil {
-		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.GatewayInternal, "resources/list failed", nil))
-	}
-	return s.EnqueueResponse(resp)
+	return s.deliverMuxResponse(req.ID, resp, err, "resources/list failed")
 }
 
 func (s *Session) handleResourcesRead(ctx context.Context, req *rpc.Request) error {
 	if err := s.requireReady(); err != nil {
-		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.HandshakeIncomplete, err.Error(), nil))
+		return s.enqueueDispatchResponse(rpc.NewError(req.ID, errcodes.HandshakeIncomplete, err.Error(), nil))
 	}
 	resp, err := s.multiplexer.ResourcesRead(ctx, req.ID, req.Params)
-	if err != nil {
-		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.GatewayInternal, "resources/read failed", nil))
-	}
-	return s.EnqueueResponse(resp)
+	return s.deliverMuxResponse(req.ID, resp, err, "resources/read failed")
 }
 
 func (s *Session) handlePromptsList(ctx context.Context, req *rpc.Request) error {
 	if err := s.requireReady(); err != nil {
-		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.HandshakeIncomplete, err.Error(), nil))
+		return s.enqueueDispatchResponse(rpc.NewError(req.ID, errcodes.HandshakeIncomplete, err.Error(), nil))
 	}
 	resp, err := s.multiplexer.PromptsList(ctx, req.ID)
-	if err != nil {
-		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.GatewayInternal, "prompts/list failed", nil))
-	}
-	return s.EnqueueResponse(resp)
+	return s.deliverMuxResponse(req.ID, resp, err, "prompts/list failed")
 }
 
 func (s *Session) handlePromptsGet(ctx context.Context, req *rpc.Request) error {
 	if err := s.requireReady(); err != nil {
-		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.HandshakeIncomplete, err.Error(), nil))
+		return s.enqueueDispatchResponse(rpc.NewError(req.ID, errcodes.HandshakeIncomplete, err.Error(), nil))
 	}
 	resp, err := s.multiplexer.PromptsGet(ctx, req.ID, req.Params)
-	if err != nil {
-		return s.EnqueueResponse(rpc.NewError(req.ID, errcodes.GatewayInternal, "prompts/get failed", nil))
-	}
-	return s.EnqueueResponse(resp)
+	return s.deliverMuxResponse(req.ID, resp, err, "prompts/get failed")
 }
 
 func (s *Session) requireReady() error {

@@ -15,16 +15,18 @@ import (
 )
 
 var (
-	metricsReady        atomic.Bool
-	indexedCatalogTools atomic.Int64
-	semanticOutcomes    metric.Int64Counter
-	semanticDuration    metric.Float64Histogram
-	policyDecisions     metric.Int64Counter
-	jwksLookups         metric.Int64Counter
-	toolArgsValidation  metric.Int64Counter
-	rateLimitEvents     metric.Int64Counter
-	payloadBytesReject  metric.Int64Counter
-	internalDuration    metric.Float64Histogram
+	metricsReady          atomic.Bool
+	indexedCatalogTools   atomic.Int64
+	semanticOutcomes      metric.Int64Counter
+	semanticDuration      metric.Float64Histogram
+	policyDecisions       metric.Int64Counter
+	jwksLookups           metric.Int64Counter
+	toolArgsValidation    metric.Int64Counter
+	rateLimitEvents       metric.Int64Counter
+	payloadBytesReject    metric.Int64Counter
+	internalDuration      metric.Float64Histogram
+	sessionBroadcastDrops metric.Int64Counter
+	sessionNotifyDrops    metric.Int64Counter
 )
 
 func registerInstruments() error {
@@ -75,6 +77,17 @@ func registerInstruments() error {
 	)
 	if err != nil {
 		return fmt.Errorf("telemetry: internal duration histogram: %w", err)
+	}
+
+	sessionBroadcastDrops, err = m.Int64Counter("mcp.gateway.session.broadcast_tasks_dropped",
+		metric.WithDescription("SSE catalog notifications dropped because the broadcast work queue was full"))
+	if err != nil {
+		return fmt.Errorf("telemetry: broadcast tasks dropped counter: %w", err)
+	}
+	sessionNotifyDrops, err = m.Int64Counter("mcp.gateway.session.notifications_dropped",
+		metric.WithDescription("SSE MCP notifications dropped because the per-session outbound buffer timed out"))
+	if err != nil {
+		return fmt.Errorf("telemetry: notification drops counter: %w", err)
 	}
 
 	g, err := m.Int64ObservableGauge("mcp.gateway.active_sse_sessions",
@@ -243,4 +256,22 @@ func RecordPayloadBytesRejected(ctx context.Context, reason string) {
 		reason = defaults.MetricBytesRejectReasonHTTPBody
 	}
 	payloadBytesReject.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", reason)))
+}
+
+func RecordBroadcastTaskDropped(ctx context.Context) {
+	if !metricsReady.Load() {
+		return
+	}
+	sessionBroadcastDrops.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("reason", defaults.MetricSessionDropReasonBroadcastQueue),
+	))
+}
+
+func RecordSessionNotificationDropped(ctx context.Context) {
+	if !metricsReady.Load() {
+		return
+	}
+	sessionNotifyDrops.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("reason", defaults.MetricSessionDropReasonNotificationOutbound),
+	))
 }
