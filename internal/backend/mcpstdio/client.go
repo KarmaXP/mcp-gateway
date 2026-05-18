@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"slices"
 	"sync"
+	"sync/atomic"
 
 	"golang.org/x/sync/semaphore"
 
@@ -47,9 +48,12 @@ type StdioMCPUpstream struct {
 	stdin   io.WriteCloser
 	br      *bufio.Reader
 
-	pendMu  sync.Mutex
-	pending map[string]chan *rpc.Response
-	readWG  sync.WaitGroup
+	droppedResponses atomic.Uint64
+
+	pendMu     sync.Mutex
+	pending    map[string]chan *rpc.Response
+	pendingErr map[string]error
+	readWG     sync.WaitGroup
 
 	onNotifMu sync.Mutex
 	onNotif   func(*rpc.Request)
@@ -66,19 +70,24 @@ func NewStdioMCPUpstream(lifecycle context.Context, id, prefix string, command, 
 		maxConcurrency = defaults.UpstreamMaxConcurrency
 	}
 	c := &StdioMCPUpstream{
-		id:        id,
-		prefix:    prefix,
-		command:   slices.Clone(command),
-		env:       slices.Clone(extraEnv),
-		lifecycle: lifecycle,
-		sem:       semaphore.NewWeighted(maxConcurrency),
-		pending:   make(map[string]chan *rpc.Response),
+		id:         id,
+		prefix:     prefix,
+		command:    slices.Clone(command),
+		env:        slices.Clone(extraEnv),
+		lifecycle:  lifecycle,
+		sem:        semaphore.NewWeighted(maxConcurrency),
+		pending:    make(map[string]chan *rpc.Response),
+		pendingErr: make(map[string]error),
 	}
 	return c, func() { c.close() }, nil
 }
 
 func (c *StdioMCPUpstream) ID() string     { return c.id }
 func (c *StdioMCPUpstream) Prefix() string { return c.prefix }
+
+func (c *StdioMCPUpstream) DroppedResponses() uint64 {
+	return c.droppedResponses.Load()
+}
 
 func (c *StdioMCPUpstream) SetOnNotification(fn func(*rpc.Request)) {
 	c.onNotifMu.Lock()
@@ -122,6 +131,7 @@ func (c *StdioMCPUpstream) failPending() {
 		delete(c.pending, key)
 		close(ch)
 	}
+	clear(c.pendingErr)
 }
 
 func (c *StdioMCPUpstream) reapProcess() {
@@ -198,6 +208,12 @@ func (c *StdioMCPUpstream) dispatch(raw []byte) {
 		select {
 		case ch <- resp:
 		default:
+			c.droppedResponses.Add(1)
+			deliverErr := fmt.Errorf("mcpstdio %s: pending channel full for id %s", c.id, key)
+			c.pendMu.Lock()
+			c.pendingErr[key] = deliverErr
+			c.pendMu.Unlock()
+			close(ch)
 		}
 		return
 	}
@@ -262,6 +278,10 @@ func (c *StdioMCPUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Res
 	}
 	ch := make(chan *rpc.Response, pendingJSONRPCChannelCap)
 	c.pendMu.Lock()
+	if _, exists := c.pending[key]; exists {
+		c.pendMu.Unlock()
+		return nil, fmt.Errorf("mcpstdio %s: duplicate jsonrpc id %q", c.id, key)
+	}
 	c.pending[key] = ch
 	c.pendMu.Unlock()
 	defer func() {
@@ -269,6 +289,7 @@ func (c *StdioMCPUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Res
 		if cur, ok := c.pending[key]; ok && cur == ch {
 			delete(c.pending, key)
 		}
+		delete(c.pendingErr, key)
 		c.pendMu.Unlock()
 	}()
 
@@ -283,6 +304,13 @@ func (c *StdioMCPUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Res
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case resp, ok := <-ch:
+		c.pendMu.Lock()
+		deliverErr := c.pendingErr[key]
+		delete(c.pendingErr, key)
+		c.pendMu.Unlock()
+		if deliverErr != nil {
+			return nil, deliverErr
+		}
 		if !ok {
 			return nil, c.deadError()
 		}

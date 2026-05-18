@@ -5,17 +5,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	"golang.org/x/sync/semaphore"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
@@ -25,11 +26,10 @@ import (
 const (
 	weightedSemaphoreTickets int64 = 1
 	pendingJSONRPCChannelCap int = 1
-
-	pendingResponseDeliverTimeout = 2 * time.Second
+	callSessionRetryAttempts int = 2
 )
 
-var responseDeliverTimeout = pendingResponseDeliverTimeout
+var errSessionReconnecting = errors.New("mcphttp: session reconnecting")
 
 type HTTPMCPUpstream struct {
 	id     string
@@ -42,18 +42,21 @@ type HTTPMCPUpstream struct {
 	rpcClient *http.Client
 	sem       *semaphore.Weighted
 
-	connMu     sync.Mutex
-	connected  bool
-	sessID     string
-	sseBody    io.Closer
-	readCancel context.CancelFunc
-	readWG     sync.WaitGroup
-	connErr    error
+	connMu       sync.Mutex
+	connected    bool
+	sessID       string
+	sseBody      io.Closer
+	readCancel   context.CancelFunc
+	readWG       sync.WaitGroup
+	connErr      error
+	connectGroup singleflight.Group
 
 	droppedResponses atomic.Uint64
+	reconnecting     atomic.Bool
 
-	pendMu  sync.Mutex
-	pending map[string]chan *rpc.Response
+	pendMu     sync.Mutex
+	pending    map[string]chan *rpc.Response
+	pendingErr map[string]error
 
 	onNotifMu sync.Mutex
 	onNotif   func(*rpc.Request)
@@ -82,8 +85,9 @@ func NewHTTPMCPUpstream(lifecycle context.Context, id, prefix, baseURL string, m
 			Transport: transport,
 			Timeout:   defaults.MultiplexCallTimeout,
 		},
-		sem:     semaphore.NewWeighted(maxConcurrency),
-		pending: make(map[string]chan *rpc.Response),
+		sem:        semaphore.NewWeighted(maxConcurrency),
+		pending:    make(map[string]chan *rpc.Response),
+		pendingErr: make(map[string]error),
 	}
 	cleanup := func() { c.close() }
 	return c, cleanup, nil
@@ -112,14 +116,36 @@ func (c *HTTPMCPUpstream) setAuth(req *http.Request) {
 }
 
 func (c *HTTPMCPUpstream) ensureSession(callCtx context.Context) error {
-	_ = callCtx
 	c.connMu.Lock()
 	if c.connected {
 		c.connMu.Unlock()
 		return nil
 	}
 	c.connMu.Unlock()
-	return c.connect()
+
+	_, err, _ := c.connectGroup.Do("connect", func() (any, error) {
+		c.connMu.Lock()
+		if c.connected {
+			c.connMu.Unlock()
+			return nil, nil
+		}
+		c.connMu.Unlock()
+		return nil, c.connect(callCtx)
+	})
+	return err
+}
+
+func connectRequestContext(lifecycle, callCtx context.Context) context.Context {
+	if callCtx == nil {
+		return lifecycle
+	}
+	if lifecycle == nil {
+		return callCtx
+	}
+	merged, cancel := context.WithCancel(callCtx)
+	context.AfterFunc(lifecycle, cancel)
+	context.AfterFunc(callCtx, cancel)
+	return merged
 }
 
 func (c *HTTPMCPUpstream) stopReaderLocked() {
@@ -143,10 +169,14 @@ func (c *HTTPMCPUpstream) drainReader() {
 	c.readWG.Wait()
 }
 
-func (c *HTTPMCPUpstream) connect() error {
+func (c *HTTPMCPUpstream) connect(callCtx context.Context) error {
+	c.reconnecting.Store(true)
+	defer c.reconnecting.Store(false)
+	c.abortPendingForReconnect()
 	c.drainReader()
 
-	req, err := http.NewRequestWithContext(c.lifecycle, http.MethodGet, c.sseURL(), nil)
+	reqCtx := connectRequestContext(c.lifecycle, callCtx)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, c.sseURL(), nil)
 	if err != nil {
 		return err
 	}
@@ -208,14 +238,61 @@ func (c *HTTPMCPUpstream) connect() error {
 
 func (c *HTTPMCPUpstream) onSSEClosed() {
 	c.connMu.Lock()
-	defer c.connMu.Unlock()
 	if !c.connected {
+		c.connMu.Unlock()
 		return
 	}
 	c.connected = false
 	c.sseBody = nil
 	c.readCancel = nil
 	c.connErr = fmt.Errorf("mcphttp %s: sse stream ended", c.id)
+	c.connMu.Unlock()
+	if c.reconnecting.Load() {
+		return
+	}
+	c.failPending()
+}
+
+func (c *HTTPMCPUpstream) abortPendingForReconnect() {
+	c.pendMu.Lock()
+	defer c.pendMu.Unlock()
+	for key, ch := range c.pending {
+		c.pendingErr[key] = errSessionReconnecting
+		delete(c.pending, key)
+		close(ch)
+	}
+}
+
+func (c *HTTPMCPUpstream) failPending() {
+	c.pendMu.Lock()
+	defer c.pendMu.Unlock()
+	for key, ch := range c.pending {
+		delete(c.pending, key)
+		close(ch)
+	}
+	clear(c.pendingErr)
+}
+
+func isRetriableSessionLoss(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, errSessionReconnecting) {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "sse stream ended") ||
+		strings.Contains(msg, "upstream disconnected")
+}
+
+func (c *HTTPMCPUpstream) disconnectErr() error {
+	c.connMu.Lock()
+	err := c.connErr
+	c.connMu.Unlock()
+	if err != nil {
+		return err
+	}
+	return fmt.Errorf("mcphttp %s: upstream disconnected", c.id)
 }
 
 func (c *HTTPMCPUpstream) readSSE(body io.Reader, ctx context.Context) {
@@ -287,12 +364,15 @@ func (c *HTTPMCPUpstream) dispatch(raw []byte) {
 		if ch == nil {
 			return
 		}
-		timer := time.NewTimer(responseDeliverTimeout)
-		defer timer.Stop()
 		select {
 		case ch <- resp:
-		case <-timer.C:
+		default:
 			c.droppedResponses.Add(1)
+			deliverErr := fmt.Errorf("mcphttp %s: pending channel full for id %s", c.id, key)
+			c.pendMu.Lock()
+			c.pendingErr[key] = deliverErr
+			c.pendMu.Unlock()
+			close(ch)
 		}
 		return
 	}
@@ -350,6 +430,21 @@ func (c *HTTPMCPUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Resp
 	}
 	defer c.sem.Release(weightedSemaphoreTickets)
 
+	var lastErr error
+	for attempt := 0; attempt < callSessionRetryAttempts; attempt++ {
+		resp, err := c.callWithSession(ctx, req)
+		if err == nil {
+			return resp, nil
+		}
+		lastErr = err
+		if attempt == callSessionRetryAttempts-1 || !isRetriableSessionLoss(err) {
+			return nil, err
+		}
+	}
+	return nil, lastErr
+}
+
+func (c *HTTPMCPUpstream) callWithSession(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
 	if err := c.ensureSession(ctx); err != nil {
 		return nil, err
 	}
@@ -378,6 +473,10 @@ func (c *HTTPMCPUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Resp
 	}
 	ch := make(chan *rpc.Response, pendingJSONRPCChannelCap)
 	c.pendMu.Lock()
+	if _, exists := c.pending[key]; exists {
+		c.pendMu.Unlock()
+		return nil, fmt.Errorf("mcphttp %s: duplicate jsonrpc id %s", c.id, key)
+	}
 	c.pending[key] = ch
 	c.pendMu.Unlock()
 	defer func() {
@@ -385,6 +484,7 @@ func (c *HTTPMCPUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Resp
 		if cur, ok := c.pending[key]; ok && cur == ch {
 			delete(c.pending, key)
 		}
+		delete(c.pendingErr, key)
 		c.pendMu.Unlock()
 	}()
 
@@ -395,7 +495,17 @@ func (c *HTTPMCPUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Resp
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case resp := <-ch:
+	case resp, ok := <-ch:
+		c.pendMu.Lock()
+		deliverErr := c.pendingErr[key]
+		delete(c.pendingErr, key)
+		c.pendMu.Unlock()
+		if deliverErr != nil {
+			return nil, deliverErr
+		}
+		if !ok {
+			return nil, c.disconnectErr()
+		}
 		return resp, nil
 	}
 }

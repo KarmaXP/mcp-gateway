@@ -3,6 +3,7 @@ package mcpstdio
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"runtime"
 	"sync"
 	"syscall"
@@ -76,6 +77,109 @@ func TestDispatchResponseDeliversToPending(t *testing.T) {
 	default:
 		t.Fatal("expected response on pending channel")
 	}
+}
+
+// TestDispatchResponseAbortsPendingWhenChannelFull asserts dispatch records pendingErr when the
+// pending channel is full. Call() checks pendingErr after <-ch (parity with mcphttp/client.go FIX-11).
+// mcphttp has TestCallReturnsErrorWhenPendingChannelFull (blocked POST holds Call before select);
+// stdio has no stable equivalent—write returns before select, so a mirror E2E races and is omitted.
+func TestDispatchResponseAbortsPendingWhenChannelFull(t *testing.T) {
+	t.Parallel()
+	c, cleanup, err := NewStdioMCPUpstream(context.Background(), "u1", "alpha", []string{"true"}, nil, 1)
+	require.NoError(t, err)
+	defer cleanup()
+
+	ch := make(chan *rpc.Response, pendingJSONRPCChannelCap)
+	c.pendMu.Lock()
+	c.pending["9"] = ch
+	c.pendMu.Unlock()
+	ch <- &rpc.Response{JSONRPC: rpc.JSONRPCVersion, ID: json.RawMessage(`9`), Result: json.RawMessage(`{}`)}
+
+	raw, err := json.Marshal(map[string]any{
+		"jsonrpc": rpc.JSONRPCVersion,
+		"id":      9,
+		"result":  map[string]any{},
+	})
+	require.NoError(t, err)
+	c.dispatch(raw)
+	require.Equal(t, uint64(1), c.DroppedResponses())
+
+	c.pendMu.Lock()
+	deliverErr := c.pendingErr["9"]
+	c.pendMu.Unlock()
+	require.Error(t, deliverErr)
+	require.Contains(t, deliverErr.Error(), "pending channel full")
+
+	_, ok := <-ch
+	require.True(t, ok)
+	_, ok = <-ch
+	require.False(t, ok)
+}
+
+// TestCallClearsPendingErrOnContextCancel ensures pendingErr does not leak when Call
+// returns on ctx.Done() (parity with mcphttp/client.go defer cleanup).
+func TestCallClearsPendingErrOnContextCancel(t *testing.T) {
+	t.Parallel()
+	c, cleanup, err := NewStdioMCPUpstream(context.Background(), "u1", "alpha", []string{"sleep", "3600"}, nil, 1)
+	require.NoError(t, err)
+	defer cleanup()
+
+	require.NoError(t, c.ensure(context.Background()))
+
+	const key = "3"
+	ctx, cancel := context.WithCancel(context.Background())
+
+	var callErr error
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_, callErr = c.Call(ctx, &rpc.Request{
+			JSONRPC: rpc.JSONRPCVersion,
+			Method:  "tools/list",
+			ID:      json.RawMessage(`3`),
+		})
+	}()
+
+	require.Eventually(t, func() bool {
+		c.pendMu.Lock()
+		_, ok := c.pending[key]
+		c.pendMu.Unlock()
+		return ok
+	}, time.Second, 5*time.Millisecond)
+
+	c.pendMu.Lock()
+	c.pendingErr[key] = errors.New("stale pending delivery error")
+	c.pendMu.Unlock()
+	cancel()
+	wg.Wait()
+
+	require.ErrorIs(t, callErr, context.Canceled)
+
+	c.pendMu.Lock()
+	_, leaked := c.pendingErr[key]
+	c.pendMu.Unlock()
+	require.False(t, leaked, "pendingErr must be cleared when Call exits on context cancel")
+}
+
+func TestCallRejectsDuplicateJSONRPCID(t *testing.T) {
+	t.Parallel()
+	c, cleanup, err := NewStdioMCPUpstream(context.Background(), "u1", "alpha", []string{"true"}, nil, 1)
+	require.NoError(t, err)
+	defer cleanup()
+
+	ch := make(chan *rpc.Response, pendingJSONRPCChannelCap)
+	c.pendMu.Lock()
+	c.pending["1"] = ch
+	c.pendMu.Unlock()
+
+	_, err = c.Call(context.Background(), &rpc.Request{
+		JSONRPC: rpc.JSONRPCVersion,
+		Method:  "tools/list",
+		ID:      json.RawMessage(`1`),
+	})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "duplicate jsonrpc id")
 }
 
 func TestDispatchResponseIgnoresUnknownID(t *testing.T) {
