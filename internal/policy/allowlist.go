@@ -2,10 +2,13 @@ package policy
 
 import "fmt"
 
-// allowed empty ⇒ any tool in catalog (no restriction).
+// allowed nil ⇒ any tool in catalog (SEC2, no restriction); non-nil empty ⇒ deny-all.
 func AllowedListContains(namespacedTool string, allowed []string) (bool, error) {
-	if len(allowed) == 0 {
+	if allowed == nil {
 		return true, nil
+	}
+	if len(allowed) == 0 {
+		return false, nil
 	}
 	for _, e := range allowed {
 		ok, err := MatchTool(namespacedTool, e)

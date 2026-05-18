@@ -46,6 +46,7 @@ func expandAuthorizationDetails(raw json.RawMessage) ([]string, error) {
 			out = append(out, pat)
 			continue
 		}
+		return nil, fmt.Errorf("policy: authorization_details[%d]: mcp_tool entry requires tool_name or tool_pattern", i)
 	}
 	return dedupeStrings(out), nil
 }

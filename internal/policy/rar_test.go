@@ -40,6 +40,13 @@ func TestExpandAuthorizationDetails(t *testing.T) {
 			wantErr: "mutually exclusive",
 		},
 		{
+			name: "rejects mcp_tool without name or pattern",
+			raw: []map[string]any{
+				{"type": "mcp_tool"},
+			},
+			wantErr: "requires tool_name or tool_pattern",
+		},
+		{
 			name: "trims and dedupes entries",
 			raw: []map[string]any{
 				{"type": "mcp_tool", "tool_name": "  prom__query_range  "},

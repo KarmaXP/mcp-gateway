@@ -21,8 +21,14 @@ func TestAllowedListContains_ExactAndGlob(t *testing.T) {
 	require.False(t, ok)
 }
 
-func TestAllowedListContains_EmptyMeansOpen(t *testing.T) {
+func TestAllowedListContains_NilMeansOpen(t *testing.T) {
 	ok, err := AllowedListContains("any__tool", nil)
 	require.NoError(t, err)
 	require.True(t, ok)
+}
+
+func TestAllowedListContains_EmptySliceDenyAll(t *testing.T) {
+	ok, err := AllowedListContains("any__tool", []string{})
+	require.NoError(t, err)
+	require.False(t, ok)
 }

@@ -38,6 +38,24 @@ func TestEngine_EffectiveAllowList_RAROnly(t *testing.T) {
 	require.Equal(t, []string{"k8s__logs"}, got)
 }
 
+func TestEngine_EffectiveAllowList_EmptyIntersectionDenyAll(t *testing.T) {
+	e := NewEngine(config.PolicySettings{Version: "v1"})
+	raw, _ := json.Marshal([]map[string]string{
+		{"type": "mcp_tool", "tool_name": "rar__only"},
+	})
+	got, err := e.EffectiveAllowList(fakeClaims{
+		tools:       []string{"jwt__only"},
+		authDetails: raw,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.Empty(t, got)
+
+	ok, err := AllowedListContains("jwt__only", got)
+	require.NoError(t, err)
+	require.False(t, ok)
+}
+
 func TestEngine_EffectiveAllowList_Intersection(t *testing.T) {
 	e := NewEngine(config.PolicySettings{Version: "v1"})
 	raw, _ := json.Marshal([]map[string]string{
@@ -67,6 +85,16 @@ func TestEngine_UnknownGroupFailsClosed(t *testing.T) {
 	e := NewEngine(config.PolicySettings{Version: "v1"})
 	_, err := e.EffectiveAllowList(fakeClaims{groups: []string{"missing"}})
 	require.Error(t, err)
+}
+
+func TestEngine_EffectiveAllowList_RejectsEmptyRARToolEntry(t *testing.T) {
+	e := NewEngine(config.PolicySettings{Version: "v1"})
+	raw, _ := json.Marshal([]map[string]string{
+		{"type": "mcp_tool"},
+	})
+	_, err := e.EffectiveAllowList(fakeClaims{authDetails: raw})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "requires tool_name or tool_pattern")
 }
 
 func TestEngine_RARParseDegrade(t *testing.T) {

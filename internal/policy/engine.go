@@ -137,7 +137,11 @@ func intersectAllowEntries(jwtEntries, rarEntries []string) ([]string, error) {
 			out = append(out, t)
 		}
 	}
-	return dedupeStrings(out), nil
+	out = dedupeStrings(out)
+	if len(out) == 0 {
+		return []string{}, nil
+	}
+	return out, nil
 }
 
 func dedupeStrings(in []string) []string {
