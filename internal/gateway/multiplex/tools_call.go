@@ -25,6 +25,20 @@ func (a *Multiplexer) ToolsCall(ctx context.Context, hostID json.RawMessage, par
 		return errResp, nil
 	}
 
+	mode, _ := hostctx.AllowListModeFromContext(ctx)
+	switch mode {
+	case hostctx.AllowListDenyAll:
+		if errResp := a.enforceHostToolAuthz(ctx, hostID, p.Name); errResp != nil {
+			return errResp, nil
+		}
+	case hostctx.AllowListRestricted:
+		if a.semantic == nil || !a.semantic.AllowAutoRename() {
+			if errResp := a.enforceHostToolAuthz(ctx, hostID, p.Name); errResp != nil {
+				return errResp, nil
+			}
+		}
+	}
+
 	if errResp := a.applySemanticToolRouting(ctx, hostID, &p); errResp != nil {
 		return errResp, nil
 	}
@@ -57,12 +71,17 @@ func (a *Multiplexer) enforceHostToolAuthz(ctx context.Context, hostID json.RawM
 	defer span.End()
 	span.SetAttributes(attribute.String(telemetry.AttrMCPToolName, namespacedTool))
 
-	allowed := hostctx.AllowedToolNamesFromContext(actx)
-	if len(allowed) == 0 {
+	mode, names := hostctx.AllowListModeFromContext(actx)
+	switch mode {
+	case hostctx.AllowListUnrestricted:
 		span.SetStatus(codes.Ok, "")
 		return nil
+	case hostctx.AllowListDenyAll:
+		span.SetStatus(codes.Error, "not in allow list")
+		policy.LogAudit(actx, "deny", "not_in_allow_list", namespacedTool, hostctx.SubjectIDFromContext(actx), hostctx.PolicyVersionFromContext(actx))
+		return rpc.NewError(hostID, errcodes.PermissionDenied, fmt.Sprintf("tool %q not allowed for this principal", namespacedTool), nil)
 	}
-	ok, err := policy.AllowedListContains(namespacedTool, allowed)
+	ok, err := policy.AllowedListContains(namespacedTool, hostctx.PolicyAllowListView(mode, names))
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "policy evaluation failed")
@@ -97,6 +116,9 @@ func parseToolsCallParams(hostID json.RawMessage, params json.RawMessage) (tools
 
 func (a *Multiplexer) applySemanticToolRouting(ctx context.Context, hostID json.RawMessage, p *toolsCallParams) *rpc.Response {
 	if a.semantic == nil || !a.semantic.Enabled() {
+		return nil
+	}
+	if mode, _ := hostctx.AllowListModeFromContext(ctx); mode == hostctx.AllowListDenyAll {
 		return nil
 	}
 	routeStart := time.Now()
@@ -170,12 +192,16 @@ func (a *Multiplexer) invokeUpstreamToolsCall(ctx context.Context, hostID json.R
 		bspan.SetStatus(codes.Error, "backend transport")
 		return rpc.NewError(hostID, errcodes.GatewayInternal, "backend call failed", nil), nil
 	}
-	if resp != nil && resp.Error != nil {
+	if resp == nil {
+		bspan.SetStatus(codes.Error, "upstream empty response")
+		return rpc.NewError(hostID, errcodes.GatewayInternal, "backend call failed", nil), nil
+	}
+	if resp.Error != nil {
 		bspan.SetStatus(codes.Error, "upstream jsonrpc error")
 	} else {
 		bspan.SetStatus(codes.Ok, "")
 	}
-	if resp != nil && resp.Error == nil {
+	if resp.Error == nil {
 		hostctx.RecordSuccessfulToolCall(ctx, namespacedTool)
 	}
 	return resp, nil

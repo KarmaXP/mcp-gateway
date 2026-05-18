@@ -10,6 +10,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
+	"github.com/KarmaXP/mcp-gateway/internal/router"
 )
 
 func TestSemanticRoutingSignalIncludesIntentAndCatalogVersion(t *testing.T) {
@@ -28,5 +29,6 @@ func TestSemanticRoutingSignalIncludesIntentAndCatalogVersion(t *testing.T) {
 	require.JSONEq(t, `{"x":1}`, string(sig.ArgumentsJSON))
 	require.Equal(t, "operator wants pod logs", sig.IntentText)
 	require.Equal(t, []string{"p__echo", "other__tool"}, sig.AllowedTools)
+	require.Equal(t, router.AllowListAuthzRestricted, sig.AllowListAuthz)
 	require.Equal(t, "catalog-ver-xyz", sig.CatalogVersion)
 }

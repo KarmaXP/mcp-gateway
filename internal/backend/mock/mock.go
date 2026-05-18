@@ -46,6 +46,7 @@ type MockUpstream struct {
 	mu sync.Mutex
 
 	toolsCallInvocations atomic.Uint64
+	toolsListInvocations atomic.Uint64
 }
 
 func NewMockUpstream(id, prefix string, toolNames []string) *MockUpstream {
@@ -73,6 +74,14 @@ func (b *MockUpstream) ToolsCallInvocationCount() uint64 {
 		return 0
 	}
 	return b.toolsCallInvocations.Load()
+}
+
+// ToolsListInvocationCount is the number of tools/list JSON-RPC requests handled by this mock.
+func (b *MockUpstream) ToolsListInvocationCount() uint64 {
+	if b == nil {
+		return 0
+	}
+	return b.toolsListInvocations.Load()
 }
 
 func (b *MockUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
@@ -128,6 +137,7 @@ func (b *MockUpstream) initialize(_ context.Context, req *rpc.Request) (*rpc.Res
 
 func (b *MockUpstream) toolsList(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
 	_ = ctx
+	b.toolsListInvocations.Add(1)
 	if msg := strings.TrimSpace(b.ToolsListJSONRPCMessage); msg != "" {
 		return rpc.NewError(req.ID, errcodes.InternalError, msg, nil), nil
 	}

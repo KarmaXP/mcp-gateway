@@ -107,6 +107,28 @@ func TestInitializeAllBackendsFail(t *testing.T) {
 	require.JSONEq(t, `7`, string(resp.ID))
 }
 
+func TestInitializeAllFailReportsPartialFailuresWhenEnabled(t *testing.T) {
+	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
+	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
+	a, err := New([]backend.Upstream{
+		&initFailBackend{inner: b1},
+		&initFailBackend{inner: b2},
+	}, WithListTTL(0), WithReportPartialFailures(true))
+	require.NoError(t, err)
+
+	resp, err := a.Initialize(context.Background(), json.RawMessage(`8`))
+	require.NoError(t, err)
+	require.NotNil(t, resp.Error)
+	require.NotNil(t, resp.Error.Data)
+	var data struct {
+		PartialFailures []struct {
+			BackendID string `json:"backend_id"`
+		} `json:"partial_failures"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Error.Data, &data))
+	require.Len(t, data.PartialFailures, 2)
+}
+
 func TestToolsListOmitsFailedBackend(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})

@@ -13,7 +13,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 )
 
-func TestInvalidateToolCacheClearsCatalogVersion(t *testing.T) {
+func TestInvalidateToolCachePreservesCatalogVersion(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "p", []string{"echo"})
 	emb := &countingEmbed{dim: 4}
 	rcfg := router.DefaultSemanticRouterRuntimeConfig()
@@ -30,10 +30,11 @@ func TestInvalidateToolCacheClearsCatalogVersion(t *testing.T) {
 	ver := a.catVer
 	a.catMu.RUnlock()
 	require.NotEmpty(t, ver)
+	require.Equal(t, ver, sr.CatalogVersion())
 
 	a.InvalidateToolCache()
 
 	a.catMu.RLock()
 	defer a.catMu.RUnlock()
-	require.Empty(t, a.catVer)
+	require.Equal(t, ver, a.catVer, "invalidate must keep catalog version until reindex succeeds")
 }

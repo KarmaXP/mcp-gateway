@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -31,7 +32,10 @@ import (
 
 var errNoUpstreamsResponded = errors.New("multiplex: no upstreams responded to initialize")
 
-const jsonNullLiteral = "null"
+const (
+	jsonNullLiteral = "null"
+	defaultToolsListChangedDelay = 200 * time.Millisecond
+)
 
 var emptyToolArguments = json.RawMessage(`{}`)
 
@@ -53,8 +57,9 @@ type Multiplexer struct {
 	policyHolder *policy.Holder
 	argLimits    validate.Limits
 
-	catMu  sync.RWMutex
-	catVer string
+	catMu         sync.RWMutex
+	catVer        string
+	catRefreshGen atomic.Uint64
 
 	schemaMu       sync.RWMutex
 	toolValidators map[string]*jsonschema.Schema
@@ -65,6 +70,15 @@ type Multiplexer struct {
 	globalCallSemaphore   *semaphore.Weighted
 
 	lifecycleCtx context.Context
+
+	initMu     sync.Mutex
+	initDone   bool
+	initResult json.RawMessage
+
+	listChangedMu         sync.Mutex
+	listChangedDebounce   time.Duration
+	listChangedTimer      *time.Timer
+	listChangedPendingCtx context.Context
 }
 
 type Option func(*Multiplexer)
@@ -136,6 +150,11 @@ func WithLifecycleContext(ctx context.Context) Option {
 	return func(a *Multiplexer) { a.lifecycleCtx = ctx }
 }
 
+// WithToolsListChangedDebounce coalesces upstream list_changed refresh work (0 disables debounce).
+func WithToolsListChangedDebounce(d time.Duration) Option {
+	return func(a *Multiplexer) { a.listChangedDebounce = d }
+}
+
 func (a *Multiplexer) lifecycleContext(fallback context.Context) context.Context {
 	if a.lifecycleCtx != nil {
 		return a.lifecycleCtx
@@ -159,12 +178,13 @@ func New(upstreams []backend.Upstream, opts ...Option) (*Multiplexer, error) {
 		byPrefix[p] = b
 	}
 	a := &Multiplexer{
-		upstreams:   append([]backend.Upstream(nil), upstreams...),
-		byPrefix:    byPrefix,
-		initTimeout: defaults.MultiplexInitTimeout,
-		listTimeout: defaults.MultiplexListTimeout,
-		callTimeout: defaults.MultiplexCallTimeout,
-		listTTL:     defaults.MultiplexListCacheTTL,
+		upstreams:           append([]backend.Upstream(nil), upstreams...),
+		byPrefix:            byPrefix,
+		initTimeout:         defaults.MultiplexInitTimeout,
+		listTimeout:         defaults.MultiplexListTimeout,
+		callTimeout:         defaults.MultiplexCallTimeout,
+		listTTL:             defaults.MultiplexListCacheTTL,
+		listChangedDebounce: defaultToolsListChangedDelay,
 	}
 	for _, o := range opts {
 		o(a)
@@ -198,6 +218,15 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 		telemetry.AttrJSONRPCID(hostID),
 	)
 
+	a.initMu.Lock()
+	if a.initDone {
+		cached := append(json.RawMessage(nil), a.initResult...)
+		a.initMu.Unlock()
+		span.SetStatus(codes.Ok, "")
+		return rpc.NewResult(hostID, cached), nil
+	}
+	a.initMu.Unlock()
+
 	results := make([]json.RawMessage, len(a.upstreams))
 	var mu sync.Mutex
 	var strictFailed bool
@@ -225,7 +254,7 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 			}
 			defer release()
 			subID := json.RawMessage(fmt.Sprintf(`"gw-init-%s"`, b.ID()))
-			req := &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: "initialize", ID: subID, Params: hostParams()}
+			req := &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: "initialize", ID: subID, Params: upstreamInitParams(ctx)}
 			resp, err := b.Call(callCtx, req)
 			if err != nil {
 				slog.Warn("initialize backend failed", "backend_id", b.ID(), "err", err)
@@ -236,6 +265,19 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 				} else {
 					mu.Lock()
 					initFailures = append(initFailures, PartialFailure{BackendID: b.ID(), Reason: classifyCallFailure(err)})
+					mu.Unlock()
+				}
+				return nil
+			}
+			if resp == nil {
+				slog.Warn("initialize backend returned nil response", "backend_id", b.ID())
+				if a.strictInit {
+					mu.Lock()
+					strictFailed = true
+					mu.Unlock()
+				} else {
+					mu.Lock()
+					initFailures = append(initFailures, PartialFailure{BackendID: b.ID(), Reason: PartialFailureOmitted})
 					mu.Unlock()
 				}
 				return nil
@@ -272,6 +314,21 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 	merged, mergeFailures, err := mergeInitializeResults(results, a.upstreams)
 	if err != nil {
 		span.SetStatus(codes.Error, "all upstreams failed initialize")
+		if a.reportPartialFailures {
+			allFailures := append(append([]PartialFailure(nil), initFailures...), mergeFailures...)
+			if len(allFailures) == 0 {
+				for i, b := range a.upstreams {
+					if len(results[i]) == 0 {
+						allFailures = append(allFailures, PartialFailure{BackendID: b.ID(), Reason: PartialFailureOmitted})
+					}
+				}
+			}
+			data, merr := json.Marshal(map[string]any{"partial_failures": partialFailuresToMaps(allFailures)})
+			if merr != nil {
+				return nil, fmt.Errorf("multiplex: marshal initialize partial failures: %w", merr)
+			}
+			return rpc.NewError(hostID, errcodes.GatewayInternal, "gateway: all upstreams failed initialize", data), nil
+		}
 		return rpc.NewError(hostID, errcodes.GatewayInternal, "gateway: all upstreams failed initialize", nil), nil
 	}
 	if a.reportPartialFailures {
@@ -285,9 +342,71 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 		span.SetStatus(codes.Error, "marshal initialize")
 		return nil, fmt.Errorf("multiplex: marshal initialize result: %w", err)
 	}
+	a.initMu.Lock()
+	a.initDone = true
+	a.initResult = append(json.RawMessage(nil), raw...)
+	a.initMu.Unlock()
 	a.invalidateToolCache()
 	span.SetStatus(codes.Ok, "")
 	return rpc.NewResult(hostID, raw), nil
+}
+
+type hostInitParamsKey struct{}
+
+func WithHostInitializeParams(ctx context.Context, params json.RawMessage) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if len(params) == 0 || string(params) == jsonNullLiteral {
+		return ctx
+	}
+	return context.WithValue(ctx, hostInitParamsKey{}, append(json.RawMessage(nil), params...))
+}
+
+func hostInitializeParamsFromContext(ctx context.Context) json.RawMessage {
+	if ctx == nil {
+		return nil
+	}
+	raw, _ := ctx.Value(hostInitParamsKey{}).(json.RawMessage)
+	if len(raw) == 0 {
+		return nil
+	}
+	return append(json.RawMessage(nil), raw...)
+}
+
+func upstreamInitParams(ctx context.Context) json.RawMessage {
+	host := hostInitializeParamsFromContext(ctx)
+	if len(host) == 0 {
+		return hostParams()
+	}
+	var hostMap, baseMap map[string]any
+	if json.Unmarshal(host, &hostMap) != nil {
+		return hostParams()
+	}
+	if json.Unmarshal(hostParams(), &baseMap) != nil {
+		return host
+	}
+	out, err := json.Marshal(mergeInitParamMaps(baseMap, hostMap))
+	if err != nil {
+		return hostParams()
+	}
+	return out
+}
+
+func mergeInitParamMaps(base, host map[string]any) map[string]any {
+	out := cloneMap(base)
+	for k, v := range host {
+		if k == "capabilities" || k == "clientInfo" {
+			if bm, bOK := out[k].(map[string]any); bOK {
+				if hm, hOK := v.(map[string]any); hOK {
+					out[k] = mergeInitParamMaps(bm, hm)
+					continue
+				}
+			}
+		}
+		out[k] = v
+	}
+	return out
 }
 
 func hostParams() json.RawMessage {
@@ -381,9 +500,6 @@ func (a *Multiplexer) invalidateToolCache() {
 	a.schemaMu.Lock()
 	a.toolValidators = nil
 	a.schemaMu.Unlock()
-	a.catMu.Lock()
-	a.catVer = ""
-	a.catMu.Unlock()
 }
 
 func coalesceArgs(a json.RawMessage) json.RawMessage {
@@ -397,7 +513,7 @@ func (a *Multiplexer) semanticRoutingSignal(ctx context.Context, toolName string
 	a.catMu.RLock()
 	ver := a.catVer
 	a.catMu.RUnlock()
-	allowedList := hostctx.AllowedToolNamesFromContext(ctx)
+	allowMode, allowedList := hostctx.AllowListModeFromContext(ctx)
 	return router.RoutingSignal{
 		SessionID:       hostctx.MCPSessionIDFromContext(ctx),
 		Method:          "tools/call",
@@ -405,7 +521,19 @@ func (a *Multiplexer) semanticRoutingSignal(ctx context.Context, toolName string
 		ArgumentsJSON:   args,
 		IntentText:      hostctx.ClientIntentFromContext(ctx),
 		AllowedTools:    allowedList,
+		AllowListAuthz:  routerAllowListAuthz(allowMode),
 		CatalogVersion:  ver,
 		RecentToolNames: hostctx.RecentToolNamesFromContext(ctx),
+	}
+}
+
+func routerAllowListAuthz(mode hostctx.AllowListMode) router.AllowListAuthz {
+	switch mode {
+	case hostctx.AllowListDenyAll:
+		return router.AllowListAuthzDenyAll
+	case hostctx.AllowListRestricted:
+		return router.AllowListAuthzRestricted
+	default:
+		return router.AllowListAuthzUnrestricted
 	}
 }

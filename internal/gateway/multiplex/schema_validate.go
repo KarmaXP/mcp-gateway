@@ -14,20 +14,25 @@ import (
 
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 	"github.com/KarmaXP/mcp-gateway/internal/policy"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
 	"github.com/KarmaXP/mcp-gateway/internal/validate"
 )
 
-func filterToolsForPolicy(merged []map[string]any, allowed []string) ([]map[string]any, error) {
-	if len(allowed) == 0 {
+func filterToolsForPolicy(merged []map[string]any, mode hostctx.AllowListMode, allowed []string) ([]map[string]any, error) {
+	switch mode {
+	case hostctx.AllowListUnrestricted:
 		return merged, nil
+	case hostctx.AllowListDenyAll:
+		return []map[string]any{}, nil
 	}
+	policyList := hostctx.PolicyAllowListView(mode, allowed)
 	out := make([]map[string]any, 0, len(merged))
 	for _, t := range merged {
 		name, _ := t["name"].(string)
-		ok, err := policy.AllowedListContains(name, allowed)
+		ok, err := policy.AllowedListContains(name, policyList)
 		if err != nil {
 			return nil, err
 		}
@@ -115,23 +120,61 @@ func cloneJSONLikeValue(v any) any {
 	}
 }
 
-func hardenObjectSchemas(v any) {
+var schemaCombinatorKeys = []string{"allOf", "anyOf", "oneOf", "not", "if", "then", "else", "items", "prefixItems", "contains", "propertyNames"}
+
+func hardenObjectSchemas(v any) { hardenSchemaNode(v) }
+
+func hardenSchemaNode(v any) {
 	switch x := v.(type) {
 	case map[string]any:
-		if isObjectSchema(x) {
-			x["additionalProperties"] = false
-		}
-		for _, vv := range x {
-			hardenObjectSchemas(vv)
-		}
+		hardenObjectSchemaMap(x)
 	case []any:
-		for _, vv := range x {
-			hardenObjectSchemas(vv)
+		for _, item := range x {
+			hardenSchemaNode(item)
+		}
+	}
+}
+
+func hardenObjectSchemaMap(doc map[string]any) {
+	if isObjectSchema(doc) {
+		doc["additionalProperties"] = false
+	}
+	for _, key := range schemaCombinatorKeys {
+		if vv, ok := doc[key]; ok {
+			hardenSchemaNode(vv)
+		}
+	}
+	if props, ok := doc["properties"].(map[string]any); ok {
+		for _, vv := range props {
+			hardenSchemaNode(vv)
+		}
+	}
+	if pp, ok := doc["patternProperties"].(map[string]any); ok {
+		for _, vv := range pp {
+			hardenSchemaNode(vv)
+		}
+	}
+	if ap, ok := doc["additionalProperties"]; ok {
+		if apMap, ok := ap.(map[string]any); ok {
+			hardenSchemaNode(apMap)
+		}
+	}
+	if defs, ok := doc[""].(map[string]any); ok {
+		for _, vv := range defs {
+			hardenSchemaNode(vv)
+		}
+	}
+	if defs, ok := doc["definitions"].(map[string]any); ok {
+		for _, vv := range defs {
+			hardenSchemaNode(vv)
 		}
 	}
 }
 
 func isObjectSchema(doc map[string]any) bool {
+	if _, ok := doc["properties"]; ok {
+		return true
+	}
 	t, ok := doc["type"]
 	if !ok {
 		return false

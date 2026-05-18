@@ -32,10 +32,21 @@ func (a *Multiplexer) ToolsList(ctx context.Context, hostID json.RawMessage) (*r
 		telemetry.AttrJSONRPCID(hostID),
 	)
 
-	allowed := hostctx.AllowedToolNamesFromContext(tctx)
-	if resp, ok := a.tryCachedToolsList(tctx, hostID, allowed); ok {
+	allowMode, allowed := hostctx.AllowListModeFromContext(tctx)
+	if resp, ok := a.tryCachedToolsList(tctx, hostID, allowMode); ok {
 		span.SetStatus(codes.Ok, "")
 		return resp, nil
+	}
+	if allowMode == hostctx.AllowListDenyAll {
+		muxStart := time.Now()
+		toReturn, err := a.toolsListPayloadForClient(nil, allowMode, allowed, nil)
+		telemetry.RecordInternalPhase(tctx, "tools/list", defaults.MetricInternalPhaseMux, time.Since(muxStart))
+		if err != nil {
+			span.SetStatus(codes.Error, "tools/list policy")
+			return rpc.NewError(hostID, errcodes.GatewayInternal, "tools/list policy failed", nil), nil
+		}
+		span.SetStatus(codes.Ok, "")
+		return rpc.NewResult(hostID, toReturn), nil
 	}
 
 	merged, listFailures, err := a.fetchAndMergeUpstreamTools(tctx)
@@ -52,7 +63,7 @@ func (a *Multiplexer) ToolsList(ctx context.Context, hostID json.RawMessage) (*r
 		return nil, fmt.Errorf("multiplex: marshal tools/list: %w", err)
 	}
 
-	a.storeFullToolsListCache(outFull, allowed)
+	a.storeFullToolsListCache(outFull, allowMode)
 	a.maybeReindexSemanticCatalog(tctx, merged, outFull)
 
 	mergedForList := merged
@@ -65,6 +76,7 @@ func (a *Multiplexer) ToolsList(ctx context.Context, hostID json.RawMessage) (*r
 				Method:         "tools/list",
 				IntentText:     intent,
 				AllowedTools:   allowed,
+				AllowListAuthz: routerAllowListAuthz(allowMode),
 				CatalogVersion: ver,
 			}
 			rctx, sp := telemetry.StartSpan(tctx, telemetry.SpanSemanticRouter)
@@ -79,7 +91,7 @@ func (a *Multiplexer) ToolsList(ctx context.Context, hostID json.RawMessage) (*r
 	}
 
 	muxStart := time.Now()
-	toReturn, err := a.toolsListPayloadForClient(mergedForList, allowed, listFailures)
+	toReturn, err := a.toolsListPayloadForClient(mergedForList, allowMode, allowed, listFailures)
 	telemetry.RecordInternalPhase(tctx, "tools/list", defaults.MetricInternalPhaseMux, time.Since(muxStart))
 	if err != nil {
 		span.SetStatus(codes.Error, "tools/list policy")
@@ -89,8 +101,8 @@ func (a *Multiplexer) ToolsList(ctx context.Context, hostID json.RawMessage) (*r
 	return rpc.NewResult(hostID, toReturn), nil
 }
 
-func (a *Multiplexer) tryCachedToolsList(ctx context.Context, hostID json.RawMessage, allowed []string) (*rpc.Response, bool) {
-	if a.listTTL <= 0 || len(allowed) != 0 {
+func (a *Multiplexer) tryCachedToolsList(ctx context.Context, hostID json.RawMessage, mode hostctx.AllowListMode) (*rpc.Response, bool) {
+	if a.listTTL <= 0 || mode != hostctx.AllowListUnrestricted {
 		return nil, false
 	}
 	if a.semantic != nil && a.semantic.FilterListActive() && hostctx.ClientIntentFromContext(ctx) != "" {
@@ -162,6 +174,10 @@ func (a *Multiplexer) callUpstreamToolsList(ctx context.Context, b backend.Upstr
 		slog.Warn("tools/list backend failed", "backend_id", b.ID(), "err", err)
 		return nil, &PartialFailure{BackendID: b.ID(), Reason: classifyCallFailure(err)}
 	}
+	if resp == nil {
+		slog.Warn("tools/list backend returned nil response", "backend_id", b.ID())
+		return nil, &PartialFailure{BackendID: b.ID(), Reason: PartialFailureOmitted}
+	}
 	if resp.Error != nil {
 		slog.Warn("tools/list jsonrpc error", "backend_id", b.ID(), "message", resp.Error.Message)
 		return nil, &PartialFailure{BackendID: b.ID(), Reason: PartialFailureJSONRPC}
@@ -215,8 +231,8 @@ func mergeNamespacedToolList(upstreams []backend.Upstream, perUpstream [][]map[s
 	return merged
 }
 
-func (a *Multiplexer) storeFullToolsListCache(outFull []byte, allowed []string) {
-	if a.listTTL <= 0 || len(allowed) != 0 {
+func (a *Multiplexer) storeFullToolsListCache(outFull []byte, mode hostctx.AllowListMode) {
+	if a.listTTL <= 0 || mode != hostctx.AllowListUnrestricted {
 		return
 	}
 	a.mu.Lock()
@@ -247,22 +263,36 @@ func (a *Multiplexer) maybeReindexSemanticCatalog(ctx context.Context, merged []
 		slog.Warn("router catalog build skipped", "err", err)
 		return
 	}
+	refreshGen := a.catRefreshGen.Add(1)
 	if err := a.semantic.Reindex(ctx, ver, indexed); err != nil {
 		slog.Warn("router reindex failed", "err", err)
 		return
 	}
+	a.commitSemanticCatalogVersion(ctx, ver, indexed, refreshGen)
+}
+
+func (a *Multiplexer) commitSemanticCatalogVersion(ctx context.Context, ver string, indexed []router.IndexedTool, refreshGen uint64) {
 	a.catMu.Lock()
+	defer a.catMu.Unlock()
+	if a.catRefreshGen.Load() != refreshGen {
+		return
+	}
+	if a.catVer == ver {
+		return
+	}
+	if a.semantic != nil {
+		a.semantic.ApplyCatalog(ctx, ver, indexed)
+	}
 	a.catVer = ver
-	a.catMu.Unlock()
 	telemetry.SetIndexedCatalogToolCount(int64(len(indexed)))
 }
 
-func (a *Multiplexer) toolsListPayloadForClient(merged []map[string]any, allowed []string, failures []PartialFailure) (json.RawMessage, error) {
+func (a *Multiplexer) toolsListPayloadForClient(merged []map[string]any, mode hostctx.AllowListMode, allowed []string, failures []PartialFailure) (json.RawMessage, error) {
 	var payload map[string]any
-	if len(allowed) == 0 {
+	if mode == hostctx.AllowListUnrestricted {
 		payload = map[string]any{"tools": merged}
 	} else {
-		filtered, err := filterToolsForPolicy(merged, allowed)
+		filtered, err := filterToolsForPolicy(merged, mode, allowed)
 		if err != nil {
 			return nil, fmt.Errorf("multiplex: tools/list policy: %w", err)
 		}
