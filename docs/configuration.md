@@ -25,7 +25,7 @@ Ports: [local-ports.md](local-ports.md).
 | `MCP_GATEWAY_CONFIG` | `gateway.demo.yaml` (via `make run`) | Path to main YAML |
 | `MCP_GATEWAY_BACKENDS` | n/a | Optional JSON array merged after YAML |
 | `PORT` | `8080` | HTTP listen port |
-| `GATEWAY_PORT` | `8080` | Used by `make stop` (keep in sync with `PORT`) |
+| `GATEWAY_PORT` | `8080` | Fallback listen port if `PORT` is unset; `make stop` also reads both from `.env` |
 
 ---
 
@@ -54,7 +54,7 @@ Requires **`QDRANT_URL`** when `router.mode` / `ROUTER_MODE` is `on`, `assist_li
 | `on` / `assist_list` | Full catalog | Router may resolve ambiguous names |
 | `filter_list` | Subset when `X-MCP-Intent` is set | Same as `on` |
 
-Exact tool names skip vector search. See [Connecting agents § Semantic routing](CONNECTING_AGENTS.md#semantic-routing).
+Exact tool names skip vector search. See [Connecting agents — Semantic routing](CONNECTING_AGENTS.md#semantic-routing).
 
 **`filter_list` degradation:** if the catalog is stale, embed/query fails, or no tool clears `score_min`, the router returns the full merged catalog in memory; the gateway still applies JWT/RAR filtering on the response (`tools/list` never bypasses AuthZ).
 

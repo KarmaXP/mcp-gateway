@@ -48,7 +48,7 @@ help:
 	@printf "$(BLUE)▶ Development$(RESET)\n"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "build" "Compile the Go binary"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "run" "Start the Gateway in development mode"
-	@printf "  $(CYAN)%-20s$(RESET) %s\n" "stop" "Stop the running Gateway process"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "stop" "Stop gateway on PORT/GATEWAY_PORT (.env); not demo/SRE mocks"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test" "Run all unit tests with race detection"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test-cover" "go test -race with coverage report (internal/*)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test-integration" "go test -tags=integration (JWT policy + optional Qdrant/embed/OTLP; see docs/DEVELOPER.md)"
@@ -146,13 +146,19 @@ run:
 
 SMOKE_JWT_GATEWAY_PORT ?= 18082
 
-stop: demo-backends-stop sre-backends-stop
+stop:
 	@echo "🛑 Stopping $(BINARY_NAME)..."
-	@lsof -ti :$(GATEWAY_PORT) 2>/dev/null | xargs kill 2>/dev/null || true
-	@lsof -ti :$(SMOKE_GATEWAY_PORT) 2>/dev/null | xargs kill 2>/dev/null || true
-	@lsof -ti :$(SMOKE_JWT_GATEWAY_PORT) 2>/dev/null | xargs kill 2>/dev/null || true
-	@lsof -ti :31400 2>/dev/null | xargs kill 2>/dev/null || true
-	@echo "Stopped gateway ports and demo/SRE mocks if any."
+	@bash -c 'set -a && ([ -f .env ] && . ./.env || true) && set +a; \
+		seen=""; \
+		kill_port() { \
+			local p="$$1"; [ -z "$$p" ] && return 0; \
+			case " $$seen " in *" $$p "*) return 0;; esac; seen="$$seen $$p"; \
+			local ids; ids=$$(lsof -ti :$$p 2>/dev/null || true); \
+			[ -n "$$ids" ] && kill $$ids 2>/dev/null || true; \
+		}; \
+		kill_port "$$PORT"; kill_port "$$GATEWAY_PORT"; kill_port "$(GATEWAY_PORT)"; \
+		kill_port "$(SMOKE_GATEWAY_PORT)"; kill_port "$(SMOKE_JWT_GATEWAY_PORT)"; kill_port "31400"; \
+		echo "Stopped gateway listeners (PORT/GATEWAY_PORT from .env when set). Use make sre-down / demo-backends-stop for mocks."'
 
 test:
 	@echo "🧪 Running vet + tests..."

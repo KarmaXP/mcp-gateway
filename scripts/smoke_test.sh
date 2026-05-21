@@ -221,5 +221,5 @@ if [[ "${DEMO_PRINT_HELP:-}" == "1" ]]; then
   echo "                -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"smoke__echo\",\"arguments\":{}}}' \\"
   echo "                ${GATEWAY_URL}/mcp/rpc"
   echo "Config:       ${MCP_GATEWAY_CONFIG}"
-  echo "Stop gateway: make stop   (frees port 8080 when using make run; demo auto-start uses ${GATEWAY_PORT})"
+  echo "Stop gateway: make stop   (frees PORT/GATEWAY_PORT from .env; demo auto-start used ${GATEWAY_PORT})"
 fi
