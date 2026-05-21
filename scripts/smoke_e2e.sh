@@ -1,21 +1,9 @@
 #!/usr/bin/env bash
-# End-to-end smoke against an already-running gateway (no auto-start).
+# End-to-end MCP smoke (SSE + JSON-RPC) against a running gateway.
 #
-# Usage:
 #   bash scripts/smoke_e2e.sh
-#
-#   # Custom gateway URL:
-#   GATEWAY_URL=http://127.0.0.1:8080 bash scripts/smoke_e2e.sh
-#
-#   # JWT-protected gateway:
-#   SMOKE_JWT="$(tools/gen-jwt ...)" bash scripts/smoke_e2e.sh
-#
-#   # Custom expected tool and response text:
-#   SMOKE_EXPECT_TOOL=acme__echo SMOKE_EXPECT_TEXT=acme-ok bash scripts/smoke_e2e.sh
-#
-# Notes:
-#   - This script expects gateway and upstream(s) to already be running.
-#   - Use `make smoke` for auto-started full-stack smoke flow.
+#   GATEWAY_URL=http://127.0.0.1:8080 SMOKE_EXPECT_TOOL=alpha__echo SMOKE_EXPECT_TEXT=ok bash scripts/smoke_e2e.sh
+#   SMOKE_JWT="$(go run ./tools/gen-jwt ...)" bash scripts/smoke_e2e.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -24,7 +12,6 @@ cd "$ROOT"
 GATEWAY_URL="${GATEWAY_URL:-http://127.0.0.1:8080}"
 SMOKE_EXPECT_TOOL="${SMOKE_EXPECT_TOOL:-smoke__echo}"
 SMOKE_EXPECT_TEXT="${SMOKE_EXPECT_TEXT:-smoke-ok}"
-# Optional raw JSON object/string for tool arguments (default: empty object).
 SMOKE_TOOL_ARGS="${SMOKE_TOOL_ARGS:-{}}"
 
 SSE_HDR=""
@@ -32,10 +19,13 @@ SSE_OUT=""
 SSE_PID=""
 SID=""
 
-AUTH_HEADERS=()
-if [[ -n "${SMOKE_JWT:-}" ]]; then
-  AUTH_HEADERS=(-H "Authorization: Bearer ${SMOKE_JWT}")
-fi
+curl_auth() {
+  if [[ -n "${SMOKE_JWT:-}" ]]; then
+    curl -H "Authorization: Bearer ${SMOKE_JWT}" "$@"
+  else
+    curl "$@"
+  fi
+}
 
 cleanup() {
   if [[ -n "${SSE_PID:-}" ]]; then
@@ -78,8 +68,7 @@ post_rpc() {
   local step="$2"
   local http_code=""
   if ! http_code="$(
-    curl -sS -o /dev/null -w "%{http_code}" \
-      "${AUTH_HEADERS[@]}" \
+    curl_auth -sS -o /dev/null -w "%{http_code}" \
       -H "Mcp-Session-Id: ${SID}" \
       -H "Content-Type: application/json" \
       -d "${body}" \
@@ -96,18 +85,17 @@ post_rpc() {
 }
 
 echo "==> GET /healthz"
-curl -sfS "${AUTH_HEADERS[@]}" "${GATEWAY_URL}/healthz" >/dev/null || \
+curl_auth -sfS "${GATEWAY_URL}/healthz" >/dev/null || \
   fail "gateway not reachable at ${GATEWAY_URL}"
 
 echo "==> GET /readyz"
-curl -sfS "${AUTH_HEADERS[@]}" "${GATEWAY_URL}/readyz" >/dev/null || \
+curl_auth -sfS "${GATEWAY_URL}/readyz" >/dev/null || \
   fail "gateway not ready at ${GATEWAY_URL}"
 
 SSE_HDR="$(mktemp)"
 SSE_OUT="$(mktemp)"
 echo "==> GET ${GATEWAY_URL}/mcp/sse (background) -> ${SSE_OUT}"
-curl -sS -N -o "${SSE_OUT}" -D "${SSE_HDR}" \
-    "${AUTH_HEADERS[@]}" \
+curl_auth -sS -N -o "${SSE_OUT}" -D "${SSE_HDR}" \
   "${GATEWAY_URL}/mcp/sse" &
 SSE_PID=$!
 sleep 0.6
