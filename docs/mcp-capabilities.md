@@ -11,11 +11,13 @@ Wire contract: [OpenAPI](artifacts/openapi/openapi.yaml). Scope boundaries: [ADR
 | Endpoint | Role |
 |----------|------|
 | `GET /mcp/sse` | Open session; response header **`Mcp-Session-Id`** required on later POSTs |
-| `POST /mcp/rpc` | Send one JSON-RPC request or notification per call (**202** when accepted) |
+| `POST /mcp/rpc` | Send one JSON-RPC **2.0** request or notification per call (**202** when accepted) |
 | `GET /healthz` | Liveness (always OK when process is up) |
 | `GET /readyz` | Readiness; probes Qdrant + embed when semantic router is active |
 
-Results for requests with an `id` are delivered on the SSE stream as `event: jsonrpc` with a single-line `data:` JSON-RPC object.
+Wire format: JSON-RPC **2.0**; `initialize` uses MCP protocol version **2024-11-05** (see [DEVELOPER.md — Protocol](DEVELOPER.md#protocol-and-dependencies)).
+
+Results for requests with an `id` are delivered on the SSE stream as `event: jsonrpc` with a single-line `data:` JSON-RPC object. Notifications (no `id`) are accepted with **202** and produce no SSE response.
 
 ---
 
@@ -53,7 +55,7 @@ Until the session completes:
 
 …calls such as `tools/list` and `tools/call` return **`HandshakeIncomplete` (-32001)**.
 
-Full sequence: [Connecting agents § Session flow](CONNECTING_AGENTS.md#session-flow-required).
+Full sequence: [Connecting agents — Session flow](CONNECTING_AGENTS.md#session-flow-required).
 
 ---
 
@@ -63,7 +65,7 @@ Default: if an upstream fails during `initialize` or a **list** RPC, that upstre
 
 Optional strict mode (`aggregation.strict_initialize` / `strict_list`): any upstream failure → **`StrictAggregationFailed` (-32005)** to the host.
 
-Details: [Adding backends § Aggregation](ADDING_BACKENDS.md#aggregation-and-failures).
+Details: [Adding backends — Aggregation](ADDING_BACKENDS.md#aggregation-and-failures).
 
 ---
 

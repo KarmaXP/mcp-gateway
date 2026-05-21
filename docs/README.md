@@ -6,7 +6,7 @@ Start with the [repository README](../README.md), then use this map.
 
 | Goal | Document |
 |------|----------|
-| Run the gateway locally in one command | [README § Quick start](../README.md) |
+| Run the gateway locally in one command | [README — Quick start](../README.md#-quick-start) |
 | Understand local ports and example configs | [local-ports.md](local-ports.md) |
 | Register upstream MCP servers | [ADDING_BACKENDS.md](ADDING_BACKENDS.md) |
 | Connect an IDE, script, or agent | [CONNECTING_AGENTS.md](CONNECTING_AGENTS.md) |
@@ -50,6 +50,6 @@ Start with the [repository README](../README.md), then use this map.
 | Tool | Location |
 |------|----------|
 | Minimal MCP host client | [scripts/mcp_host_demo/README.md](../scripts/mcp_host_demo/README.md) |
-| MCP smoke (curl) | `make demo`, `scripts/smoke_test.sh` |
+| MCP smoke (curl) | `make demo`, `scripts/smoke_test.sh`, `scripts/smoke_e2e.sh` |
 | Load testing | [scripts/loadtest/README.md](../scripts/loadtest/README.md) |
 | Regenerate router eval catalog JSON | `make gen-router-eval-catalog` |

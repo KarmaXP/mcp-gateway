@@ -42,7 +42,7 @@ make bootstrap   # copies .env.example → .env if missing
 
 | Command | What you get |
 |---------|----------------|
-| `make run` | Gateway on **8080** (default config: `deployments/gateway.demo.yaml`) |
+| `make run` | Gateway on **8080** by default (override `PORT` in `.env`; see [local-ports.md](docs/local-ports.md)) |
 | `make demo-full` | Two mock backends + `alpha__echo` through the gateway |
 | `make sre-smoke` | Three SRE-style tools (`k8s__`, `prom__`, `gh__`) via mock upstreams |
 | `make verify-e2e` | Full automated check: unit tests + demo + multi-backend + SRE smoke |
@@ -77,6 +77,7 @@ make run
 | Architecture overview | **[Architecture](docs/architecture/README.md)** |
 | HTTP contract (OpenAPI) | **[openapi.yaml](docs/artifacts/openapi/openapi.yaml)** |
 | Measure router quality and latency | **[Calibration runbook](docs/evaluation/calibration-run.md)** |
+| Multi-backend SRE walkthrough | **[SRE scenario](docs/evaluation/scenario-sre-multibackend.md)** |
 
 ---
 

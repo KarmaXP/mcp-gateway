@@ -30,7 +30,7 @@ flowchart LR
 | **Gateway** | Auth, merge catalogs, route ambiguous `tools/call`, forward RPCs. |
 | **Backend** | Real MCP tools (cluster API, metrics, GitHub, …). |
 
-In the intended SRE setup, a framework such as **LangGraph** acts as the host: one graph node issues MCP calls through the gateway URL. This repository does not ship a LangGraph project yet; the flow below is what you implement in your agent repo.
+In the intended SRE setup, an external agent framework (for example LangGraph) acts as the host: graph nodes issue MCP calls through one gateway base URL. Implement the host in your own repository; this project supplies the gateway and reference clients only.
 
 ---
 
@@ -38,7 +38,7 @@ In the intended SRE setup, a framework such as **LangGraph** acts as the host: o
 
 | Environment | Base URL |
 |-------------|----------|
-| Local dev (`make run`) | `http://127.0.0.1:8080` |
+| Local dev (`make run`) | `http://127.0.0.1:8080` (or `PORT` from `.env`; see [local-ports.md](local-ports.md)) |
 | Docker compose gateway profile | `http://127.0.0.1:${HOST_PORT_GATEWAY:-8080}` |
 
 Endpoints:
@@ -49,6 +49,8 @@ Endpoints:
 | `GET` | `/readyz` | Readiness (Qdrant/embed when router on) |
 | `GET` | `/mcp/sse` | Open session; read `Mcp-Session-Id` header |
 | `POST` | `/mcp/rpc` | Send one JSON-RPC message per request |
+
+**Protocol:** JSON-RPC **2.0** over HTTP; MCP revision **2024-11-05** in `initialize` (see [DEVELOPER.md — Protocol](DEVELOPER.md#protocol-and-dependencies) and [mcp-capabilities.md](mcp-capabilities.md)).
 
 ---
 
@@ -155,7 +157,7 @@ Local dev without auth: `AUTH_MODE=none` (default in examples).
 | `on` / `assist_list` | Full `tools/list`; router may rewrite ambiguous `tools/call` names when `allow_auto_rename` is true. |
 | `filter_list` | Narrowed `tools/list` when `X-MCP-Intent` is set; degrades to full catalog when routing is unavailable (JWT filter still applies). |
 
-Requires `QDRANT_URL` and embed sidecar (`make docker-up`). Integration tests probe **`POST /embed`**, not only `/healthz`. See [ADDING_BACKENDS.md](ADDING_BACKENDS.md) § Semantic router.
+Requires `QDRANT_URL` and embed sidecar (`make docker-up`). Integration tests probe **`POST /embed`**, not only `/healthz`. See [Adding backends — Semantic router](ADDING_BACKENDS.md#semantic-router-routermode-on).
 
 **Exact names win:** if the host sends `k8s__get_pod_logs` exactly, the gateway uses the deterministic path without vector search.
 
@@ -170,9 +172,11 @@ Requires `QDRANT_URL` and embed sidecar (`make docker-up`). Integration tests pr
 With backends and mocks from [ADDING_BACKENDS.md](ADDING_BACKENDS.md):
 
 ```bash
-make sre-up     # Qdrant + embed + k8s/prom/gh mocks
-make sre-smoke    # verifies three tools/call in one session
+make sre-up
+make sre-smoke
 ```
+
+Manual MCP validation (three sessions, one tool each): [scenario-sre-multibackend.md](evaluation/scenario-sre-multibackend.md) (`scripts/smoke_e2e.sh`).
 
 Typical agent sequence (same MCP session):
 
@@ -204,14 +208,15 @@ Canonical tool names: `k8s__get_pod_logs`, `prom__query_instant`, `gh__list_prs`
 
 ## Integrating LangGraph (or similar frameworks)
 
-There is **no LangGraph app in this repository** yet. Integrate in **your agent project** by treating the gateway as a remote MCP server:
+Integrate in **your agent project** by treating the gateway as a remote MCP server:
 
 ### 1. Configuration
 
 ```bash
-export MCP_GATEWAY_URL=http://127.0.0.1:8080
-export MCP_GATEWAY_CONFIG=deployments/gateway.sre.example.yaml # on gateway process only
+export GATEWAY_URL=http://127.0.0.1:8080
 ```
+
+Set `MCP_GATEWAY_CONFIG`, `ROUTER_MODE`, `QDRANT_URL`, and `EMBED_URL` on the **gateway process** only (not on the host client).
 
 ### 2. MCP client in the graph
 
@@ -264,7 +269,6 @@ X-MCP-Intent: high error rate on checkout service after deploy
 ### 5. Pseudocode shape
 
 ```python
-# Illustrative: adapt to your MCP SDK
 session = mcp_client.connect_sse(f"{GATEWAY_URL}/mcp/sse", headers=auth_headers)
 session.initialize()
 session.notify_initialized()
@@ -276,11 +280,12 @@ result = session.tools_call(
 )
 ```
 
-### 6. Verify before LangGraph
+### 6. Verify before your agent runtime
 
-1. `make sre-smoke`, gateway + mocks without an LLM.
-2. `go run ./scripts/mcp_host_demo`, minimal host client.
-3. Then point LangGraph at the same `GATEWAY_URL`.
+1. `make sre-smoke` (or `scripts/smoke_e2e.sh` per [scenario-sre-multibackend.md](evaluation/scenario-sre-multibackend.md)).
+2. `go run ./scripts/mcp_host_demo` with the same `GATEWAY_URL`.
+3. [scenario-jwt-allowlist.md](evaluation/scenario-jwt-allowlist.md) when using `AUTH_MODE=jwt`.
+4. Wire your host to the same base URL, SSE session, and headers documented above.
 
 ---
 

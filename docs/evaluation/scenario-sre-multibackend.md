@@ -38,13 +38,30 @@ Set runtime env consistent with semantic routing:
 - `QDRANT_URL=<your-qdrant-url>`
 - `EMBED_URL=<your-embed-url>`
 
+**Local host stack:**
+
+```bash
+make docker-up
+make sre-up
+
+export AUTH_MODE=none
+export MCP_GATEWAY_CONFIG=deployments/gateway.sre.example.yaml
+export ROUTER_MODE=on
+export QDRANT_URL=http://127.0.0.1:6333
+export EMBED_URL=http://127.0.0.1:18001
+export PORT=18080
+make run
+```
+
+In a second shell, set `GATEWAY_URL` to match `PORT` (defaults in [local-ports.md](../local-ports.md)). `make stop` frees the gateway listener only; use `make sre-down` for mocks.
+
 ## 2) Walkthrough (host client or smoke scripts)
 
 Use one client session over MCP SSE + JSON-RPC. The sequence below mirrors `scripts/smoke_e2e.sh` semantics, replacing the tool names with multi-backend targets.
 
 1. Start gateway with the multi-backend config and verify `GET /healthz` and `GET /readyz`.
 2. Open `GET /mcp/sse` and capture `Mcp-Session-Id`.
-3. Send `initialize`, then `notifications/initialized`.
+3. Send `initialize` (`protocolVersion` **2024-11-05**), then `notifications/initialized`.
 4. Send `tools/list`.
 5. Send three `tools/call` requests in the same session:
    - `k8s__get_pod_logs` (cluster diagnostics)
@@ -57,13 +74,17 @@ One-shot smoke (requires `make sre-up` or mocks + Qdrant/embed):
 make sre-smoke
 ```
 
-Manual sequence with `scripts/smoke_e2e.sh` (three runs):
+Manual sequence with `scripts/smoke_e2e.sh` (three runs; gateway must already be listening):
 
 ```bash
+export GATEWAY_URL=http://127.0.0.1:${PORT:-8080}
+
 SMOKE_EXPECT_TOOL=k8s__get_pod_logs SMOKE_EXPECT_TEXT=k8s-ok bash scripts/smoke_e2e.sh
 SMOKE_EXPECT_TOOL=prom__query_instant SMOKE_EXPECT_TEXT=prom-ok bash scripts/smoke_e2e.sh
 SMOKE_EXPECT_TOOL=gh__list_prs SMOKE_EXPECT_TEXT=gh-ok bash scripts/smoke_e2e.sh
 ```
+
+Each run should end with `SMOKE OK`.
 
 ## 3) Expected router behavior (`ROUTER_MODE=on`)
 
@@ -100,3 +121,10 @@ Operationally, this gives an SRE a single correlated trace to answer:
 - Successful `tools/call` for 2-3 namespaced tools across different backend prefixes.
 - Traces/metrics show `parse/security/router/mux` phase coverage for the same session.
 - Router telemetry confirms exact-path or vector-path behavior under `ROUTER_MODE=on`.
+
+## Related
+
+- [CONNECTING_AGENTS.md](../CONNECTING_AGENTS.md): host session flow and headers
+- [mcp-capabilities.md](../mcp-capabilities.md): method matrix and notifications
+- [errors.md](../errors.md): JSON-RPC and HTTP errors
+- [local-ports.md](../local-ports.md): mock ports 3201–3203

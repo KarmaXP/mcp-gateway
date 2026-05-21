@@ -73,7 +73,7 @@ make demo        # recommended first run: no Docker, E2E MCP on localhost
 
 | Port | Service | When |
 |------|---------|------|
-| **8080** | Gateway (`PORT` / `GATEWAY_PORT`) | `make run`, `make stop` |
+| **8080** (or `.env` override, e.g. `18080`) | Gateway (`PORT` / `GATEWAY_PORT`) | `make run`, `make stop` (both read `.env`) |
 | **18081** | Gateway (smoke auto-start only) | `make demo` / `make smoke` with `SMOKE_AUTO_START_GATEWAY=1` |
 | **18082** | Gateway (JWT smoke) | `scripts/smoke_jwt.sh`; freed by `make stop` |
 | **31400** | `scripts/smoke_upstream` | Default upstream for `deployments/gateway.demo.yaml` |
@@ -88,13 +88,14 @@ Typical flows:
 make demo        # smoke upstream :31400 + gateway :18081 + MCP curl (no Docker)
 make demo-full     # alpha/beta mocks + gateway.example.yaml + alpha__echo (no Docker)
 make demo-backends   # only mocks on 3101/3102 (pair with make run + gateway.example.yaml)
-make sre-up       # docker-up + SRE mocks on 3201, 3203 (Qdrant + embed required for router on)
+make sre-up       # docker-up + SRE mocks on 3201–3203 (Qdrant + embed required for router on)
 make sre-smoke     # three tools/call: k8s__get_pod_logs, prom__query_instant, gh__list_prs
 make verify-e2e     # CI + demo + demo-full + sre-smoke (full local E2E check)
 make bootstrap     # .env from .env.example if missing
 make docker-up     # Qdrant, embed sidecar, OTel collector, Tempo, Prometheus, Grafana
 make docker-up-demo   # compose profile demo: mock-alpha / mock-beta (3101/3102 on host)
-make run        # gateway on 8080; default MCP_GATEWAY_CONFIG=gateway.demo.yaml
+make run        # gateway on PORT from .env (default 8080); MCP_GATEWAY_CONFIG=gateway.demo.yaml unless set
+make stop       # kills gateway listeners only; use demo-backends-stop / sre-down for mocks
 make test        # vet + race + unit tests
 make ci         # same as GitHub Actions lint-and-unit (lint + vet + race, -count=1)
 make test-integration  # needs compose (Qdrant + embed); see below
@@ -155,7 +156,7 @@ Summary:
 - **Auth**, `AUTH_MODE=none|jwt`; tool allow-lists via JWT/RAR; errors in [errors.md](errors.md).
 - **Router**, `ROUTER_MODE` + `QDRANT_URL` + `EMBED_URL`; modes in [CONNECTING_AGENTS.md](CONNECTING_AGENTS.md#semantic-routing).
 - **Telemetry**, `OTEL_EXPORTER_OTLP_ENDPOINT`.
-- **Policy reload**, `SIGHUP` reloads the in-process policy engine only; backends and most wiring require restart ([configuration.md § Reload](configuration.md#reload-vs-restart)). Open SSE sessions keep the same `Mcp-Session-Id` and owner `sub`; **JWT allow-list and `X-MCP-Intent` on each `POST /mcp/rpc`** are applied per request. Reconnect the SSE client if your host caches policy/version client-side.
+- **Policy reload**, `SIGHUP` reloads the in-process policy engine only; backends and most wiring require restart ([configuration.md — Reload](configuration.md#reload-vs-restart)). Open SSE sessions keep the same `Mcp-Session-Id` and owner `sub`; **JWT allow-list and `X-MCP-Intent` on each `POST /mcp/rpc`** are applied per request. Reconnect the SSE client if your host caches policy/version client-side.
 
 ## Protocol and dependencies
 
@@ -218,7 +219,7 @@ With `make docker-up`, Compose brings up a minimal observability stack (exact se
 
 - **Prometheus** scrapes gateway-relevant targets where configured.
 - **Grafana** dashboards for metrics; **Tempo** receives traces from the OpenTelemetry Collector.
-- Application metrics include semantic router outcomes and latency (`mcp.gateway.semantic_router.*`) with **`layer`** labels (`exact`, `rules`, `vector`, …), **`indexed_tools`** (gauge after each successful catalog reindex), and an **active SSE sessions** gauge (`mcp.gateway.active_sse_sessions`). **Internal hop** time (gateway-only, excludes upstream MCP I/O) is recorded as a histogram **`mcp.gateway.internal.duration_seconds`** with labels **`method`** (JSON-RPC method when known; `unknown` during JWT on `POST /mcp/rpc` before parse) and **`phase`**: `parse`, `security`, `router`, `mux`. Use phase histograms to track **p95** against the plan §6 internal budget (50 ms p95 goal for gateway-only work; see [calibration runbook](evaluation/calibration-run.md)); Prometheus scrape names may appear as `mcp_gateway_internal_duration_seconds_*` after translation.
+- Application metrics include semantic router outcomes and latency (`mcp.gateway.semantic_router.*`) with **`layer`** labels (`exact`, `rules`, `vector`, …), **`indexed_tools`** (gauge after each successful catalog reindex), and an **active SSE sessions** gauge (`mcp.gateway.active_sse_sessions`). **Internal hop** time (gateway-only, excludes upstream MCP I/O) is recorded as a histogram **`mcp.gateway.internal.duration_seconds`** with labels **`method`** (JSON-RPC method when known; `unknown` during JWT on `POST /mcp/rpc` before parse) and **`phase`**: `parse`, `security`, `router`, `mux`. Use phase histograms to track **p95** against the internal latency budget (50 ms p95 goal for gateway-only work; see [calibration runbook](evaluation/calibration-run.md)); Prometheus scrape names may appear as `mcp_gateway_internal_duration_seconds_*` after translation.
 - Traces: child span **`mcp.security.authn`** wraps JWT validation (under **`mcp.host.request`** for `POST /mcp/rpc` when `AUTH_MODE=jwt`); **`mcp.security.authz`** remains on `tools/call` allow-list enforcement in the multiplexer.
 - Tracing policy decisions (closed): each processed JSON-RPC message creates exactly one root span, **`mcp.host.request`**.
 - W3C propagation policy (closed): `traceparent` / `tracestate` are always propagated on outgoing HTTP upstream backend calls.

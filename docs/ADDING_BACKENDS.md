@@ -207,9 +207,9 @@ When the router is enabled, the gateway needs:
 
 Start dependencies: `make docker-up`, then your backends, then `make run`.
 
-After backends change, the gateway re-indexes the tool catalog on the next `tools/list` (and when `forward_tools_list_changed` is configured). See [DEVELOPER.md](DEVELOPER.md) § Configuration highlights.
+After backends change, the gateway re-indexes the tool catalog on the next `tools/list` (and when `forward_tools_list_changed` is configured). See [DEVELOPER.md — Configuration](DEVELOPER.md#configuration).
 
-Minimal router-on YAML: [DEVELOPER.md](DEVELOPER.md) § Minimal config.
+Minimal router-on YAML: [DEVELOPER.md — Minimal config](DEVELOPER.md#minimal-config-semantic-router-on).
 
 ---
 
@@ -233,7 +233,7 @@ Optional `aggregation:` block in YAML (see comments in `gateway.example.yaml`):
 | Change | Action |
 |--------|--------|
 | `policy:` block | `SIGHUP` reloads policy only. |
-| `backends:` list | **Restart** the gateway process (`make stop` then `make run`). |
+| `backends:` list | **Restart** the gateway process (`make stop` then `make run`). Mock upstreams keep running unless you run `make demo-backends-stop` or `make sre-down`. |
 | Env (`ROUTER_MODE`, `QDRANT_URL`, …) | Restart. |
 
 ---

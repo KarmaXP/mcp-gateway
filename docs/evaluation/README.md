@@ -15,9 +15,12 @@ Guides for validating gateway behavior beyond unit tests: scripted scenarios, lo
 Quick automated checks (from repo root):
 
 ```bash
-make sre-smoke   # three SRE tool calls via mocks
-make smoke     # single-backend MCP curl flow
+make sre-smoke
+make smoke
+GATEWAY_URL=http://127.0.0.1:8080 bash scripts/smoke_e2e.sh
 ```
+
+Multi-backend manual smoke: [scenario-sre-multibackend.md](scenario-sre-multibackend.md).
 
 Host client: [`scripts/mcp_host_demo/README.md`](../../scripts/mcp_host_demo/README.md).
 
@@ -28,7 +31,7 @@ Host client: [`scripts/mcp_host_demo/README.md`](../../scripts/mcp_host_demo/REA
 | Guide | Purpose |
 |-------|---------|
 | [calibration-run.md](calibration-run.md) | Procedure: Qdrant + embed + gateway + metrics |
-| [calibration-results.md](calibration-results.md) | Template to record recall@k and latency numbers |
+| [calibration-results.md](calibration-results.md) | Record recall@k and latency numbers from a calibration run |
 | [router-trace-capture.md](router-trace-capture.md) | Capture semantic-router spans in Tempo |
 
 Load testing: [`scripts/loadtest/README.md`](../../scripts/loadtest/README.md).

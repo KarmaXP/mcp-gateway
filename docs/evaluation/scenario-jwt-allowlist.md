@@ -33,7 +33,7 @@ export JWT_AUD="mcp-gateway"
 ## Step 2: Generate a base token with `tools/gen-jwt`
 
 ```bash
-cd /Users/carlos.palomero@feverup.com/Desktop/tfm/mcp-gateway
+# From the mcp-gateway module root:
 BASE_JWT="$(go run ./tools/gen-jwt -issuer "${JWT_ISS}" -audience "${JWT_AUD}" -key /tmp/mcp-jwt.key)"
 echo "${BASE_JWT}" | cut -c1-32
 ```
@@ -145,4 +145,4 @@ rm -f "${SSE_HDR}" "${SSE_OUT}"
 
 ## Automated check
 
-CI runs `scripts/smoke_jwt.sh` on every push (see [DEVELOPER.md § Continuous integration](../DEVELOPER.md#continuous-integration)).
+CI runs `scripts/smoke_jwt.sh` on every push (see [DEVELOPER.md — Continuous integration](../DEVELOPER.md#continuous-integration)).
