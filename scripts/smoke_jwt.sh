@@ -50,6 +50,24 @@ fail() {
   exit 1
 }
 
+wait_http_ok() {
+  local url="$1"
+  local attempts="${2:-120}"
+  local delay="${3:-0.25}"
+  local i
+  for ((i = 1; i <= attempts; i++)); do
+    if curl -sf "${url}" >/dev/null 2>&1; then
+      return 0
+    fi
+    if [[ -n "${GW_PID:-}" ]] && ! kill -0 "${GW_PID}" 2>/dev/null; then
+      echo "gateway process exited before ${url} became healthy" >&2
+      return 1
+    fi
+    sleep "${delay}"
+  done
+  return 1
+}
+
 dump_sse() {
   if [[ -n "${SSE_OUT}" && -f "${SSE_OUT}" ]]; then
     echo "--- SSE output (first 200 lines) ---" >&2
@@ -74,8 +92,12 @@ wait_sse_contains() {
 gen_token() {
   local allowed_tools="$1"
   local token=""
+  local gen_jwt="go run ./tools/gen-jwt"
+  if command -v gen-jwt >/dev/null 2>&1; then
+    gen_jwt="gen-jwt"
+  fi
   if ! token="$(
-    go run ./tools/gen-jwt \
+    ${gen_jwt} \
       -issuer "${JWT_ISS}" \
       -audience "${JWT_AUD}" \
       -key "${JWT_PRIVATE_KEY_FILE}" \
@@ -179,8 +201,21 @@ EOF
 ALLOW_JWT="$(gen_token "${ALLOW_TOOL}")"
 [[ -n "${ALLOW_JWT}" ]] || fail "allow token was empty"
 
+UPSTREAM_BIN="${SMOKE_UPSTREAM_BIN:-}"
+if [[ -z "${UPSTREAM_BIN}" ]]; then
+  UPSTREAM_BIN="go run ./scripts/smoke_upstream"
+else
+  UPSTREAM_BIN="${UPSTREAM_BIN}"
+fi
+GATEWAY_BIN="${SMOKE_GATEWAY_BIN:-}"
+if [[ -z "${GATEWAY_BIN}" ]]; then
+  GATEWAY_BIN="go run ./cmd/gateway"
+else
+  GATEWAY_BIN="${GATEWAY_BIN}"
+fi
+
 echo "==> starting smoke upstream on 127.0.0.1:${UPSTREAM_PORT}"
-go run ./scripts/smoke_upstream/main.go -listen "127.0.0.1:${UPSTREAM_PORT}" &
+${UPSTREAM_BIN} -listen "127.0.0.1:${UPSTREAM_PORT}" &
 UP_PID=$!
 sleep 0.5
 
@@ -190,19 +225,13 @@ if [[ "${SMOKE_AUTO_START_GATEWAY:-}" == "1" ]]; then
   AUTH_MODE=jwt \
   JWT_ISS="${JWT_ISS}" \
   JWT_AUD="${JWT_AUD}" \
-  JWT_PUBLIC_KEY_PEM="$(<"${JWT_PUBLIC_KEY_FILE}")" \
+  JWT_PUBLIC_KEY_FILE="${JWT_PUBLIC_KEY_FILE}" \
   PORT="${GATEWAY_PORT}" \
-    go run ./cmd/gateway/main.go &
+    ${GATEWAY_BIN} &
   GW_PID=$!
-  for _ in $(seq 1 40); do
-    if curl -sf "${GATEWAY_URL}/healthz" >/dev/null 2>&1; then
-      break
-    fi
-    sleep 0.15
-  done
-  curl -sf "${GATEWAY_URL}/healthz" >/dev/null || fail "gateway failed to become healthy"
+  wait_http_ok "${GATEWAY_URL}/healthz" || fail "gateway failed to become healthy"
 else
-  curl -sf "${GATEWAY_URL}/healthz" >/dev/null 2>&1 || fail "gateway not healthy at ${GATEWAY_URL}"
+  wait_http_ok "${GATEWAY_URL}/healthz" 40 0.15 || fail "gateway not healthy at ${GATEWAY_URL}"
 fi
 
 SSE_HDR="$(mktemp)"

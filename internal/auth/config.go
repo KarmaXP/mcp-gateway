@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -30,13 +31,25 @@ func JWTAuthFromEnvironment() JWTAuthConfig {
 			ttl = d
 		}
 	}
+	publicKeyPEM, _ := publicKeyPEMFromEnvironment()
 	return JWTAuthConfig{
 		Mode:             strings.ToLower(strings.TrimSpace(os.Getenv("AUTH_MODE"))),
 		Issuer:           strings.TrimSpace(os.Getenv("JWT_ISS")),
 		Audience:         strings.TrimSpace(os.Getenv("JWT_AUD")),
 		JWKSURL:          strings.TrimSpace(os.Getenv("JWT_JWKS_URL")),
-		PublicKeyPEM:     strings.TrimSpace(os.Getenv("JWT_PUBLIC_KEY_PEM")),
+		PublicKeyPEM:     publicKeyPEM,
 		JWKSCacheTTL:     ttl,
 		SkipPathPrefixes: []string{mcpwire.PathHealthz, mcpwire.PathReadyz},
 	}
+}
+
+func publicKeyPEMFromEnvironment() (string, error) {
+	if path := strings.TrimSpace(os.Getenv("JWT_PUBLIC_KEY_FILE")); path != "" {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return "", fmt.Errorf("read JWT_PUBLIC_KEY_FILE %q: %w", path, err)
+		}
+		return strings.TrimSpace(string(b)), nil
+	}
+	return strings.TrimSpace(os.Getenv("JWT_PUBLIC_KEY_PEM")), nil
 }

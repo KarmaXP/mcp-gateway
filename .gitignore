@@ -20,6 +20,7 @@ vendor/
 # Logs and temporary files
 *.log
 tmp/
+.ci-bin/
 
 # OS specific files
 .DS_Store

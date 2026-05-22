@@ -51,9 +51,20 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
+      - name: Build smoke binaries
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-bin
+          go build -o .ci-bin/mcp-gateway ./cmd/gateway
+          go build -o .ci-bin/smoke_upstream ./scripts/smoke_upstream
+          go build -o .ci-bin/gen-jwt ./tools/gen-jwt
+
       - name: MCP e2e JWT smoke (router mode off, no docker)
         run: |
           set -euo pipefail
+          export SMOKE_GATEWAY_BIN="${GITHUB_WORKSPACE}/.ci-bin/mcp-gateway"
+          export SMOKE_UPSTREAM_BIN="${GITHUB_WORKSPACE}/.ci-bin/smoke_upstream"
+          export PATH="${GITHUB_WORKSPACE}/.ci-bin:${PATH}"
           SMOKE_AUTO_START_GATEWAY=1 SMOKE_CLEAN_PORTS=0 bash scripts/smoke_jwt.sh
 
   integration:

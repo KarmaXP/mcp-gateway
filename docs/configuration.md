@@ -68,6 +68,7 @@ Exact tool names skip vector search. See [Connecting agents — Semantic routing
 |----------|---------|-------------|
 | `AUTH_MODE` | `none` | `none` or `jwt` |
 | `JWT_PUBLIC_KEY_PEM` | n/a | RS256 public key (PEM) for static verification |
+| `JWT_PUBLIC_KEY_FILE` | n/a | Path to PEM file (preferred in CI/scripts; overrides inline PEM when set) |
 | `JWT_JWKS_URL` | n/a | JWKS endpoint (requires `kid` on tokens) |
 | `JWT_JWKS_CACHE_TTL` | `5m` | JWKS cache duration |
 | `JWT_ISS` | n/a | Optional issuer check |
