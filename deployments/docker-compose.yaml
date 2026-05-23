@@ -2,7 +2,7 @@
 # Default: dependencies only (make docker-up). Gateway container: profile gateway (make docker-up-full).
 # Profile demo: mock-alpha / mock-beta on 3101/3102 (make docker-up-demo).
 # Gateway container (profile gateway) reaches mocks by service name; use --profile demo with --profile gateway.
-# Host gateway + compose mocks: published 3101/3102 on localhost (see docs/DEVELOPER.md § Docker networking).
+# Host gateway + compose mocks: published 3101/3102 on localhost (see docs/DEVELOPER.md#docker--compose-networking).
 # Profile sre: mock k8s/prom/gh upstreams on 3201–3203 (make docker-up-sre); pair with gateway.sre.example.yaml on host.
 # URLs: Grafana :3000 (admin/admin), Prometheus :9090, Qdrant :6333, embed :8001, gateway :8080 (profile).
 

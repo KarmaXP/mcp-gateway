@@ -52,6 +52,6 @@ Schema validation errors on `tools/call` **must not** echo argument values in th
 | Symptom | See |
 |---------|-----|
 | POST **202** but no SSE payload | SSE connection closed or not read in parallel. See [Connecting agents](CONNECTING_AGENTS.md). |
-| **401** on every RPC | JWT mode, keys, or `authorization_details`. See [configuration § Auth](configuration.md#authentication). |
+| **401** on every RPC | JWT mode, keys, or `authorization_details`. See [configuration, Auth section](configuration.md#authentication). |
 | Tool missing from `tools/list` | Backend down, `MethodNotFound` on list, or JWT filter. See [Adding backends](ADDING_BACKENDS.md). |
-| Router ignores intent | `ROUTER_MODE` off, or exact tool name shortcut. See [configuration § Router](configuration.md#semantic-router). |
+| Router ignores intent | `ROUTER_MODE` off, or exact tool name shortcut. See [configuration, Router section](configuration.md#semantic-router). |

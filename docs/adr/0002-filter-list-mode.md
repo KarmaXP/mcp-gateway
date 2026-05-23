@@ -9,7 +9,7 @@ Accepted, **`filter_list` is implemented** behind `router.mode: filter_list` / `
 The architecture plan describes two router-adjacent `tools/list` behaviors:
 
 - **`assist_list`:** the host receives the full aggregated catalog; semantic routing applies on `tools/call` (and optionally vector-assisted list filtering is off).
-- **`filter_list`:** `tools/list` returns a subset of the merged catalog filtered by similarity to request-scoped intent (`X-MCP-Intent` via `hostctx`), subject to JWT/RAR allow-lists and vector index filters (plan §3.B S1).
+- **`filter_list`:** `tools/list` returns a subset of the merged catalog filtered by similarity to request-scoped intent (`X-MCP-Intent` via `hostctx`), subject to JWT/RAR allow-lists and vector index filters (plan Section 3.B S1).
 
 ## Decision
 
@@ -25,7 +25,7 @@ The gateway supports `filter_list` with explicit semantics:
 
 ## References
 
-- `docs/architecture/mcp_gateway.plan.md`, `tools/list` modes, §3.D internal histogram, §6 p95
+- `docs/architecture/mcp_gateway.plan.md`, `tools/list` modes, Section 3.D internal histogram, Section 6 p95
 - `docs/evaluation/calibration-run.md`, live embedding + Qdrant calibration template
 - `internal/gateway/multiplex`, merged `tools/list`
 - `internal/router`, semantic routing and `FilterToolsForList`

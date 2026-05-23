@@ -39,7 +39,7 @@ flowchart TB
 | **Security** | JWT, RAR merge, JSON Schema on tools, rate limits |
 | **Observability** | OTel traces/metrics, phase histograms, audit sink |
 
-Operator-oriented summary: [DEVELOPER.md § Architecture](../DEVELOPER.md#architecture).
+Operator-oriented summary: [DEVELOPER.md, Architecture section](../DEVELOPER.md#architecture).
 
 ---
 

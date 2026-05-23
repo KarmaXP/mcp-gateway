@@ -33,7 +33,7 @@ const (
 	MetricSessionDropReasonBroadcastQueue = "broadcast_queue_full"
 	MetricSessionDropReasonNotificationOutbound = "notification_outbound_full"
 
-	// Internal hop histogram (§3.D): phases and pre-parse method label.
+	// Internal hop histogram (Section 3.D): phases and pre-parse method label.
 	MetricInternalMethodUnknown = "unknown"
 	MetricInternalPhaseParse = "parse"
 	MetricInternalPhaseSecurity = "security"

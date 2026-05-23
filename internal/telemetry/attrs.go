@@ -9,7 +9,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 )
 
-// Low-cardinality span attributes (plan §3.D). Do not put unbounded user text here.
+// Low-cardinality span attributes (plan Section 3.D). Do not put unbounded user text here.
 const (
 	AttrMCPMethod = "mcp.method"
 	AttrMCPJSONRPCID = "mcp.jsonrpc.id"
