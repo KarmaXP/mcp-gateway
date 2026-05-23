@@ -8,6 +8,7 @@ Guides for validating gateway behavior beyond unit tests: scripted scenarios, lo
 
 | Guide | What it exercises |
 |-------|-------------------|
+| [integration-checklist.md](integration-checklist.md) | **End-to-end validation** in one session (backends, host client, JWT, loadtest) before your agent |
 | [scenario-sre-multibackend.md](scenario-sre-multibackend.md) | Three backends, namespaced tools, semantic router, traces |
 | [scenario-jwt-allowlist.md](scenario-jwt-allowlist.md) | `AUTH_MODE=jwt`, `mcp_tools` filtering and deny on `tools/call` |
 | [scenario-backend-down.md](scenario-backend-down.md) | Partial catalog when an upstream is unavailable |

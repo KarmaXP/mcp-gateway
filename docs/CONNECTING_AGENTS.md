@@ -282,10 +282,13 @@ result = session.tools_call(
 
 ### 6. Verify before your agent runtime
 
-1. `make sre-smoke` (or `scripts/smoke_e2e.sh` per [scenario-sre-multibackend.md](evaluation/scenario-sre-multibackend.md)).
-2. `go run ./scripts/mcp_host_demo` with the same `GATEWAY_URL`.
-3. [scenario-jwt-allowlist.md](evaluation/scenario-jwt-allowlist.md) when using `AUTH_MODE=jwt`.
-4. Wire your host to the same base URL, SSE session, and headers documented above.
+Follow the **[integration checklist](evaluation/integration-checklist.md)** in one session (same gateway URL throughout):
+
+1. Confirm upstreams and `tools/call` (`make sre-smoke` or [scenario-sre-multibackend.md](evaluation/scenario-sre-multibackend.md)).
+2. Run `go run ./scripts/mcp_host_demo` with your `GATEWAY_URL`.
+3. Optional: [scenario-jwt-allowlist.md](evaluation/scenario-jwt-allowlist.md) when using `AUTH_MODE=jwt`.
+4. Optional: loadtest and metrics per [calibration-run.md](evaluation/calibration-run.md).
+5. Wire your host to the same base URL, SSE session, and headers documented above.
 
 ---
 
