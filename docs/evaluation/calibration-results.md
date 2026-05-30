@@ -99,7 +99,7 @@ Config: `deployments/gateway.real.yaml`. Procedure: [`integration-checklist.md`]
 | Field | Value |
 | ----- | ----- |
 | Date (UTC) | 2026-05-30 |
-| Gateway commit | `a889bff` (includes `gateway.real.yaml`; prior lab session on `cb0a5aa`) |
+| Gateway commit | `a889bff2779a7ac8630dc4224b2d44ab56a99fe5` (includes `gateway.real.yaml`; prior lab session on `cb0a5aa`) |
 | Environment | Host gateway (`PORT=18080`) + Docker deps (`make docker-up`); macOS / OrbStack |
 | `MCP_GATEWAY_CONFIG` | `deployments/gateway.real.yaml` |
 | `AUTH_MODE` | `jwt` (`JWT_ISS=https://tfm.local`, `JWT_AUD=mcp-gateway`, key `/tmp/mcp-tfm-jwt.key`) |
