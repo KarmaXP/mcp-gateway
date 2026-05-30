@@ -28,6 +28,8 @@ go run ./scripts/loadtest -url http://127.0.0.1:8080 -mode semantic -workers 10 
 
 Compare the printed **p95 / p99** lines across runs. Throughput is approximate (successful iterations / wall time).
 
+**JWT limitation:** this client does **not** send `Authorization: Bearer`. Use only with `AUTH_MODE=none`, or extend the script for JWT sessions. Under JWT, generate load with repeated `scripts/smoke_e2e.sh` and read Prometheus internal means ([calibration-results.md](../../docs/evaluation/calibration-results.md)).
+
 ## k6 HTTP baseline (`k6_http_baseline.js`)
 
 Exercises **GET /healthz** and **GET /readyz** with default k6 percentile summaries (`http_req_duration`).
