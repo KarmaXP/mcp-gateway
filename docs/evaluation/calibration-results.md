@@ -1,31 +1,34 @@
 # Calibration results
 
-Record **live** router recall and gateway latency here after following [`calibration-run.md`](calibration-run.md).
+Canonical recorded lab results. Procedure: [`calibration-run.md`](calibration-run.md) (baseline) and [`integration-checklist.md`](integration-checklist.md) profile B.
 
-**Recorded run:** 2026-05-18 (baseline hyperparameters in `deployments/gateway.example.yaml`: `top_k=8`, `score_min=0.35`, `hybrid_alpha=0.2`).
+**Rule:** do not invent numbers. If a metric was not measured or is not reliable, mark it **Not measured** or **Not used** with a reason — do not leave table cells blank.
+
+| Run | Date (UTC) | Scope |
+| ----- | ---------- | ----- |
+| Baseline calibration | 2026-05-18 | Router recall, unit benchmarks, client loadtest (`AUTH_MODE=none`, demo mocks) |
+| **Integrated lab run** | 2026-05-30 | Real MCP backends (stdio), JWT, OTLP→Prometheus, smoke load |
 
 ---
 
-## Run metadata
+## Baseline calibration (2026-05-18)
+
+Hyperparameters: `deployments/gateway.example.yaml` (`top_k=8`, `score_min=0.35`, `hybrid_alpha=0.2`).
+
+### Run metadata
 
 | Field | Value |
 | ----- | ----- |
 | Date (UTC) | 2026-05-18T18:56:21Z |
 | Gateway commit | `67251c25a68247c7ed934863fbc8e946a76ea99c` |
-| Environment (host / Docker / CI) | host gateway (`PORT=18080`) + Docker deps (`make docker-up`) + demo mocks (`make demo-backends`) |
-| Catalog source (`ROUTER_EVAL_CATALOG_PATH` or default `router-eval-catalog.json`) | default `docs/evaluation/router-eval-catalog.json` |
+| Environment | Host gateway (`PORT=18080`) + Docker deps (`make docker-up`) + demo mocks (`make demo-backends`) |
+| Catalog | default `docs/evaluation/router-eval-catalog.json` |
 | Qdrant URL | `http://127.0.0.1:6333` |
-| Embed URL | `http://127.0.0.1:18001` (`.env` `HOST_PORT_EMBED=18001`; host port 8001 was already in use) |
-| Gateway mode (`ROUTER_MODE`) | `assist_list` (env override over `gateway.example.yaml`) |
-| Load profile (tool, workers, duration) | loadtest L2: `alpha__echo` direct, workers=10, duration=45s, URL `http://127.0.0.1:18080` |
+| Embed URL | `http://127.0.0.1:18001` (`.env` `HOST_PORT_EMBED=18001`) |
+| `ROUTER_MODE` | `assist_list` (env override) |
+| Load profile | loadtest L2: `alpha__echo` direct, workers=10, duration=45s |
 
-Procedure and probes: [`calibration-run.md`](calibration-run.md). Embed sidecar JSON field: `texts` (see `deployments/embed/server.py`).
-
----
-
-## Vector recall (MiniLM + Qdrant)
-
-Command:
+### Vector recall (MiniLM + Qdrant)
 
 ```bash
 QDRANT_URL=http://127.0.0.1:6333 EMBED_URL=http://127.0.0.1:18001 \
@@ -35,76 +38,29 @@ QDRANT_URL=http://127.0.0.1:6333 EMBED_URL=http://127.0.0.1:18001 \
 
 | Metric | Value |
 | ------ | ----- |
-| recall@1 | 1.000 |
-| recall@3 | 1.000 |
-| Cases (hits / total) | 26/26 @1, 26/26 @3 |
-| Notes | PASS; test thresholds ≥0.60 / ≥0.85; catalog `docs/evaluation/router-eval-catalog.json` |
+| recall@1 | 1.000 (26/26) |
+| recall@3 | 1.000 (26/26) |
+| Notes | PASS; thresholds ≥0.60 / ≥0.85 |
 
-Test output (`minilm_integration_test.go:99`):
-
-```text
-MiniLM+Qdrant router eval (../../../docs/evaluation/router-eval-catalog.json): recall@1=1.000 (26/26) recall@3=1.000 (26/26)
-```
-
-Optional supporting metrics (from Prometheus after a semantic load run):
-
-| Metric | Value |
-| ------ | ----- |
-| Router decision p95 (`mcp.gateway.semantic_router.duration_seconds`) | not measured (semantic load test had 0 successful samples; see load test section) |
-| Internal hop p95 (`mcp.gateway.internal.duration_seconds`) | Prometheus NaN over 5m window (no scrape increments during host-gateway run) |
-
----
-
-## Micro-benchmarks (unit; no Docker)
-
-Measured with:
+### Micro-benchmarks (unit; no Docker)
 
 ```bash
 go test -run '^$' -bench 'Benchmark(ParseRequest|Namespace(Add|Strip))$' -benchmem ./internal/rpc ./internal/gateway/namespace
 ```
 
-Sample output (2026-05-18, darwin/arm64 Apple M4 Max):
+| Benchmark | ns/op | MB/s | allocs/op |
+| --------- | ----- | ---- | --------- |
+| ParseRequest | 869.0 | 135.80 | 11 |
+| NamespaceAdd | 32.58 | 798.11 | 1 |
+| NamespaceStrip | 20.92 | 1242.65 | 0 |
 
-```text
-BenchmarkParseRequest-14    	 1381596	       869.0 ns/op	 135.80 MB/s	     448 B/op	      11 allocs/op
-BenchmarkNamespaceAdd-14      	36700941	        32.58 ns/op	 798.11 MB/s	      32 B/op	       1 allocs/op
-BenchmarkNamespaceStrip-14    	56601212	        20.92 ns/op	1242.65 MB/s	       0 B/op	       0 allocs/op
-```
+Golden cases (lexical): MRR=1.000, nDCG@5=0.907 (`TestGoldenCasesMRRAndNDCG`).
 
-Golden cases (lexical, no Docker):
+### Client-observed load test (`AUTH_MODE=none`)
 
-```bash
-go test ./internal/router/eval/... -run TestGoldenCasesMRRAndNDCG -v
-```
+Gateway: `AUTH_MODE=none ROUTER_MODE=assist_list` + `make demo-backends`.
 
-```text
-golden metrics lexical baseline: MRR=1.000 nDCG@5=0.907
-```
-
----
-
-## Internal latency by phase (Prometheus)
-
-PromQL (5m lookback; OTel→Prom metric: `mcp_mcp_gateway_internal_duration_seconds_bucket`):
-
-```promql
-histogram_quantile(0.95, sum by (le, phase) (rate(mcp_mcp_gateway_internal_duration_seconds_bucket{phase=~"parse|security|router|mux"}[5m])))
-```
-
-| Phase | p50 (ms) | p95 (ms) | p99 (ms) | Query time (UTC) | Notes |
-| ----- | -------- | -------- | -------- | ---------------- | ----- |
-| parse | | | | 2026-05-18T18:56:10Z | NaN — 0 samples `increase(...[10m])` after host loadtest |
-| security | | | | 2026-05-18T18:56:10Z | NaN |
-| router | | | | 2026-05-18T18:56:10Z | NaN |
-| mux | | | | 2026-05-18T18:56:10Z | NaN |
-
----
-
-## Client-observed load test
-
-Gateway: `AUTH_MODE=none ROUTER_MODE=assist_list QDRANT_URL=http://127.0.0.1:6333 EMBED_URL=http://127.0.0.1:18001 PORT=18080 make run` + `make demo-backends`.
-
-### Direct (`alpha__echo`)
+**Direct (`alpha__echo`):**
 
 ```bash
 go run ./scripts/loadtest -url http://127.0.0.1:18080 -mode direct -workers 10 -duration 45s
@@ -118,51 +74,112 @@ go run ./scripts/loadtest -url http://127.0.0.1:18080 -mode direct -workers 10 -
 | latency_p99_ms | 3.591 |
 | samples / errors | 225 / 1367 |
 
-### Semantic (vague intent → router)
+**Semantic:** 0 / 1333 samples — catalog did not match semantic loadtest intents.
 
-```bash
-go run ./scripts/loadtest -url http://127.0.0.1:18080 -mode semantic -workers 10 -duration 45s
-```
+### Baseline — not measured (documented, not repeated)
+
+| Artifact | Status | Reason |
+| -------- | ------ | ------ |
+| Prom internal phase p50/p95/p99 | **Not measured** | Histogram series had 0 increments after host-gateway loadtest (NaN at query time 2026-05-18T18:56:10Z) |
+| Tempo trace decomposition | **Not measured** | Optional step not executed |
+| Semantic loadtest latency | **Not measured** | Zero successful samples |
+
+Baseline supplies recall, unit benchmarks, and direct loadtest reference. Operational latency under JWT + real backends is in the **integrated lab run** below.
+
+---
+
+## Integrated lab run (2026-05-30)
+
+**Scope:** single session — real MCP backends (stdio), semantic router (`ROUTER_MODE=on`), JWT, OTLP→Prometheus. No SRE HTTP mocks (`make sre-up` not used).
+
+Config: `deployments/gateway.real.yaml`. Procedure: [`integration-checklist.md`](integration-checklist.md) profile B, [`scenario-real-backends-jwt.md`](scenario-real-backends-jwt.md).
+
+### Run metadata
 
 | Field | Value |
 | ----- | ----- |
-| samples / errors | 0 / 1333 |
-| Notes | no successful samples; live alpha/beta catalog does not match semantic loadtest intents |
+| Date (UTC) | 2026-05-30 |
+| Gateway commit | `a889bff` (includes `gateway.real.yaml`; prior lab session on `cb0a5aa`) |
+| Environment | Host gateway (`PORT=18080`) + Docker deps (`make docker-up`); macOS / OrbStack |
+| `MCP_GATEWAY_CONFIG` | `deployments/gateway.real.yaml` |
+| `AUTH_MODE` | `jwt` (`JWT_ISS=https://tfm.local`, `JWT_AUD=mcp-gateway`, key `/tmp/mcp-tfm-jwt.key`) |
+| `ROUTER_MODE` | `on` |
+| `GATEWAY_URL` | `http://127.0.0.1:18080` |
+| `QDRANT_URL` / `EMBED_URL` | `http://127.0.0.1:6333` / `http://127.0.0.1:18001` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://127.0.0.1:4318` |
+| Backends (real, stdio) | `@modelcontextprotocol/server-everything` → `k8s`; `server-filesystem` → `prom` (root `/private/tmp/mcp-tfm-tribunal`); `server-memory` → `gh` |
+| JWT traffic | `scripts/smoke_e2e.sh` with admin JWT: 60× parallel + 20× sequential (`prom__read_text_file`) |
 
----
+**macOS note:** filesystem MCP allowed root is `/private/tmp/...`; tool paths must use `/private/tmp/mcp-tfm-tribunal/...`, not `/tmp/...`.
 
-## Gateway vs upstream (Tempo)
+### Vector recall (regression check, same catalog)
 
-TraceQL seed:
+Re-run on 2026-05-30 to confirm no regression with stack up:
 
-```traceql
-{ name = "mcp.host.request" && span.mcp.method = "tools/call" }
+```bash
+QDRANT_URL=http://127.0.0.1:6333 EMBED_URL=http://127.0.0.1:18001 \
+ go test -tags=integration -race -count=1 \
+ ./internal/router/eval -run TestRouterEvalVectorRecallMiniLM -v
 ```
 
-| Trace id | Tool | Backend(s) | T_total (ms) | T_upstream (ms) | T_internal (ms) | Path | Notes |
-| -------- | ---- | ---------- | ------------ | --------------- | --------------- | ---- | ----- |
-| | | | | | | | not run (optional; see `calibration-run.md` Tempo section) |
+| Metric | Value |
+| ------ | ----- |
+| recall@1 | 1.000 (26/26) |
+| recall@3 | 1.000 (26/26) |
+| Notes | Same catalog as baseline; independent of JWT/backend YAML in the gateway session |
 
-Cross-check:
+### Functional E2E (`scripts/smoke_e2e.sh`, JWT)
 
-| Check | Result | Notes |
-| ----- | ------ | ----- |
-| p95 internal hop vs 50 ms design goal | PASS (loadtest approx) | direct `latency_p95_ms=1.242`; includes client SSE+JSON-RPC |
-| Traces consistent with Prometheus | n/a | Prom phase histograms had no samples in this run |
-| `check_gateway_p95.sh` | FAIL | `observed_p95_ms=nan`; Prometheus phase histograms empty in this run |
+| Silo | Namespaced tool | Result |
+| ---- | --------------- | ------ |
+| prom (filesystem) | `prom__read_text_file` | SMOKE OK |
+| k8s (everything) | `k8s__echo` | SMOKE OK |
+| gh (memory) | `gh__create_entities` | SMOKE OK |
+
+### JWT allow-list
+
+| Check | Result |
+| ----- | ------ |
+| Token restricted (`-mcp-tools prom__read_text_file`) + `prom__read_text_file` | SMOKE OK |
+| Same token + `prom__list_directory` | JSON-RPC **-32003** — `tool "prom__list_directory" not allowed for this principal` |
+
+### Internal latency by phase (Prometheus, `tools/call`)
+
+Metric (OTel→Prom): `mcp_mcp_gateway_internal_duration_seconds_{sum,count}`.
+
+**Primary evidence for the 50 ms internal budget:** mean latency per phase (reliable with sub-ms samples). Histogram `histogram_quantile` p95 can mis-report when the first bucket starts at 5 s; see [calibration-run.md](calibration-run.md).
+
+```promql
+sum(rate(mcp_mcp_gateway_internal_duration_seconds_sum{method="tools/call",phase="<phase>"}[5m]))
+/
+sum(rate(mcp_mcp_gateway_internal_duration_seconds_count{method="tools/call",phase="<phase>"}[5m]))
+* 1000
+```
+
+| Phase | Mean (ms) | vs 50 ms design goal |
+| ----- | --------- | -------------------- |
+| parse | 0.0075 | PASS |
+| security | 0.0022 | PASS |
+| mux | 0.0060 | PASS |
+| router | 0.0307 | PASS |
+
+### Integrated run — not measured (protocol choice)
+
+| Artifact | Status | Reason |
+| -------- | ------ | ------ |
+| `scripts/loadtest` direct/semantic | **Not measured** | Tool does not send `Authorization: Bearer`; session used `AUTH_MODE=jwt`. Substitute: JWT smoke traffic (80 calls) + Prom means above. |
+| Tempo `T_total` / `T_upstream` / `T_internal` | **Not measured** | Tempo is not published on the host in `docker-compose.yaml` (in-cluster only). |
+| Histogram p95 per phase | **Not used** | Artefact ~4750 ms from bucket layout; `check_gateway_p95.sh` FAIL on this series is expected for sub-ms samples. |
 
 ---
 
-## Summary table
+## Summary
 
-| Scope | recall@1 | recall@3 | MRR | nDCG@5 | p95 internal (ms) | Evidence |
-| ----- | -------- | -------- | --- | ------ | ----------------- | -------- |
-| golden-cases (lexical, unit) | n/a | n/a | 1.000 | 0.907 | n/a | `go test ./internal/router/eval/... -run TestGoldenCasesMRRAndNDCG -v` |
-| MiniLM+Qdrant (integration) | 1.000 | 1.000 | n/a | n/a | n/a | `TestRouterEvalVectorRecallMiniLM` |
-| parse | n/a | n/a | n/a | n/a | | Prom NaN |
-| security | n/a | n/a | n/a | n/a | | Prom NaN |
-| router | n/a | n/a | n/a | n/a | | Prom NaN |
-| mux | n/a | n/a | n/a | n/a | | Prom NaN |
-| loadtest direct (E2E client) | n/a | n/a | n/a | n/a | 1.242 | `scripts/loadtest -mode direct` |
-
-Do not invent numbers. Each filled cell maps to a dated run in the metadata section above.
+| Claim | Run | Evidence |
+| ----- | --- | -------- |
+| Router recall@1/@3 on eval catalog | Baseline + integrated regression | 1.000 (26/26) both dates |
+| Lexical ranking baseline | Baseline | MRR=1.000, nDCG@5=0.907 |
+| Real multibackend MCP + namespacing | Integrated lab | smoke_e2e ×3 (prom/k8s/gh) |
+| JWT allow-list enforcement | Integrated lab | allow OK; deny -32003 |
+| Internal gateway work ≪ 50 ms | Integrated lab | Prom **mean** by phase |
+| Client-observed throughput/latency (no JWT) | Baseline | loadtest direct p95 ≈ 1.24 ms (includes SSE client path) |

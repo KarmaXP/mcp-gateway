@@ -2,26 +2,30 @@
 
 Guides for validating gateway behavior beyond unit tests: scripted scenarios, load tests, and router/latency measurement.
 
+**Integrated lab (2026-05-30):** [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) + [calibration-results.md](calibration-results.md).
+
 ---
 
 ## Operational walkthroughs
 
 | Guide | What it exercises |
 |-------|-------------------|
-| [integration-checklist.md](integration-checklist.md) | **End-to-end validation** in one session (backends, host client, JWT, loadtest) before your agent |
-| [scenario-sre-multibackend.md](scenario-sre-multibackend.md) | Three backends, namespaced tools, semantic router, traces |
+| [integration-checklist.md](integration-checklist.md) | **End-to-end validation** in one session (profile A mocks or profile B real+JWT) |
+| [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) | **Real stdio MCP** (everything, filesystem, memory) + JWT + OTLP + Prom |
+| [scenario-sre-multibackend.md](scenario-sre-multibackend.md) | Three HTTP mocks, namespaced tools, semantic router |
 | [scenario-jwt-allowlist.md](scenario-jwt-allowlist.md) | `AUTH_MODE=jwt`, `mcp_tools` filtering and deny on `tools/call` |
 | [scenario-backend-down.md](scenario-backend-down.md) | Partial catalog when an upstream is unavailable |
 
 Quick automated checks (from repo root):
 
 ```bash
-make sre-smoke
+make ci                    # unit + race tests (no Docker)
+make sre-smoke             # profile A: k8s/prom/gh mocks
 make smoke
 GATEWAY_URL=http://127.0.0.1:8080 bash scripts/smoke_e2e.sh
-```
 
-Multi-backend manual smoke: [scenario-sre-multibackend.md](scenario-sre-multibackend.md).
+# Profile B (JWT + real backends): see scenario-real-backends-jwt.md
+```
 
 Host client: [`scripts/mcp_host_demo/README.md`](../../scripts/mcp_host_demo/README.md).
 
@@ -31,11 +35,11 @@ Host client: [`scripts/mcp_host_demo/README.md`](../../scripts/mcp_host_demo/REA
 
 | Guide | Purpose |
 |-------|---------|
-| [calibration-run.md](calibration-run.md) | Procedure: Qdrant + embed + gateway + metrics |
-| [calibration-results.md](calibration-results.md) | Record recall@k and latency numbers from a calibration run |
-| [router-trace-capture.md](router-trace-capture.md) | Capture semantic-router spans in Tempo |
+| [calibration-run.md](calibration-run.md) | Procedure: Qdrant + embed + gateway + metrics (baseline, mocks) |
+| [calibration-results.md](calibration-results.md) | **Canonical recorded numbers** — baseline 2026-05-18 + integrated run 2026-05-30 |
+| [router-trace-capture.md](router-trace-capture.md) | Capture semantic-router spans in Tempo (optional) |
 
-Load testing: [`scripts/loadtest/README.md`](../../scripts/loadtest/README.md).
+Load testing: [`scripts/loadtest/README.md`](../../scripts/loadtest/README.md) (`AUTH_MODE=none` only unless you add Bearer yourself).
 
 ---
 
@@ -45,6 +49,8 @@ Load testing: [`scripts/loadtest/README.md`](../../scripts/loadtest/README.md).
 |------|---------|
 | [router-eval-catalog.json](router-eval-catalog.json) | Static tool catalog for integration recall tests |
 | Regenerate | `make gen-router-eval-catalog` |
+
+Integration recall test: `TestRouterEvalVectorRecallMiniLM` — recall@1/@3 = 1.000 (26/26) as of 2026-05-18 and re-run 2026-05-30.
 
 ---
 

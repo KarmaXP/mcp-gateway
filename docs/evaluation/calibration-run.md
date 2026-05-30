@@ -159,7 +159,7 @@ For reproducible runs, record both the catalog identifier and template version t
 
 ## Record (template)
 
-Fill in after each run. Do not invent numbers, leave cells blank if a step was not executed.
+Fill in after each run. Do not invent numbers. Prefer explicit **Not measured** / **Not used** with reason (see [calibration-results.md](calibration-results.md)).
 
 | Metric / artifact | Command or source | Value | Notes |
 | ----------------- | ----------------- | ----- | ----- |
@@ -295,6 +295,17 @@ Procedure:
 5. Cross-check that trace-derived internal latency trends match Prometheus phase quantiles from the internal phase quantiles section above.
 
 Store one Tempo trace URL (or screenshot) per run next to the quantitative results so decomposition is auditable.
+
+## Recorded results (repository)
+
+Canonical numbers live in [calibration-results.md](calibration-results.md):
+
+| Run | Date | Profile |
+|-----|------|---------|
+| Baseline calibration | 2026-05-18 | `gateway.example.yaml`, demo mocks, `AUTH_MODE=none`, recall + direct loadtest |
+| Integrated lab run | 2026-05-30 | `gateway.real.yaml`, stdio MCP, JWT, OTLP; see [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) |
+
+**Internal 50 ms budget (integrated run):** evidence uses Prometheus **mean** latency per phase (`tools/call`), all ≪ 50 ms. Histogram p95 is **not used** when sub-ms samples fall into the first 5 s bucket (artefact ~4750 ms).
 
 ## Post-baseline (optional)
 

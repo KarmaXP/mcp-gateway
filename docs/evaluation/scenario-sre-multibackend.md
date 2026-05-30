@@ -2,6 +2,8 @@
 
 This scenario validates gateway behavior when multiple MCP backends are exposed behind namespaced tools (canonical names: `k8s__get_pod_logs`, `prom__query_instant`, `gh__list_prs`) with semantic routing enabled.
 
+**HTTP mocks (profile A).** For **real stdio MCP + JWT + recorded metrics**, use [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) and [calibration-results.md](calibration-results.md).
+
 Use this runbook to exercise multi-backend namespaced routing with the existing smoke flow (`scripts/smoke_e2e.sh`) or your MCP host client. For agent integration, see [CONNECTING_AGENTS.md](../CONNECTING_AGENTS.md).
 
 ## 1) Topology and config shape
@@ -85,6 +87,8 @@ SMOKE_EXPECT_TOOL=gh__list_prs SMOKE_EXPECT_TEXT=gh-ok bash scripts/smoke_e2e.sh
 ```
 
 Each run should end with `SMOKE OK`.
+
+**JWT (optional):** this walkthrough uses `AUTH_MODE=none`. To exercise JWT allow-lists on the same MCP wire, see [scenario-jwt-allowlist.md](scenario-jwt-allowlist.md) or run `SMOKE_AUTO_START_GATEWAY=1 bash scripts/smoke_jwt.sh` (also in CI; [DEVELOPER.md — Continuous integration](../DEVELOPER.md#continuous-integration)).
 
 ## 3) Expected router behavior (`ROUTER_MODE=on`)
 

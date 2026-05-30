@@ -5,6 +5,8 @@ This scenario validates JWT-based tool authorization in gateway mode:
 - `tools/list` is filtered to the effective allow-list.
 - `tools/call` is denied (`PermissionDenied`, `-32003`) for tools outside that allow-list.
 
+**Full integrated lab** (real stdio backends + OTLP + Prometheus): [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md).
+
 The claim model follows [ADR 0003](../adr/0003-security-rar-jwt-merge-failmode.md):
 
 - `mcp_tools` contains namespaced tool ids.
