@@ -1,0 +1,40 @@
+# Real stdio MCP upstreams (npx). Walkthrough: docs/evaluation/scenario-real-backends-jwt.md
+
+backends:
+  - id: backend-everything
+    prefix: k8s
+    command: ["npx", "-y", "@modelcontextprotocol/server-everything"]
+    max_concurrency: 4
+
+  - id: backend-filesystem
+    prefix: prom
+    command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/private/tmp/mcp-tfm-tribunal"]
+    max_concurrency: 2
+
+  - id: backend-memory
+    prefix: gh
+    command: ["npx", "-y", "@modelcontextprotocol/server-memory"]
+    max_concurrency: 2
+
+router:
+  mode: on
+  top_k: 8
+  score_min: 0.35
+  hybrid_alpha: 0.2
+  rules:
+    silo_keywords:
+      kubernetes: k8s
+      prometheus: prom
+      github: gh
+
+policy:
+  tool_groups:
+    tribunal_read:
+      - prom__read_text_file
+      - prom__list_directory
+
+qdrant:
+  collection: mcp_tool_catalog
+
+embed:
+  url: http://127.0.0.1:18001

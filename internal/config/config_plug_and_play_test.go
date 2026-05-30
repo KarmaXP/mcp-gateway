@@ -19,6 +19,7 @@ func TestLoadAllPlugAndPlayGatewayYAML(t *testing.T) {
 		"gateway.example.yaml",
 		"gateway.example.docker.yaml",
 		"gateway.sre.example.yaml",
+		"gateway.real.yaml",
 	}
 	for _, name := range files {
 		t.Run(name, func(t *testing.T) {
