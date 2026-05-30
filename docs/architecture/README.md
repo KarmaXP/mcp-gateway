@@ -53,6 +53,15 @@ Operator-oriented summary: [DEVELOPER.md, Architecture section](../DEVELOPER.md#
 | [ADR 0004](../adr/0004-gateway-scope.md) | Supported MCP methods and boundaries |
 | [mcp_gateway.plan.md](mcp_gateway.plan.md) | Full specification (requirements, flows, acceptance criteria) |
 
+### Plan vs ADRs
+
+| Document | Role |
+|----------|------|
+| **ADRs** ([0001](../adr/0001-architecture-decisions.md)–[0004](../adr/0004-gateway-scope.md)) | Accepted decisions: stack, `filter_list`, JWT/RAR merge, supported MCP scope |
+| **`mcp_gateway.plan.md`** | Living specification (requirements, flows, Section 4 stack notes) |
+
+When prose differs, **the ADR for that topic wins** (for example AuthZ scope in ADR 0004, `filter_list` semantics in ADR 0002). The plan may describe future or optional work; implemented behavior is defined by code + ADRs + [OpenAPI](../artifacts/openapi/openapi.yaml).
+
 ---
 
 ## Code layout (orientation)
@@ -74,3 +83,4 @@ Operator-oriented summary: [DEVELOPER.md, Architecture section](../DEVELOPER.md#
 - [mcp-capabilities.md](../mcp-capabilities.md): method matrix for hosts
 - [configuration.md](../configuration.md): tunables
 - [OpenAPI](../artifacts/openapi/openapi.yaml): HTTP contract
+- [Evaluation](../evaluation/README.md) · [calibration results](../evaluation/calibration-results.md): recorded lab evidence

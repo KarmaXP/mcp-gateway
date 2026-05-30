@@ -62,6 +62,22 @@ make run
 
 `/readyz` checks Qdrant and embed when the router is active. Upstream MCP servers are **not** probed at readiness (handled per request).
 
+### Integrated lab — real stdio backends + JWT
+
+For end-to-end validation with official MCP servers over stdio (not HTTP mocks), JWT, and OTLP:
+
+```bash
+make docker-up   # no make sre-up
+# see docs/evaluation/scenario-real-backends-jwt.md for JWT keys and exports
+export MCP_GATEWAY_CONFIG=deployments/gateway.real.yaml
+export AUTH_MODE=jwt
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
+export PORT=18080
+make run
+```
+
+Recorded numbers: [calibration-results.md](evaluation/calibration-results.md).
+
 ---
 
 ## Production notes

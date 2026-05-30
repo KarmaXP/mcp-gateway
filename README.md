@@ -76,7 +76,8 @@ make run
 | Operate (metrics, CI, observability) | **[Developer guide](docs/DEVELOPER.md)** |
 | Architecture overview | **[Architecture](docs/architecture/README.md)** |
 | HTTP contract (OpenAPI) | **[openapi.yaml](docs/artifacts/openapi/openapi.yaml)** |
-| Measure router quality and latency | **[Calibration runbook](docs/evaluation/calibration-run.md)** |
+| Measure router quality and latency | **[Calibration runbook](docs/evaluation/calibration-run.md)** · **[Recorded results](docs/evaluation/calibration-results.md)** |
+| Real MCP backends + JWT (integrated lab) | **[Real backends scenario](docs/evaluation/scenario-real-backends-jwt.md)** |
 | Multi-backend SRE walkthrough | **[SRE scenario](docs/evaluation/scenario-sre-multibackend.md)** |
 
 ---
@@ -89,7 +90,8 @@ make run
 | ✅ **Available** | Example configs: single-backend demo, alpha/beta, SRE three-backend layout |
 | 📖 **Documented pattern** | LangGraph (or any MCP host) calling the gateway, see [Connecting agents](docs/CONNECTING_AGENTS.md); you implement the agent in your own repo |
 | 🔧 **You provide** | Real MCP backends (Kubernetes, Prometheus, GitHub, …) and production deployment |
-| 📊 **Optional** | Record router recall and latency using the [calibration runbook](docs/evaluation/calibration-run.md) when tuning or reporting performance |
+| 📊 **Recorded** | Lab results in [calibration-results.md](docs/evaluation/calibration-results.md) (baseline 2026-05-18 + integrated run 2026-05-30) |
+| 📊 **Optional** | Re-run calibration when tuning; see [calibration runbook](docs/evaluation/calibration-run.md) |
 
 ---
 

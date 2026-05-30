@@ -18,7 +18,7 @@ Start with the [repository README](../README.md), then use this map.
 | Environment variables and YAML options | [configuration.md](configuration.md) |
 | JSON-RPC and HTTP error codes | [errors.md](errors.md) |
 | MCP methods (tools, resources, prompts) | [mcp-capabilities.md](mcp-capabilities.md) |
-| HTTP API contract (OpenAPI) | [artifacts/openapi/openapi.yaml](artifacts/openapi/openapi.yaml) |
+| HTTP API contract (OpenAPI) | [artifacts/openapi/openapi.yaml](artifacts/openapi/openapi.yaml) (keep aligned with [errors.md](errors.md) and [`internal/gateway/errcodes`](../internal/gateway/errcodes/codes.go)) |
 
 ## Architecture
 
@@ -41,7 +41,11 @@ Start with the [repository README](../README.md), then use this map.
 | Scenario | Document |
 |----------|----------|
 | Index of evaluation guides | [evaluation/README.md](evaluation/README.md) |
+| Pre-agent integration (one session) | [evaluation/integration-checklist.md](evaluation/integration-checklist.md) |
+| Real backends + JWT (integrated lab) | [evaluation/scenario-real-backends-jwt.md](evaluation/scenario-real-backends-jwt.md) |
+| Recorded calibration numbers | [evaluation/calibration-results.md](evaluation/calibration-results.md) |
 | Multi-backend SRE routing | [evaluation/scenario-sre-multibackend.md](evaluation/scenario-sre-multibackend.md) |
+| Real stdio backends + JWT | [evaluation/scenario-real-backends-jwt.md](evaluation/scenario-real-backends-jwt.md) |
 | JWT tool allow-list | [evaluation/scenario-jwt-allowlist.md](evaluation/scenario-jwt-allowlist.md) |
 | Backend unavailable | [evaluation/scenario-backend-down.md](evaluation/scenario-backend-down.md) |
 

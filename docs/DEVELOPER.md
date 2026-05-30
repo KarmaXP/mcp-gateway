@@ -219,7 +219,7 @@ With `make docker-up`, Compose brings up a minimal observability stack (exact se
 
 - **Prometheus** scrapes gateway-relevant targets where configured.
 - **Grafana** dashboards for metrics; **Tempo** receives traces from the OpenTelemetry Collector.
-- Application metrics include semantic router outcomes and latency (`mcp.gateway.semantic_router.*`) with **`layer`** labels (`exact`, `rules`, `vector`, …), **`indexed_tools`** (gauge after each successful catalog reindex), and an **active SSE sessions** gauge (`mcp.gateway.active_sse_sessions`). **Internal hop** time (gateway-only, excludes upstream MCP I/O) is recorded as a histogram **`mcp.gateway.internal.duration_seconds`** with labels **`method`** (JSON-RPC method when known; `unknown` during JWT on `POST /mcp/rpc` before parse) and **`phase`**: `parse`, `security`, `router`, `mux`. Use phase histograms to track **p95** against the internal latency budget (50 ms p95 goal for gateway-only work; see [calibration runbook](evaluation/calibration-run.md)); Prometheus scrape names may appear as `mcp_gateway_internal_duration_seconds_*` after translation.
+- Application metrics include semantic router outcomes and latency (`mcp.gateway.semantic_router.*`) with **`layer`** labels (`exact`, `rules`, `vector`, …), **`indexed_tools`** (gauge after each successful catalog reindex), and an **active SSE sessions** gauge (`mcp.gateway.active_sse_sessions`). **Internal hop** time (gateway-only, excludes upstream MCP I/O) is recorded as a histogram **`mcp.gateway.internal.duration_seconds`** with labels **`method`** (JSON-RPC method when known; `unknown` during JWT on `POST /mcp/rpc` before parse) and **`phase`**: `parse`, `security`, `router`, `mux`. After OTel → Prometheus translation, series often appear as `mcp_mcp_gateway_internal_duration_seconds_*`. For sub-ms internal work, prefer **mean latency per phase** over histogram p95 when bucket layout starts at 5 s — see [calibration-results.md](evaluation/calibration-results.md).
 - Traces: child span **`mcp.security.authn`** wraps JWT validation (under **`mcp.host.request`** for `POST /mcp/rpc` when `AUTH_MODE=jwt`); **`mcp.security.authz`** remains on `tools/call` allow-list enforcement in the multiplexer.
 - Tracing policy decisions (closed): each processed JSON-RPC message creates exactly one root span, **`mcp.host.request`**.
 - W3C propagation policy (closed): `traceparent` / `tracestate` are always propagated on outgoing HTTP upstream backend calls.
@@ -301,7 +301,7 @@ GitHub Actions: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
 2. **Run:** `make test-integration`.
 3. **Behavior:**
   - **`internal/gateway/httpserver`:** JWT **`mcp_tools`** allow-list denial for **`tools/call`** is always exercised (in-process `httptest`; no external services).
-  - **`internal/router`:** semantic routing against live Qdrant + embed runs when both are reachable; if either is down and **`CI` is unset**, the test **skips** with a clear message (on CI, missing deps **fail** the job).
+  - **`internal/router`:** semantic routing against live Qdrant + embed runs when both are reachable. Integration tests call the sidecar at **`EMBED_URL`** with **`POST /embed`** and JSON field **`texts`** (not `inputs`; see [`deployments/embed/server.py`](../../deployments/embed/server.py)). Wait until embed answers at **`/healthz`** before running tests. If Qdrant or embed is down and **`CI` is unset**, the test **skips** with a clear message (on CI, missing deps **fail** the job).
   - **`internal/telemetry`:** OTLP shutdown test runs when the collector answers at `OTEL_EXPORTER_OTLP_ENDPOINT`; otherwise it **skips**.
 
 Use **`go test -tags=integration -short ./...`** to skip tests that call `testing.Short()` (currently the JWT policy integration test).
@@ -311,4 +311,4 @@ Use **`go test -tags=integration -short ./...`** to skip tests that call `testin
 - [Documentation index](README.md)
 - [Architecture overview](architecture/README.md) · [full specification](architecture/mcp_gateway.plan.md)
 - [ADRs](adr/): [0001](adr/0001-architecture-decisions.md), [0002](adr/0002-filter-list-mode.md), [0003](adr/0003-security-rar-jwt-merge-failmode.md), [0004](adr/0004-gateway-scope.md)
-- [Evaluation guides](evaluation/README.md) · [calibration runbook](evaluation/calibration-run.md)
+- [Evaluation guides](evaluation/README.md) · [calibration runbook](evaluation/calibration-run.md) · [recorded results](evaluation/calibration-results.md) · [real backends + JWT lab](evaluation/scenario-real-backends-jwt.md)

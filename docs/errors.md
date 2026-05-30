@@ -13,9 +13,11 @@ Authoritative HTTP details: [OpenAPI](artifacts/openapi/openapi.yaml). Source co
 | **202 Accepted** | Request accepted; read the matching JSON-RPC response on the open SSE connection (same `id`). |
 | **400 Bad Request** | Missing or invalid `Mcp-Session-Id`, malformed JSON-RPC body. |
 | **401 Unauthorized** | `AUTH_MODE=jwt` and missing/invalid bearer, or policy evaluation failed (fail-closed). |
+| **403 Forbidden** | `Origin` header present and not in `gateway.allowed_origins` / `GATEWAY_ALLOWED_ORIGINS`. |
 | **404 Not Found** | Unknown or expired session id. |
 | **413 Payload Too Large** | Body exceeds gateway limit (`MaxBytesReader`). |
 | **429 Too Many Requests** | Rate limit exhausted (`rate_limit` / `RATE_LIMIT_*`). |
+| **500 Internal Server Error** | Session dispatch or streaming failure after the request was accepted at the HTTP layer. |
 | **503 Service Unavailable** | `/readyz` only, dependency unhealthy when router requires Qdrant/embed. |
 
 Notifications (no JSON-RPC `id`) also return **202** when accepted.

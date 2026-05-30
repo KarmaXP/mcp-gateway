@@ -13,6 +13,7 @@ Copy [`.env.example`](../.env.example) with `make bootstrap`. Example YAML files
 | [`gateway.demo.yaml`](../deployments/gateway.demo.yaml) | 1× smoke mock `:31400` | `off` | First run (`make demo`, default `make run`) |
 | [`gateway.example.yaml`](../deployments/gateway.example.yaml) | alpha `:3101`, beta `:3102` | `off` (tunable) | Multi-backend lab (`make demo-backends`, `make demo-full`) |
 | [`gateway.sre.example.yaml`](../deployments/gateway.sre.example.yaml) | k8s/prom/gh mocks `:3201, 3203` | `on` | SRE walkthrough (`make sre-up`, `make sre-smoke`) |
+| [`gateway.real.yaml`](../deployments/gateway.real.yaml) | stdio MCP (`npx` everything, filesystem, memory) | `on` | Real backends + JWT lab ([scenario-real-backends-jwt.md](evaluation/scenario-real-backends-jwt.md)) |
 
 Ports: [local-ports.md](local-ports.md).
 
@@ -79,6 +80,8 @@ JWT claims used by the gateway:
 - **`mcp_tools`**, array of allowed namespaced tool ids
 - **`authorization_details`**, RAR-style entries (see [ADR 0003](adr/0003-security-rar-jwt-merge-failmode.md))
 - **`mcp_tool_groups`**, expanded via YAML `policy.tool_groups`
+
+Each group key in the JWT must exist in `policy.tool_groups`. **Unknown group names fail policy evaluation** (fail-closed → **401** on `tools/list` and `tools/call`). This matches [ADR 0003](adr/0003-security-rar-jwt-merge-failmode.md). Opt-in **`allow_on_eval_failure`** applies to malformed **`authorization_details`** (RAR), not to unknown group keys.
 
 JWKS or signature failure → **401** (fail-closed). There is no bypass when JWKS is down.
 
