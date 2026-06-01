@@ -1,19 +1,22 @@
-# Integration checklist (gateway + backends, before your agent)
+# Integration checklist (gateway + backends + optional agent)
 
-Use this **single session** to validate the gateway with real or mock upstreams **before** wiring LangGraph, Cursor, or another MCP host. Run everything with one gateway process up; do not restart between steps unless noted.
+Use a **single session** to validate the gateway (and optionally the full host stack) with one gateway process up; do not restart between steps unless noted.
 
-Recorded numbers (integrated lab run, 2026-05-30): [calibration-results.md](calibration-results.md).
+Recorded numbers: [calibration-results.md](calibration-results.md) — *Integrated lab run* (profile B, 2026-05-30); *Full lab session* (profile C, when executed).
 
 ---
 
 ## Choose a profile
 
-| Profile | Config | Auth | Backends | Walkthrough |
-|---------|--------|------|----------|-------------|
-| **A — Mocks + optional loadtest** | `gateway.sre.example.yaml` | `AUTH_MODE=none` | HTTP mocks (`make sre-up`) | Steps below (default commands) |
-| **B — Real stdio + JWT (integrated lab)** | `gateway.real.yaml` | `AUTH_MODE=jwt` | stdio MCP via `npx` | [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) |
+| Profile | Config | Auth | Backends | Scope |
+|---------|--------|------|----------|--------|
+| **A — Mocks + optional loadtest** | `gateway.sre.example.yaml` | `AUTH_MODE=none` | HTTP mocks (`make sre-up`) | Gateway + loadtest without JWT |
+| **B — Real stdio + JWT (integrated lab)** | `gateway.real.yaml` | `AUTH_MODE=jwt` | stdio MCP via `npx` | Gateway evidence (smoke, JWT, Prom means, recall) — [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) |
+| **C — Full lab session** | Same as B | `AUTH_MODE=jwt` | Same as B | **B plus** MCP host demo, agent (e.g. LangGraph), Tempo capture, JWT load — section [Profile C](#profile-c--full-lab-session) below |
 
 Profile B **does not** use `make sre-up`. Profile B **does not** run `scripts/loadtest` (no Bearer header); use JWT smoke traffic + Prometheus internal means instead (documented in calibration-results).
+
+Profile C **extends** B in the same session (or immediately after, same gateway config). Record outcomes under *Full lab session* in [calibration-results.md](calibration-results.md).
 
 ---
 
@@ -143,11 +146,72 @@ Host integration: [CONNECTING_AGENTS.md](../CONNECTING_AGENTS.md).
 
 ---
 
+## Profile C — Full lab session
+
+Run **after** profile B checks (or repeat B sanity first). Goal: close gaps left by B — MCP host without smoke-only path, conversational agent, optional Tempo, JWT-aware load.
+
+### C.0 — Same prerequisites as B
+
+[scenario-real-backends-jwt.md](scenario-real-backends-jwt.md): `make docker-up`, JWT keys, `gateway.real.yaml`, `ROUTER_MODE=on`, OTLP, three stdio backends. Keep `PORT=18080` stable.
+
+### C.1 — MCP host demo (no LLM)
+
+Same protocol as step [2. Minimal MCP host](#2-minimal-mcp-host-same-protocol-as-your-agent), with JWT on every HTTP call.
+
+| Check | Expected |
+|-------|----------|
+| SSE session id | Received |
+| `tools/list` | Namespaced tools |
+| `tools/call` | At least one success on a namespaced tool |
+
+If the demo binary has no JWT flag yet, use `scripts/smoke_e2e.sh` only for JWT proof and track demo as **blocked** with reason in calibration-results.
+
+### C.2 — Agent (LangGraph or equivalent)
+
+| Check | Expected |
+|-------|----------|
+| Same `GATEWAY_URL` as B | No config drift |
+| `Authorization: Bearer` | When `AUTH_MODE=jwt` |
+| `tools/call` via agent | ≥1 success; log or screenshot for thesis demo |
+
+Optional: `X-MCP-Intent` on an ambiguous call when the router is on.
+
+Details: [CONNECTING_AGENTS.md](../CONNECTING_AGENTS.md).
+
+### C.3 — Observability (Tempo)
+
+1. Generate traffic (agent or smoke).
+2. Open Grafana (Compose stack), Prometheus + Tempo datasources.
+3. Follow [router-trace-capture.md](router-trace-capture.md).
+4. Store one trace link or screenshot next to results.
+
+If skipped: **Not measured** + reason in *Full lab session* table.
+
+### C.4 — Load under JWT
+
+| Option | Command / approach |
+|--------|-------------------|
+| **Preferred (after code change)** | Extend `scripts/loadtest` to send `Authorization: Bearer`; then direct/semantic runs like profile A |
+| **Until then** | Repeat JWT `smoke_e2e` (parallel + sequential) as in B; record Prom **means** only — do not claim histogram p95 for sub-ms phases |
+
+### C.5 — Record results
+
+Copy all measured values into [calibration-results.md](calibration-results.md) → **Full lab session**. Do not invent numbers. Mark **Not measured** with a one-line reason for every skipped row.
+
+### What profile C does not claim
+
+- Production Kubernetes / Prometheus / GitHub APIs (still reference MCP servers over stdio).
+- Replacing profile B numbers — B remains the primary gateway benchmark for the thesis.
+- Fixing OTel histogram p95 artefacts for sub-ms internal phases (still use means unless buckets change).
+
+---
+
 ## Quick reference
 
 | Goal | Doc / command |
 |------|----------------|
 | Real stdio + JWT (integrated lab) | [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) |
+| Full lab (B + agent + Tempo + JWT load) | Profile C above |
 | Add a real upstream | [ADDING_BACKENDS.md](../ADDING_BACKENDS.md) |
 | SRE three-backend mocks | [scenario-sre-multibackend.md](scenario-sre-multibackend.md) |
 | Record recall/latency | [calibration-results.md](calibration-results.md) |
