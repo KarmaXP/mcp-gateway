@@ -173,6 +173,22 @@ sum(rate(mcp_mcp_gateway_internal_duration_seconds_count{method="tools/call",pha
 
 ---
 
+## Full lab session (profile C)
+
+**Status:** Not executed yet. Procedure: [integration-checklist.md](integration-checklist.md) profile C.
+
+Record here after the session: MCP host demo with JWT, agent (`tools/call`), Tempo capture, JWT load (loadtest with Bearer or documented substitute), optional semantic intent header.
+
+| Artifact | Status | Reason / notes |
+| -------- | ------ | -------------- |
+| `mcp_host_demo` + JWT | **Not measured** | Pending profile C session |
+| Agent (e.g. LangGraph) `tools/call` | **Not measured** | Pending profile C session |
+| Tempo trace / decomposition | **Not measured** | Pending profile C session |
+| `scripts/loadtest` with JWT | **Not measured** | Pending Bearer support or substitute documented |
+| `X-MCP-Intent` call (optional) | **Not measured** | Optional |
+
+---
+
 ## Summary
 
 | Claim | Run | Evidence |
