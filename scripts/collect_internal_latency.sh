@@ -3,7 +3,7 @@
 #
 # Usage:
 #   PROM_URL=http://127.0.0.1:9090 WINDOW=5m scripts/collect_internal_latency.sh
-#   PROM_URL=http://127.0.0.1:9090 WINDOW=10m METRIC_PREFIX=mcp_gateway_internal_duration_seconds scripts/collect_internal_latency.sh
+#   PROM_URL=http://127.0.0.1:9090 WINDOW=10m METRIC_PREFIX='mcp(_mcp)?_gateway_internal_duration_seconds' scripts/collect_internal_latency.sh
 #
 # Output:
 #   Markdown table with parse/security/router/mux rows and quantiles in milliseconds.
@@ -11,13 +11,13 @@ set -euo pipefail
 
 PROM_URL="${PROM_URL:-http://127.0.0.1:9090}"
 WINDOW="${WINDOW:-5m}"
-METRIC_PREFIX="${METRIC_PREFIX:-mcp_gateway_internal_duration_seconds}"
+METRIC_PREFIX="${METRIC_PREFIX:-mcp(_mcp)?_gateway_internal_duration_seconds}"
 PHASE_RE="${PHASE_RE:-parse|security|router|mux}"
 
 query_quantile() {
   local quantile="$1"
   local query
-  query="histogram_quantile(${quantile}, sum by (le, phase) (rate(${METRIC_PREFIX}_bucket{phase=~\"${PHASE_RE}\"}[${WINDOW}])))"
+  query="histogram_quantile(${quantile}, sum by (le, phase) (rate({__name__=~\"${METRIC_PREFIX}_bucket\",phase=~\"${PHASE_RE}\"}[${WINDOW}])))"
   curl -fsS -G "${PROM_URL%/}/api/v1/query" --data-urlencode "query=${query}"
 }
 

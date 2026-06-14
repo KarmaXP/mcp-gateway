@@ -9,26 +9,34 @@ Measures **tools/call** latency from POST `202 Accepted` until the matching JSON
 | `direct`  | Any (exact match shortcut when router on) | `alpha__echo` |
 | `semantic`| `ROUTER_MODE=on` + healthy `EMBED_URL`   | Long vague string → vector routing |
 
-Examples:
+Examples (from `mcp-gateway/`):
 
 ```bash
-# Terminal 1: gateway with router off (direct path still uses exact name)
-go run ./cmd/gateway
+# Terminal 1: alpha mock upstream + gateway (default direct tool is alpha__echo)
+make demo-backends
+MCP_GATEWAY_CONFIG=deployments/gateway.example.yaml make run
 
 # Terminal 2
 go run ./scripts/loadtest -url http://127.0.0.1:8080 -mode direct -workers 10 -duration 45s
 ```
 
+Plain `go run ./cmd/gateway` without `MCP_GATEWAY_CONFIG` fails unless you have `gateway.yaml` in the cwd. `make run` defaults to `deployments/gateway.demo.yaml` (`smoke__echo`); override with `-tool smoke__echo` or use the example config above.
+
 ```bash
-# Semantic comparison (embed + Qdrant optional; in-memory store is enough for router)
-ROUTER_MODE=on EMBED_URL=http://127.0.0.1:8001 go run ./cmd/gateway
+# Semantic comparison (embed sidecar + example config; Qdrant optional for in-memory dev paths)
+make docker-up
+make demo-backends
+ROUTER_MODE=on EMBED_URL=http://127.0.0.1:8001 QDRANT_URL=http://127.0.0.1:6333 \
+  MCP_GATEWAY_CONFIG=deployments/gateway.example.yaml make run
 
 go run ./scripts/loadtest -url http://127.0.0.1:8080 -mode semantic -workers 10 -duration 45s
 ```
 
 Compare the printed **p95 / p99** lines across runs. Throughput is approximate (successful iterations / wall time).
 
-### JWT (profile B / C)
+### JWT (profile C loadtest)
+
+Profile B uses repeated `smoke_e2e.sh` + Prometheus means instead of loadtest (see [integration-checklist.md](../../docs/evaluation/integration-checklist.md)). Profile C adds JWT loadtest below.
 
 Pass `-token` (or set `LOADTEST_JWT`) to send `Authorization: Bearer` on the SSE
 GET and every POST, and `-tool` / `-args` to target a real namespaced tool:

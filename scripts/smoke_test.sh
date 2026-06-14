@@ -2,7 +2,7 @@
 # End-to-end smoke: MCP HTTP+SSE through the gateway to scripts/smoke_upstream.
 #
 # Usage:
-#   make test
+#   make smoke
 #   SMOKE_AUTO_START_GATEWAY=1 ./scripts/smoke_test.sh
 #
 # Or with an already-running gateway (same shell exports as below):
