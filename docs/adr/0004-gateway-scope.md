@@ -35,7 +35,7 @@ The gateway is positioned as an SRE/platform MCP broker that aggregates backend 
 | `resources/list`, `resources/read` | Supported (pass-through after AuthN) | Aggregated/forwarded; no JWT/RAR allow-list enforcement in this phase. |
 | `prompts/list`, `prompts/get` | Supported (pass-through after AuthN) | Aggregated/forwarded; no JWT/RAR allow-list enforcement in this phase. |
 | `notifications/tools/list_changed` | Supported (optional forward) | `aggregation.forward_tools_list_changed` forwards catalog-change notifications to hosts. |
-| `notifications/resources/list_changed`, `notifications/prompts/list_changed` | Out of scope for forwarding side-effects | No cache invalidation/reindex/SSE fan-out behavior is guaranteed for these in this phase. |
+| `notifications/resources/list_changed`, `notifications/prompts/list_changed` | Out of scope for cache/router side-effects | When `aggregation.forward_tools_list_changed` is enabled: **SSE relay only** (no tools-cache invalidation or router reindex). Default off: no handler registered. |
 | Other MCP methods not listed above | Out of scope | Returned as method not supported by gateway contract. |
 
 ### 4) `list_changed` side-effects are tools-only
@@ -51,7 +51,7 @@ Equivalent side-effects for `resources/*` and `prompts/*` list-change notificati
 ## Consequences
 
 - Security and consent semantics stay clear: granular least-privilege is guaranteed for tool execution, while resources/prompts remain transport pass-through once authenticated.
-- Operators should treat `resources/*` and `prompts/*` controls as backend-side responsibility until gateway-level AuthZ expansion is intentionally implemented.
+- Operators treat `resources/*` and `prompts/*` access control as backend-side responsibility in this phase; gateway-level AuthZ for those method families is **out of scope** (see table above).
 - Method support and notification behavior are now explicit for OpenAPI, deployment comments, and security review references.
 
 ## References

@@ -58,9 +58,9 @@ Operator-oriented summary: [DEVELOPER.md, Architecture section](../DEVELOPER.md#
 | Document | Role |
 |----------|------|
 | **ADRs** ([0001](../adr/0001-architecture-decisions.md)–[0004](../adr/0004-gateway-scope.md)) | Accepted decisions: stack, `filter_list`, JWT/RAR merge, supported MCP scope |
-| **`mcp_gateway.plan.md`** | Living specification (requirements, flows, Section 4 stack notes) |
+| **`mcp_gateway.plan.md`** | Full specification (requirements, flows, Section 4 decision register) |
 
-When prose differs, **the ADR for that topic wins** (for example AuthZ scope in ADR 0004, `filter_list` semantics in ADR 0002). The plan may describe future or optional work; implemented behavior is defined by code + ADRs + [OpenAPI](../artifacts/openapi/openapi.yaml).
+When prose differs, **the ADR for that topic wins** (for example AuthZ scope in ADR 0004, `filter_list` semantics in ADR 0002). **Residual** rows in the plan are operator tuning, not open repo work; implemented behavior is defined by code + ADRs + [OpenAPI](../artifacts/openapi/openapi.yaml).
 
 ---
 
