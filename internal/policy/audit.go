@@ -7,10 +7,10 @@ import (
 	"time"
 )
 
-// Log attribute key for policy audit records (SEC5: no secrets in attrs).
+// Log attribute key for policy audit records (no secrets in attrs).
 const AuditMessageKey = "mcp_security_audit"
 
-// Emits via AuditSink; toolName/reason must not carry secrets (SEC5).
+// Emits via AuditSink; toolName/reason must not carry secrets.
 func LogAudit(ctx context.Context, outcome, reason, toolName, subjectID, policyVersion string) {
 	if ctx == nil {
 		ctx = context.Background()

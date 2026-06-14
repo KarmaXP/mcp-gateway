@@ -10,7 +10,7 @@ isProject: false
 
 - **Canonical document:** This file under `docs/architecture/` is the **in-repo architecture specification** for the MCP Gateway.
 - **Standalone export:** When you need Markdown without YAML front matter, export the body (from the first numbered section through bibliography), removing the YAML block at the top.
-- **Audience:** Technical reviewers, Go engineering, and AI agents implementing from explicit contracts.
+- **Audience:** Technical reviewers, Go engineering, and implementers working from explicit contracts.
 
 ---
 
@@ -30,7 +30,7 @@ Fixed block (also in exported `mcp_gateway.md` if you split it):
 | ------- | -------------------------------------------------------------------------------------------------------- |
 | Title  | Design and implementation of a Model Context Protocol (MCP) gateway for platform engineering       |
 | Author | Carlos Palomero                                             |
-| Version | 1.0 (engineering draft)                                         |
+| Version | 1.0 |
 | Date  | *(update each revision)*                                         |
 
 
@@ -729,15 +729,15 @@ This section is the **explicit inventory** of everything that must be **chosen a
 
 **Recommended format per decision in the final document:** short context, comparative table where applicable (homogeneous columns: Pros | Cons | Performance / scaling | Fit with Go / K8s | MCP / integration notes | Closure criteria), and **reference to commit or version** in the repo where the choice was fixed.
 
-**Homogeneous columns for comparative tables:** Pros | Cons | Performance / scaling | Fit with Go / K8s | MCP / integration notes | Closure criteria (PoC, benchmark, advisor).
+**Homogeneous columns for comparative tables:** Pros | Cons | Performance / scaling | Fit with Go / K8s | MCP / integration notes | Closure criteria (PoC, benchmark).
 
 ---
 
 ### 4.0 Decision register
 
-This subsection records **stack choices already reflected in this repository** versus items still **TBD** for implementation and operations.
+This subsection records **stack choices already reflected in this repository** versus **residual open items** for production hardening.
 
-| Area | Closed (decided) | Still open / TBD |
+| Area | Closed (decided) | Residual / deployment-specific |
 |------|---------------------------|------------------|
 | **Language** | **Go 1.26**, concurrency, static binary, ecosystem (JWT, OTLP, Qdrant HTTP). | Pin policy in `go.mod`, CI matrix. |
 | **Vector store** | **Qdrant**, HNSW, **metadata filters during ANN** (policy in-index); **HTTP API client** in gateway (`internal/router/store/qdrant.go`); **cosine** distance; **384 dimensions** aligned with embeddings. | Collection naming / rotation, HNSW tuning, auth/TLS in non-local deploys, persistence strategy (see Section 4.1 residual). |
@@ -793,7 +793,7 @@ This subsection records **stack choices already reflected in this repository** v
 - **Normative MCP revision:** version/commit or date of MCP spec and the concrete **HTTP+SSE transport profile** assumed by the project (fix in `go.mod` / `docs/DEVELOPER.md` and bibliography).
 - **Concrete HTTP surface of the gateway:** the plan states the pattern generically; **repo implements** `GET /mcp/sse`, `POST /mcp/rpc`, session header **`Mcp-Session-Id`** (document in OpenAPI when added).
 - **SSE format:** event names (`event:`), `data` field structure (raw JSON vs envelope), **heartbeats** and read/write timeouts.
-- **TLS:** termination at ingress vs TLS in the binary; certificate policy academic vs corporate.
+- **TLS:** termination at ingress vs TLS in the binary; certificate policy for development vs production.
 - **Limits:** max JSON-RPC body size, max time for a **multiplexed** `tools/call`, stream **backpressure**.
 - **Compatibility with test host** (Cursor, other MCP client): which host deployments use and any transport constraints.
 
@@ -839,17 +839,17 @@ This subsection records **stack choices already reflected in this repository** v
 
 **Plan status:** **`internal/router/eval`** provides a reproducible router eval benchmark (synthetic catalog, recall@1 + p95 tests; see Section 3.B.8). **`internal/router/rules`** implements aliases and silo→prefix narrowing (Section 3.B.6). **Hybrid BM25** reranks the vector TopK with **`router.hybrid_alpha`** ∈ [0,1]. Reference values (`top_k=8`, `score_min=0.35`, `hybrid_alpha=0.2`, `allow_auto_rename=false`) are recorded in [calibration-results.md](../evaluation/calibration-results.md).
 
-**Open choices (unchanged until calibration):**
+**Open choices (deployment-specific):**
 
 - **`tools/list` mode:** `assist_list` vs **`filter_list`** (intent-filtered subset via `X-MCP-Intent` / `hostctx`; see ADR 0002, `docs/DEVELOPER.md`).
-- **`AllowAutoRename`:** recommended default **conservative `false`**; final policy TBD.
-- **`IntentText`:** standard documented mechanism (HTTP header name, JSON-RPC params field, **must be documented** and versioned).
-- **`topK` and `T_min` threshold**, **TBD** for production (defaults are starting points; measure with live embeddings).
-- **Hybrid BM25 + vector:** α is configurable; optional second pass on weights or corpus-wide BM25 remains future work if needed.
-- **Light classifier** before vector (rules vs small model): in scope or deferred.
-- **Session history** (last N tools): N and privacy policy.
+- **`AllowAutoRename`:** default **`false`** in reference configs; enable only after calibration in your environment.
+- **`IntentText`:** standard documented mechanism (HTTP header name, JSON-RPC params field; version in OpenAPI).
+- **`topK`, `score_min`, `hybrid_alpha`:** reference values in `gateway.example.yaml` and [calibration-results.md](../evaluation/calibration-results.md); retune when the embedding model or catalog changes.
+- **Hybrid BM25 + vector:** α is configurable; optional second pass on weights remains future work if needed.
+- **Light classifier** before vector (rules vs small model): deferred.
+- **Session history** (last N tools): N and privacy policy deferred.
 
-**Closure criteria:** plan Section 3.B.8 satisfied by in-tree eval tests; **final numeric table** for your deployment still requires one calibration run with the real embedder and recorded p95/recall.
+**Closure criteria:** plan Section 3.B.8 satisfied by in-tree eval tests; reference numeric table recorded in [calibration-results.md](../evaluation/calibration-results.md).
 
 ---
 
@@ -862,7 +862,7 @@ This subsection records **stack choices already reflected in this repository** v
 - **Primary AuthN mode (deployment):** mTLS workload vs combination with JWT (minimal vs “enterprise-like”), primary design centres on JWT; mesh variants optional.
 - **IdP:** issuer (`iss`), JWKS URL, `aud` validation, clock/skew, concrete values environment-specific.
 - **JSON Schema:** **draft** revision (e.g. 2020-12) and chosen **Go library** (license, performance, `$ref` support).
-- **List of “elevated” tools** requiring strict schema in non-dev (Section 3.C SEC3).
+- **List of “elevated” tools** requiring strict schema in non-dev (Section 3.C).
 - **Limits** on `arguments`: byte size, max JSON depth, max key count.
 - **Degradation policy (updated):** RAR parse/eval can explicitly degrade via `policy.allow_on_eval_failure` / `POLICY_ALLOW_ON_EVAL_FAILURE` (JWT-only fallback). JWKS unavailability remains fail-closed in JWT mode; no dedicated JWKS bypass flag is planned.
 - **Rate limiting / abuse** on gateway: yes/no and where (HTTP middleware).
@@ -931,7 +931,7 @@ This subsection records **stack choices already reflected in this repository** v
 - **Minimum Go version** policy for the module (patch updates) for the project lifecycle.
 - **Libraries:** JWT, HTTP client, SSE (if dedicated library), JSON Schema validator, Qdrant client, **pin** semver in `go.mod` with brief justification in docs.
 - **CI:** linter (`golangci-lint`), integration tests with Compose, coverage threshold for `internal/rpc` (Section 6).
-- **Dependency licenses** (compatibility with academic submission).
+- **Dependency licenses** (compatibility with open-source distribution).
 
 **Closure criteria:** `go mod verify`, green pipeline, critical dependency table in repo docs.
 

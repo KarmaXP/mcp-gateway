@@ -30,11 +30,11 @@ func ClientIntentFromContext(ctx context.Context) string {
 
 type allowedToolNamesKey struct{}
 
-// AllowListMode describes JWT/RAR merged allow-list propagation (ADR 0003 / SEC2).
+// AllowListMode describes JWT/RAR merged allow-list propagation (ADR 0003).
 type AllowListMode int
 
 const (
-	// AllowListUnrestricted — no allow-list in context (SEC2, full catalog for principal).
+	// AllowListUnrestricted: no allow-list in context (full catalog for principal).
 	AllowListUnrestricted AllowListMode = iota
 	// AllowListDenyAll — explicit empty intersection or empty policy list (deny every tool).
 	AllowListDenyAll
@@ -109,7 +109,7 @@ func AllowedToolNamesFromContext(ctx context.Context) []string {
 
 type subjectIDKey struct{}
 
-// JWT sub for audit paths — hash before logging (SEC5).
+// JWT sub for audit paths: hash before logging (no secrets in audit attrs).
 func WithSubjectID(parent context.Context, subject string) context.Context {
 	if parent == nil {
 		parent = context.Background()

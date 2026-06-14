@@ -8,7 +8,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-// SEC5: never include instance values in the returned string.
+// Never include instance values in the returned string (policy audit rules).
 func hostVisibleJSONSchemaError(err error) string {
 	var verr *jsonschema.ValidationError
 	if errors.As(err, &verr) {

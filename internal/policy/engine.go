@@ -65,7 +65,7 @@ func (e *Engine) HardenSchemas() bool {
 	return e != nil && e.hardenSchemas
 }
 
-// SEC3: elevated tools must have a compiled input schema.
+// Elevated tools must have a compiled input schema.
 func (e *Engine) RequiresStrictSchema(namespacedTool string) bool {
 	if e == nil || namespacedTool == "" {
 		return false
@@ -74,7 +74,7 @@ func (e *Engine) RequiresStrictSchema(namespacedTool string) bool {
 	return ok
 }
 
-// SEC2: merged JWT ∪ RAR allow list; empty ⇒ no restriction (full catalog for that principal).
+// Merged JWT ∪ RAR allow list; empty ⇒ no restriction (full catalog for that principal).
 func (e *Engine) EffectiveAllowList(c ClaimsInput) ([]string, error) {
 	if c == nil {
 		return nil, nil

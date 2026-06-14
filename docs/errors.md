@@ -75,3 +75,4 @@ When aggregating `tools/list`, the gateway may reuse a fixed JSON-RPC id per ups
 | **401** on every RPC | JWT mode, keys, or `authorization_details`. See [configuration, Auth section](configuration.md#authentication). |
 | Tool missing from `tools/list` | Backend down, `MethodNotFound` on list, or JWT filter. See [Adding backends](ADDING_BACKENDS.md). |
 | Router ignores intent | `ROUTER_MODE` off, or exact tool name shortcut. See [configuration, Router section](configuration.md#semantic-router). |
+| Concurrent loadtest errors under JWT | See [known limitations (multiplexing)](errors.md#known-limitations-multiplexing). |

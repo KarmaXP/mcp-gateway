@@ -2,7 +2,7 @@ package policy
 
 import "fmt"
 
-// allowed nil ⇒ any tool in catalog (SEC2, no restriction); non-nil empty ⇒ deny-all.
+// allowed nil ⇒ any tool in catalog (no restriction); non-nil empty ⇒ deny-all.
 func AllowedListContains(namespacedTool string, allowed []string) (bool, error) {
 	if allowed == nil {
 		return true, nil
