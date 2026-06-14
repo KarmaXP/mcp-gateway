@@ -28,7 +28,30 @@ go run ./scripts/loadtest -url http://127.0.0.1:8080 -mode semantic -workers 10 
 
 Compare the printed **p95 / p99** lines across runs. Throughput is approximate (successful iterations / wall time).
 
-**JWT limitation:** this client does **not** send `Authorization: Bearer`. Use only with `AUTH_MODE=none`, or extend the script for JWT sessions. Under JWT, generate load with repeated `scripts/smoke_e2e.sh` and read Prometheus internal means ([calibration-results.md](../../docs/evaluation/calibration-results.md)).
+### JWT (profile B / C)
+
+Pass `-token` (or set `LOADTEST_JWT`) to send `Authorization: Bearer` on the SSE
+GET and every POST, and `-tool` / `-args` to target a real namespaced tool:
+
+```bash
+go run ./scripts/loadtest -url http://127.0.0.1:18080 -mode direct -workers 10 -duration 45s \
+  -token "$JWT_ADMIN" \
+  -tool prom__read_text_file \
+  -args '{"path":"/private/tmp/mcp-tfm-tribunal/readme.txt"}'
+```
+
+| Flag | Default | Purpose |
+|------|---------|---------|
+| `-token` | `""` (or `LOADTEST_JWT`) | JWT bearer for `AUTH_MODE=jwt` |
+| `-tool` | `alpha__echo` | direct-mode namespaced tool name |
+| `-args` | `{}` | direct-mode `tools/call` arguments (JSON object) |
+| `-semantic-tool` | echo description | semantic-mode natural-language tool |
+
+The client-observed p95 here includes the SSE round-trip and (under JWT) auth on
+every request; it is **not** the gateway's internal phase latency. For internal
+overhead use Prometheus phase **means** ([calibration-results.md](../../docs/evaluation/calibration-results.md)),
+which stay reliable when samples are sub-ms. If you do not run a JWT loadtest,
+the documented substitute is repeated `scripts/smoke_e2e.sh` traffic + those means.
 
 ## k6 HTTP baseline (`k6_http_baseline.js`)
 

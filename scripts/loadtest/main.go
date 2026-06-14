@@ -3,6 +3,11 @@
 // Examples: go run ./scripts/loadtest -url http://127.0.0.1:8080 -mode direct -workers 8 -duration 30s
 //
 // Semantic mode needs ROUTER_MODE=on and a healthy embed sidecar.
+//
+// Under AUTH_MODE=jwt (profile B/C) pass -token (or set LOADTEST_JWT); it is sent
+// as Authorization: Bearer on the SSE GET and every POST. -tool / -args select the
+// direct tool and its JSON arguments so the call can target real backends, e.g.
+// -tool prom__read_text_file -args '{"path":"/private/tmp/mcp-tfm-tribunal/readme.txt"}'.
 package main
 
 import (
@@ -31,6 +36,9 @@ const (
 	defaultWarmupIterations = 2
 	defaultTestWindow = 30 * time.Second
 
+	defaultDirectTool = "alpha__echo"
+	defaultSemanticTool = "repeat user text back to them like an echo mock tool"
+
 	sseEventLineBuffer = 256
 	microsecondsPerMillis = 1000
 	throughputMinDenominator = 1
@@ -51,12 +59,24 @@ var (
 	loadtestToolsCallTimeout = 60 * time.Second
 )
 
+// callConfig is shared read-only across workers.
+type callConfig struct {
+	bearer       string
+	directTool   string
+	directArgs   string
+	semanticTool string
+}
+
 func main() {
 	base := flag.String("url", defaultLoadtestGatewayURL, "Gateway base URL (no trailing slash)")
 	mode := flag.String("mode", "direct", "direct (exact tool name) or semantic (vague name → vector router)")
 	workers := flag.Int("workers", defaultLoadtestWorkers, "Concurrent workers")
 	duration := flag.Duration("duration", defaultTestWindow, "Test window per worker (after warmup)")
 	warmup := flag.Int("warmup", defaultWarmupIterations, "Warmup iterations per worker (discarded)")
+	token := flag.String("token", "", "JWT bearer token (AUTH_MODE=jwt); falls back to LOADTEST_JWT env")
+	tool := flag.String("tool", defaultDirectTool, "direct-mode tool name (namespaced, e.g. prom__read_text_file)")
+	args := flag.String("args", "{}", "direct-mode tools/call arguments as a JSON object")
+	semanticTool := flag.String("semantic-tool", defaultSemanticTool, "semantic-mode natural-language tool description")
 	flag.Parse()
 
 	if *workers < 1 {
@@ -66,6 +86,21 @@ func main() {
 	if *mode != "direct" && *mode != "semantic" {
 		fmt.Fprintln(os.Stderr, "mode must be direct or semantic")
 		os.Exit(exitStatusInvalidUsage)
+	}
+	if !json.Valid([]byte(*args)) {
+		fmt.Fprintln(os.Stderr, "-args must be valid JSON")
+		os.Exit(exitStatusInvalidUsage)
+	}
+
+	bearer := strings.TrimSpace(*token)
+	if bearer == "" {
+		bearer = strings.TrimSpace(os.Getenv("LOADTEST_JWT"))
+	}
+	cfg := callConfig{
+		bearer:       bearer,
+		directTool:   *tool,
+		directArgs:   *args,
+		semanticTool: *semanticTool,
 	}
 
 	client := &http.Client{Timeout: 0}
@@ -82,12 +117,12 @@ func main() {
 		go func() {
 			defer wg.Done()
 			for i := 0; i < *warmup; i++ {
-				if _, err := oneIteration(client, *base, *mode); err != nil {
+				if _, err := oneIteration(client, *base, *mode, cfg); err != nil {
 					errs.Add(1)
 				}
 			}
 			for time.Now().Before(deadline) {
-				d, err := oneIteration(client, *base, *mode)
+				d, err := oneIteration(client, *base, *mode, cfg)
 				if err != nil {
 					errs.Add(1)
 					continue
@@ -126,16 +161,16 @@ func percentileMs(d []time.Duration, p int) float64 {
 	return float64(d[idx].Microseconds()) / microsecondsPerMillis
 }
 
-func oneIteration(client *http.Client, base, mode string) (callLatency time.Duration, err error) {
+func oneIteration(client *http.Client, base, mode string, cfg callConfig) (callLatency time.Duration, err error) {
 	ctx := context.Background()
-	sid, events, cancel, err := openSSE(ctx, client, base+"/mcp/sse")
+	sid, events, cancel, err := openSSE(ctx, client, base+"/mcp/sse", cfg.bearer)
 	if err != nil {
 		return 0, err
 	}
 	defer cancel()
 
 	id := nextID()
-	if err := postRPC(client, base+"/mcp/rpc", sid, fmt.Sprintf(
+	if err := postRPC(client, base+"/mcp/rpc", sid, cfg.bearer, fmt.Sprintf(
 		`{"jsonrpc":"%s","id":%d,"method":"initialize","params":{"protocolVersion":"%s","capabilities":{},"clientInfo":{"name":"loadtest","version":"0"}}}`,
 		rpc.JSONRPCVersion, id, mcpwire.MCPProtocolVersion)); err != nil {
 		return 0, err
@@ -144,27 +179,29 @@ func oneIteration(client *http.Client, base, mode string) (callLatency time.Dura
 		return 0, err
 	}
 
-	if err := postRPC(client, base+"/mcp/rpc", sid, fmt.Sprintf(`{"jsonrpc":"%s","method":"notifications/initialized"}`, rpc.JSONRPCVersion)); err != nil {
+	if err := postRPC(client, base+"/mcp/rpc", sid, cfg.bearer, fmt.Sprintf(`{"jsonrpc":"%s","method":"notifications/initialized"}`, rpc.JSONRPCVersion)); err != nil {
 		return 0, err
 	}
 
 	id = nextID()
-	if err := postRPC(client, base+"/mcp/rpc", sid, fmt.Sprintf(`{"jsonrpc":"%s","id":%d,"method":"tools/list"}`, rpc.JSONRPCVersion, id)); err != nil {
+	if err := postRPC(client, base+"/mcp/rpc", sid, cfg.bearer, fmt.Sprintf(`{"jsonrpc":"%s","id":%d,"method":"tools/list"}`, rpc.JSONRPCVersion, id)); err != nil {
 		return 0, err
 	}
 	if _, err := waitDataJSON(events, id, loadtestToolsListTimeout); err != nil {
 		return 0, err
 	}
 
-	toolName := `alpha__echo`
+	toolName := cfg.directTool
+	callArgs := cfg.directArgs
 	if mode == "semantic" {
-		toolName = `repeat user text back to them like an echo mock tool`
+		toolName = cfg.semanticTool
+		callArgs = "{}"
 	}
 	id = nextID()
-	callBody := fmt.Sprintf(`{"jsonrpc":"%s","id":%d,"method":"tools/call","params":{"name":%q,"arguments":{}}}`, rpc.JSONRPCVersion, id, toolName)
+	callBody := fmt.Sprintf(`{"jsonrpc":"%s","id":%d,"method":"tools/call","params":{"name":%q,"arguments":%s}}`, rpc.JSONRPCVersion, id, toolName, callArgs)
 
 	t0 := time.Now()
-	if err := postRPC(client, base+"/mcp/rpc", sid, callBody); err != nil {
+	if err := postRPC(client, base+"/mcp/rpc", sid, cfg.bearer, callBody); err != nil {
 		return 0, err
 	}
 	raw, err := waitDataJSON(events, id, loadtestToolsCallTimeout)
@@ -190,14 +227,23 @@ func oneIteration(client *http.Client, base, mode string) (callLatency time.Dura
 
 var idSeq atomic.Uint64
 
+// nextID returns a small monotonic JSON-RPC id. The gateway forwards the host id
+// verbatim to the upstream, and Node-based MCP servers parse JSON numbers as
+// float64, so ids above 2^53 lose precision and the upstream echoes back a
+// rounded id the gateway cannot match. A plain counter stays in the safe range
+// for the lifetime of any realistic run.
 func nextID() int64 {
-	return time.Now().UnixNano() + int64(idSeq.Add(1))
+	return int64(idSeq.Add(1))
 }
 
-func openSSE(ctx context.Context, client *http.Client, u string) (sid string, out <-chan string, cancel func(), err error) {
+func openSSE(ctx context.Context, client *http.Client, u, bearer string) (sid string, out <-chan string, cancel func(), err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return "", nil, nil, err
+	}
+	req.Header.Set("Accept", "text/event-stream")
+	if bearer != "" {
+		req.Header.Set("Authorization", "Bearer "+bearer)
 	}
 	resp, err := client.Do(req) //nolint:bodyclose // Body ownership transferred to SSE reader goroutine
 	if err != nil {
@@ -239,13 +285,16 @@ func openSSE(ctx context.Context, client *http.Client, u string) (sid string, ou
 	return sid, ch, cfn, nil
 }
 
-func postRPC(client *http.Client, url, sid, body string) error {
+func postRPC(client *http.Client, url, sid, bearer, body string) error {
 	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(body))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Mcp-Session-Id", sid)
+	if bearer != "" {
+		req.Header.Set("Authorization", "Bearer "+bearer)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return err

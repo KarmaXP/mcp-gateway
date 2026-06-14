@@ -47,10 +47,18 @@ func run() error {
 
 	toolNameOverride := strings.TrimSpace(os.Getenv("TOOL_NAME"))
 
+	toolArgs, err := parseToolArgs(os.Getenv("TOOL_ARGS"))
+	if err != nil {
+		return fmt.Errorf("parse TOOL_ARGS: %w", err)
+	}
+
+	// Required when the gateway runs with AUTH_MODE=jwt; sent on SSE and every POST.
+	bearer := strings.TrimSpace(os.Getenv("GATEWAY_JWT"))
+
 	client := &http.Client{Timeout: 0}
 	ctx := context.Background()
 
-	sid, events, cancel, err := openSSE(ctx, client, baseURL+"/mcp/sse")
+	sid, events, cancel, err := openSSE(ctx, client, baseURL+"/mcp/sse", bearer)
 	if err != nil {
 		return fmt.Errorf("open sse: %w", err)
 	}
@@ -58,7 +66,7 @@ func run() error {
 	fmt.Println("session:", sid)
 
 	initializeID := nextID()
-	if err := postRPC(client, baseURL+"/mcp/rpc", sid, map[string]any{
+	if err := postRPC(client, baseURL+"/mcp/rpc", sid, bearer, map[string]any{
 		"jsonrpc": rpc.JSONRPCVersion,
 		"id":      initializeID,
 		"method":  "initialize",
@@ -79,7 +87,7 @@ func run() error {
 	}
 	fmt.Println("initialize response:", string(initializeRaw))
 
-	if err := postRPC(client, baseURL+"/mcp/rpc", sid, map[string]any{
+	if err := postRPC(client, baseURL+"/mcp/rpc", sid, bearer, map[string]any{
 		"jsonrpc": rpc.JSONRPCVersion,
 		"method":  "notifications/initialized",
 	}); err != nil {
@@ -88,7 +96,7 @@ func run() error {
 	fmt.Println("sent notifications/initialized")
 
 	toolsListID := nextID()
-	if err := postRPC(client, baseURL+"/mcp/rpc", sid, map[string]any{
+	if err := postRPC(client, baseURL+"/mcp/rpc", sid, bearer, map[string]any{
 		"jsonrpc": rpc.JSONRPCVersion,
 		"id":      toolsListID,
 		"method":  "tools/list",
@@ -108,13 +116,13 @@ func run() error {
 	fmt.Println("tools/call name:", toolName)
 
 	toolsCallID := nextID()
-	if err := postRPC(client, baseURL+"/mcp/rpc", sid, map[string]any{
+	if err := postRPC(client, baseURL+"/mcp/rpc", sid, bearer, map[string]any{
 		"jsonrpc": rpc.JSONRPCVersion,
 		"id":      toolsCallID,
 		"method":  "tools/call",
 		"params": map[string]any{
 			"name":      toolName,
-			"arguments": map[string]any{},
+			"arguments": toolArgs,
 		},
 	}); err != nil {
 		return fmt.Errorf("tools/call post: %w", err)
@@ -128,14 +136,24 @@ func run() error {
 	return nil
 }
 
+// nextID returns a small monotonic JSON-RPC id starting at 1. The gateway
+// forwards the host id verbatim to the upstream (tools_call.go), and Node-based
+// MCP servers parse JSON numbers as float64, so ids above 2^53 lose precision
+// and the upstream echoes back a rounded id the gateway cannot match
+// ("backend call failed"). A small counter keeps every id within the safe
+// integer range.
 func nextID() int64 {
-	return time.Now().UnixNano() + idSeq.Add(1)
+	return idSeq.Add(1)
 }
 
-func openSSE(ctx context.Context, client *http.Client, endpoint string) (sid string, out <-chan string, cancel func(), err error) {
+func openSSE(ctx context.Context, client *http.Client, endpoint, bearer string) (sid string, out <-chan string, cancel func(), err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return "", nil, nil, err
+	}
+	req.Header.Set("Accept", "text/event-stream")
+	if bearer != "" {
+		req.Header.Set("Authorization", "Bearer "+bearer)
 	}
 	resp, err := client.Do(req) //nolint:bodyclose // Body is closed by goroutine on context cancellation.
 	if err != nil {
@@ -184,7 +202,7 @@ func openSSE(ctx context.Context, client *http.Client, endpoint string) (sid str
 	return sid, ch, cfn, nil
 }
 
-func postRPC(client *http.Client, endpoint, sid string, reqBody map[string]any) error {
+func postRPC(client *http.Client, endpoint, sid, bearer string, reqBody map[string]any) error {
 	body, err := json.Marshal(reqBody)
 	if err != nil {
 		return fmt.Errorf("marshal request body: %w", err)
@@ -195,6 +213,9 @@ func postRPC(client *http.Client, endpoint, sid string, reqBody map[string]any) 
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Mcp-Session-Id", sid)
+	if bearer != "" {
+		req.Header.Set("Authorization", "Bearer "+bearer)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
@@ -248,6 +269,18 @@ func matchesID(raw []byte, id int64) bool {
 		return true
 	}
 	return false
+}
+
+func parseToolArgs(raw string) (map[string]any, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return map[string]any{}, nil
+	}
+	var args map[string]any
+	if err := json.Unmarshal([]byte(raw), &args); err != nil {
+		return nil, fmt.Errorf("TOOL_ARGS must be a JSON object: %w", err)
+	}
+	return args, nil
 }
 
 func chooseToolName(toolsListRaw []byte, override string) (string, error) {
