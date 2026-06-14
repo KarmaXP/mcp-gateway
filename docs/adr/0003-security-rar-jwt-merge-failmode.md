@@ -64,7 +64,7 @@ Implementation: `internal/policy/engine.go` (`allowOnEvalFail` / `AllowOnEvalFai
 
 ## Consequences
 
-- Operators can cite this ADR for **thesis / security review**: RAR shape, merge semantics, and fail-closed default are explicit and implemented in `internal/policy` + auth middleware.
+- Operators can cite this ADR for security review: RAR shape, merge semantics, and fail-closed default are explicit and implemented in `internal/policy` + auth middleware.
 - Dashboards should rely on **low-cardinality** policy metrics (`outcome`, `reason` enums) rather than tool names or subjects in metric labels (see `internal/telemetry` and `internal/defaults/metrics.go`).
 
 ## References

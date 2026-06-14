@@ -23,7 +23,7 @@ Built for platform, SRE, and security-minded teams standardizing on MCP.
 **Requirements:** Go 1.26+ ([`go.mod`](go.mod)). Docker is optional.
 
 ```bash
-git clone <your-fork-or-upstream>
+git clone https://github.com/KarmaXP/mcp-gateway.git
 cd mcp-gateway
 make demo     # one mock upstream + gateway + MCP handshake + tools/call (no Docker)
 ```
@@ -90,7 +90,7 @@ make run
 | ✅ **Available** | Example configs: single-backend demo, alpha/beta, SRE three-backend layout |
 | 📖 **Documented pattern** | LangGraph (or any MCP host) calling the gateway, see [Connecting agents](docs/CONNECTING_AGENTS.md); you implement the agent in your own repo |
 | 🔧 **You provide** | Real MCP backends (Kubernetes, Prometheus, GitHub, …) and production deployment |
-| 📊 **Recorded** | Lab results in [calibration-results.md](docs/evaluation/calibration-results.md) (baseline 2026-05-18 + integrated run 2026-05-30) |
+| 📊 **Recorded** | Lab results in [calibration-results.md](docs/evaluation/calibration-results.md) (baseline 2026-05-18, integrated run 2026-05-30, full lab 2026-06-08) |
 | 📊 **Optional** | Re-run calibration when tuning; see [calibration runbook](docs/evaluation/calibration-run.md) |
 
 ---

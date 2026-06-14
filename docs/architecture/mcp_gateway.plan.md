@@ -1,22 +1,6 @@
 ---
 name: MCP Gateway architecture plan
-overview: "In-repository technical specification and decision log for the MCP Gateway. Optional export of the body to standalone Markdown (without this YAML front matter). Stack choices and open items are tracked in Section 4.x."
-todos:
- - id: router-eval-benchmark
-  content: Synthetic router eval (≥20 tools, recall + p95), internal/router/eval
-  status: completed
- - id: expand-sections
-  content: Expand Section 1, 8 with full prose (paragraphs, filled tables, Mermaid diagrams) in this file
-  status: pending
- - id: export-plan-md
-  content: Optional, copy body to a clean deliverable Markdown without front matter when needed
-  status: pending
- - id: mermaid-pass
-  content: Validate Mermaid diagrams (no spaces in IDs; quotes on labels with parentheses)
-  status: pending
- - id: ibm-bibliography
-  content: Finalize IBM Context Forge and bibliography with verifiable public sources
-  status: pending
+overview: "In-repository technical specification and decision log for the MCP Gateway."
 isProject: false
 ---
 
@@ -25,7 +9,7 @@ isProject: false
 ## Role of this document (read first)
 
 - **Canonical document:** This file under `docs/architecture/` is the **in-repo architecture specification** for the MCP Gateway.
-- **Standalone export:** When you need Markdown without Cursor metadata, **export** the body (from the first numbered section through bibliography), removing the YAML block at the top.
+- **Standalone export:** When you need Markdown without YAML front matter, export the body (from the first numbered section through bibliography), removing the YAML block at the top.
 - **Audience:** Technical reviewers, Go engineering, and AI agents implementing from explicit contracts.
 
 ---
@@ -763,10 +747,10 @@ This subsection records **stack choices already reflected in this repository** v
 | **Metrics / OTel topology** | **Prometheus** + **OpenTelemetry Collector** as **sidecar** (gateway → OTLP → Collector → Tempo + Prometheus scrape). | OTLP gRPC vs HTTP from gateway to Collector; prod sampling (Section 4.3 residual). |
 | **AuthN (design-time)** | **JWT Bearer** with **JWKS**; validate `iss`, `aud`, `exp`. Local quickstart runs with **`AUTH_MODE=none`** (dev-only; not for public exposure). | Concrete IdP URLs, key rotation ops, rate limits, mTLS vs JWT for mesh (Section 4.6 residual). |
 | **AuthZ / RAR** | **Closed**, canonical RAR `authorization_details` for **`type: "mcp_tool"`** is fixed in **[ADR 0003](../adr/0003-security-rar-jwt-merge-failmode.md)** and OpenAPI schema **`AuthorizationDetailsMcpTool`** (`docs/artifacts/openapi/openapi.yaml`), aligned with `internal/policy/rar.go` (`tool_name`/`tool_pattern` exclusivity, non-`mcp_tool` ignored, glob via `filepath.Match`). | IdP-side issuance UX/policy remains deployment-specific; gateway contract is fixed (Section 4.6). |
-| **Router hyperparameters** | This plan includes a comparison framework; **table marks `topK`, `T_min`, `AllowAutoRename`, BM25 hybrid as TBD** pending phase-2 calibration on synthetic catalog (≥20 tools). | All numeric thresholds and `config.example.yaml` final values (Section 4.5). |
+| **Router hyperparameters** | **Closed** for reference deployment: `top_k=8`, `score_min=0.35`, `hybrid_alpha=0.2`, `allow_auto_rename=false` in `deployments/gateway.example.yaml` / `gateway.real.yaml`; recall 1.000 on eval catalog ([calibration-results.md](../evaluation/calibration-results.md)). | Per-environment retuning when embedding model or catalog changes. |
 | **Orchestrator behaviour** | Plan Section 3.A defers low-level detail to the repo. **Repo:** multiplexor implements **`__` namespacing**, **host `id` preservation**, **partial backend omit on `initialize` / list (R6)**, **optional strict mode flags** (`aggregation.strict_initialize`, `aggregation.strict_list`), **operational timeouts from YAML** (`aggregation.init_timeout`, `list_timeout`, `call_timeout`), **per-backend concurrency caps** (`max_concurrency`), and **application error codes** (`internal/gateway/errcodes`). | Global multiplex semaphore policy (Section 4.7 residual). |
 
-**Section 4.11 checklist:** Items **1, 4** and the **trace/metrics/embeddings** narrative are reflected in deployment scaffolding and this plan. Item **5** (router hyperparameters) has **structure + TBD** numeric values. Item **6** is **closed** (JWT direction plus canonical RAR shape in ADR 0003 + OpenAPI `AuthorizationDetailsMcpTool`). Item **7** is **partially** closed: `docs/DEVELOPER.md` now pins MCP protocol revision `2024-11-05` and includes a consolidated direct dependency table from `go.mod`; remaining work is routine dependency/version maintenance.
+**Section 4.11 checklist:** Items **1, 4, 5** and the **trace/metrics/embeddings** narrative are reflected in deployment scaffolding and recorded evaluation. Item **6** is **closed** (JWT direction plus canonical RAR shape in ADR 0003 + OpenAPI `AuthorizationDetailsMcpTool`). Item **7** is **closed** for the reference repo: `docs/DEVELOPER.md` pins MCP protocol revision and dependency table; routine version bumps remain ongoing maintenance.
 
 ---
 
@@ -779,7 +763,7 @@ This subsection records **stack choices already reflected in this repository** v
 **Rationale:**
 
 - **Performance and data model:** Rust engine with competitive ANN search (e.g. HNSW); fits a tool catalog growing across silos and catalog versions (`catalog_version`) without requiring “hyper-massive” lab scale while leaving headroom.
-- **Pragmatism for a Go backend:** Qdrant runs as a **sidecar service** (single container or Qdrant Cloud), with **HTTP and gRPC** APIs and suitable Go clients, without a Python runtime or coupling the gateway binary to foreign ecosystems, aligned with advisor priority (Go backend).
+- **Pragmatism for a Go backend:** Qdrant runs as a **sidecar service** (single container or Qdrant Cloud), with **HTTP and gRPC** APIs and suitable Go clients, without a Python runtime or coupling the gateway binary to foreign ecosystems.
 - **Pre-vector filters (Section 3.B / Section 3.C requirement):** per-point metadata (`backend_id`, namespaced names, policy) maps to **payload + filter conditions** in query so `AllowedTools` and silo segregation apply in the index, not only in memory.
 - **Operations:** official image, stable docs, natural fit with **Kubernetes** (StatefulSet or managed deploy) for the Platform Engineering operational case.
 
@@ -853,7 +837,7 @@ This subsection records **stack choices already reflected in this repository** v
 
 ### 4.5 Semantic router: modes, signals, and hyperparameters
 
-**Plan status:** **`internal/router/eval`** provides a reproducible router eval benchmark (synthetic catalog, recall@1 + p95 tests; see Section 3.B.8). **`internal/router/rules`** implements aliases and silo→prefix narrowing (Section 3.B.6). **Hybrid BM25** reranks the vector TopK with **`router.hybrid_alpha`** ∈ [0,1] (`(1-α)·cosine + α·normBM25` on indexed document text). Defaults for **`topK`**, **`T_min`**, and **`AllowAutoRename`** remain conservative in code and **`deployments/gateway.example.yaml`** until you calibrate on the **live** embedding model + Qdrant in your environment.
+**Plan status:** **`internal/router/eval`** provides a reproducible router eval benchmark (synthetic catalog, recall@1 + p95 tests; see Section 3.B.8). **`internal/router/rules`** implements aliases and silo→prefix narrowing (Section 3.B.6). **Hybrid BM25** reranks the vector TopK with **`router.hybrid_alpha`** ∈ [0,1]. Reference values (`top_k=8`, `score_min=0.35`, `hybrid_alpha=0.2`, `allow_auto_rename=false`) are recorded in [calibration-results.md](../evaluation/calibration-results.md).
 
 **Open choices (unchanged until calibration):**
 
@@ -985,7 +969,7 @@ To justify the work before the committee, the final document should include at l
 | 2 | Transport comparison | **Done**, `tab:transport-comparison` | `GET /mcp/sse`, `POST /mcp/rpc`, `Mcp-Session-Id` |
 | 3 | Telemetry comparison | **Done**, tracing + metrics tables | Compose: Tempo, Prometheus, OTel Collector |
 | 4 | Embeddings decision | **Done**, ONNX + MiniLM | `deployments/embed/` service |
-| 5 | Router hyperparams | **Partial**, baseline values now documented (`top_k=8`, `T_min=0.35`, `hybrid_alpha=0.2`); final close pending live calibration | `deployments/gateway.example.yaml` + `.env.example` mirror baseline `ROUTER_*` |
+| 5 | Router hyperparams | **Closed** (reference values in `gateway.example.yaml` / eval catalog recall 1.000) | `deployments/gateway.example.yaml` + `.env.example` mirror baseline `ROUTER_*` |
 | 6 | RAR + AuthN | **Done**, JWT direction + canonical RAR shape in ADR 0003 and OpenAPI `AuthorizationDetailsMcpTool` | Closed for gateway contract (production ops hardening continues) |
 | 7 | Go + spec versions | **Partial (near-closed)**, **Go 1.26** stated; `docs/DEVELOPER.md` now pins MCP `2024-11-05` and includes a direct dependency table from `go.mod` | `go.mod` 1.26.1 + docs pinned |
 

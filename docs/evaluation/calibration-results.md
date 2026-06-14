@@ -75,6 +75,8 @@ go run ./scripts/loadtest -url http://127.0.0.1:18080 -mode direct -workers 10 -
 | latency_p99_ms | 3.591 |
 | samples / errors | 225 / 1367 |
 
+Latency percentiles above use **successful** iterations only. The high `errors` count reflects failed concurrent iterations under 10 workers (SSE/RPC contention during baseline exploration). For stable client-observed numbers, re-run with `-workers 1`.
+
 **Semantic:** 0 / 1333 samples — catalog did not match semantic loadtest intents.
 
 ### Baseline — not measured (documented, not repeated)
@@ -101,17 +103,17 @@ Config: `deployments/gateway.real.yaml`. Procedure: [`integration-checklist.md`]
 | ----- | ----- |
 | Date (UTC) | 2026-05-30 |
 | Gateway commit | `a889bff2779a7ac8630dc4224b2d44ab56a99fe5` (includes `gateway.real.yaml`; prior lab session on `cb0a5aa`) |
-| Environment | Host gateway (`PORT=18080`) + Docker deps (`make docker-up`); macOS / OrbStack |
+| Environment | Host gateway (`PORT=18080`) + Docker deps (`make docker-up`); macOS, Docker Compose |
 | `MCP_GATEWAY_CONFIG` | `deployments/gateway.real.yaml` |
-| `AUTH_MODE` | `jwt` (`JWT_ISS=https://tfm.local`, `JWT_AUD=mcp-gateway`, key `/tmp/mcp-tfm-jwt.key`) |
+| `AUTH_MODE` | `jwt` (`JWT_ISS=https://lab.local`, `JWT_AUD=mcp-gateway`, key `/tmp/mcp-lab-jwt.key`) |
 | `ROUTER_MODE` | `on` |
 | `GATEWAY_URL` | `http://127.0.0.1:18080` |
 | `QDRANT_URL` / `EMBED_URL` | `http://127.0.0.1:6333` / `http://127.0.0.1:18001` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://127.0.0.1:4318` |
-| Backends (real, stdio) | `@modelcontextprotocol/server-everything` → `k8s`; `server-filesystem` → `prom` (root `/private/tmp/mcp-tfm-tribunal`); `server-memory` → `gh` |
+| Backends (real, stdio) | `@modelcontextprotocol/server-everything` → `k8s`; `server-filesystem` → `prom` (root `/private/tmp/mcp-gateway-lab`); `server-memory` → `gh` |
 | JWT traffic | `scripts/smoke_e2e.sh` with admin JWT: 60× parallel + 20× sequential (`prom__read_text_file`) |
 
-**macOS note:** filesystem MCP allowed root is `/private/tmp/...`; tool paths must use `/private/tmp/mcp-tfm-tribunal/...`, not `/tmp/...`.
+**macOS note:** filesystem MCP allowed root is `/private/tmp/...`; tool paths must use `/private/tmp/mcp-gateway-lab/...`, not `/tmp/...`.
 
 ### Vector recall (regression check, same catalog)
 
@@ -168,7 +170,7 @@ sum(rate(mcp_mcp_gateway_internal_duration_seconds_count{method="tools/call",pha
 
 | Artifact | Status | Reason |
 | -------- | ------ | ------ |
-| `scripts/loadtest` direct/semantic | **Not measured** | Tool does not send `Authorization: Bearer`; session used `AUTH_MODE=jwt`. Substitute: JWT smoke traffic (80 calls) + Prom means above. |
+| `scripts/loadtest` direct/semantic | **Not measured (profile B)** | Session used `AUTH_MODE=jwt` before loadtest supported Bearer. Substitute: JWT smoke traffic (80 calls) + Prom means above. JWT loadtest recorded in profile C below. |
 | Tempo `T_total` / `T_upstream` / `T_internal` | **Not measured** | Tempo is not published on the host in `docker-compose.yaml` (in-cluster only). |
 | Histogram p95 per phase | **Not used** | Artefact ~4750 ms from bucket layout; `check_gateway_p95.sh` FAIL on this series is expected for sub-ms samples. |
 
@@ -178,38 +180,33 @@ sum(rate(mcp_mcp_gateway_internal_duration_seconds_count{method="tools/call",pha
 
 **Scope:** single session extending profile B in the same gateway config — MCP host demo with JWT, a LangGraph agent host, Tempo trace capture, and a JWT-aware loadtest. **Profile C extends B; it does not replace the B numbers above**, which remain the primary gateway benchmark.
 
-Procedure: [integration-checklist.md](integration-checklist.md) profile C, [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md). Internal notes and command log: `local/mcp-gateway/full-lab-session-results.md`.
+Procedure: [integration-checklist.md](integration-checklist.md) profile C and [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md).
 
 ### Run metadata
 
 | Field | Value |
 | ----- | ----- |
 | Date (UTC) | 2026-06-08 |
-| Gateway commit | `6e2de406cf64ab190cf2230ea432b2b677ef276e` (+ profile C client changes uncommitted; `make ci` OK 2026-06-08) |
-| Environment | Host gateway (`PORT=18080`) + Docker deps (`make docker-up`); macOS / OrbStack |
+| Gateway commit | `2e885e9a24397e2b4c6caa36130a040fbc837c9e` (`make ci` OK 2026-06-08) |
+| Environment | Host gateway (`PORT=18080`) + Docker deps (`make docker-up`); macOS, Docker Compose |
 | `MCP_GATEWAY_CONFIG` / `AUTH_MODE` / `ROUTER_MODE` | `deployments/gateway.real.yaml` / `jwt` / `on` |
-| Backends (real, stdio) | `server-everything`→`k8s`; `server-filesystem`→`prom` (root `/private/tmp/mcp-tfm-tribunal`); `server-memory`→`gh` |
-| Agent host | `langgraph-demo/` (sibling project): stdlib MCP client + LangGraph `StateGraph` |
+| Backends (real, stdio) | `server-everything`→`k8s`; `server-filesystem`→`prom` (root `/private/tmp/mcp-gateway-lab`); `server-memory`→`gh` |
+| Agent host | External LangGraph MCP client (see [CONNECTING_AGENTS.md](../CONNECTING_AGENTS.md)); not shipped in this repo |
 
 ### Results
 
 | Artifact | Status | Evidence / notes |
 | -------- | ------ | ---------------- |
-| `mcp_host_demo` + JWT | **Measured** | SSE session + `tools/list` (namespaced, allow-list filtered to 3 tools) + `tools/call` OK on all three silos: `prom__read_text_file`→"tfm smoke", `k8s__echo`→"Echo: …", `gh__create_entities`→entities created |
-| Agent (LangGraph) `tools/call` | **Measured** | Same `GATEWAY_URL` + Bearer. Ran both as a real `langgraph.StateGraph` (`k8s__echo`→"Echo: …") and via a built-in fallback runner (`prom__read_text_file`→"tfm smoke"); ≥1 `tools/call` succeeded via the agent graph |
+| `mcp_host_demo` + JWT | **Measured** | SSE session + `tools/list` (namespaced, allow-list filtered to 3 tools) + `tools/call` OK on all three silos: `prom__read_text_file`→"lab smoke", `k8s__echo`→"Echo: …", `gh__create_entities`→entities created |
+| Agent (LangGraph) `tools/call` | **Measured** | Same `GATEWAY_URL` + Bearer via an external LangGraph host. Ran both as a real `langgraph.StateGraph` (`k8s__echo`→"Echo: …") and via a built-in fallback runner (`prom__read_text_file`→"lab smoke"); ≥1 `tools/call` succeeded via the agent graph |
 | Tempo trace / decomposition | **Measured** | Captured via the Grafana datasource proxy (Tempo not host-published). One representative `tools/call` trace (`553af62b…`): `mcp.security.authn` 0.049 ms · `mcp.multiplex.tools_list` 2.57 ms · `mcp.security.authz` 0.0025 ms · `mcp.router.semantic` 0.031 ms · `mcp.validate.json_schema` 0.0045 ms · `mcp.backend.call` (filesystem) 0.846 ms. Single-trace point samples, not percentiles. |
-| `scripts/loadtest` with JWT | **Measured (workers=1)** | Bearer + namespaced tool now supported (`-token`/`-tool`/`-args`). `direct` mode, `prom__read_text_file`, 1 worker, 30 s: 10 594 samples, **0 errors**, p50 0.490 ms / p95 0.944 ms / p99 2.031 ms, ≈353 rps (client-observed, includes SSE round-trip + JWT per request). Higher concurrency is blocked by a gateway `tools/list` fan-out id collision (see limitation below). |
-| Internal phase means under JWT | **Measured** | Low-rate burst window (`[1m]`, ≈40 `tools/call`): parse 0.0089 · security 0.0049 · mux 0.0064 · router 0.0460 ms — consistent with the integrated run, no regression. Under sustained load (`[5m]`, ≈353 rps loadtest): parse/security/mux < 0.005 ms, **router rises to ≈3.3 ms** (throughput/contention) — still ≪ 50 ms. Means, not histogram p95. |
-| JWT deny (`-32003`) | **Measured** | Restricted principal: `prom__list_directory` is filtered out of `tools/list` (SEC2); a direct `tools/call` returns `-32003 "tool \"prom__list_directory\" not allowed for this principal"`. |
-| `X-MCP-Intent` call (optional) | **Not measured** | Header is plumbed end-to-end (agent `AGENT_INTENT`→`X-MCP-Intent`), but `gateway.real.yaml` has `allow_auto_rename:false`, so exact names take the deterministic path and the intent does not rewrite the tool. Semantic rename not exercised. |
+| `scripts/loadtest` with JWT | **Measured (workers=1)** | Bearer + namespaced tool via `-token`/`-tool`/`-args`. `direct` mode, `prom__read_text_file`, 1 worker, 30 s: 10 594 samples, **0 errors**, p50 0.490 ms / p95 0.944 ms / p99 2.031 ms, ≈353 rps (client-observed, includes SSE round-trip + JWT per request). Use one worker under JWT; see [known limitations](../errors.md#known-limitations-multiplexing). |
+| Internal phase means under JWT | **Measured** | Low-rate burst window (`[1m]`, ≈40 `tools/call`): parse 0.0089 · security 0.0049 · mux 0.0064 · router 0.0460 ms, consistent with the integrated run, no regression. Under sustained load (`[5m]`, ≈353 rps loadtest): parse/security/mux < 0.005 ms, **router rises to ≈3.3 ms** (throughput/contention), still ≪ 50 ms. Means, not histogram p95. |
+| JWT deny (`-32003`) | **Measured** | Restricted principal: `prom__list_directory` is filtered out of `tools/list`; a direct `tools/call` returns `-32003 "tool \"prom__list_directory\" not allowed for this principal"`. |
+| `X-MCP-Intent` call (optional) | **Not measured** | Header is supported on `tools/call`, but `gateway.real.yaml` has `allow_auto_rename:false`, so exact names take the deterministic path and the intent does not rewrite the tool. Semantic rename not exercised. |
 | Router recall regression | **Not re-measured** | Covered by baseline + integrated run (1.000, 26/26); optional sanity, not repeated this session. |
 
-### Profile C limitations found (filed as follow-ups, not fixed this session)
-
-- **Upstream id forwarding (tools/call):** the multiplexer forwards the host JSON-RPC `id` verbatim to upstreams. Node-based MCP servers round ids above 2^53, so the gateway cannot match the response → `-32000 "backend call failed"`. Worked around by switching the reference clients (`mcp_host_demo`, `loadtest`) to small monotonic ids; `smoke_e2e` (id=4) was always safe.
-- **tools/list fan-out id collision (concurrency):** the list fan-out uses a constant per-backend id, so concurrent `tools/list` to the same upstream fail with `duplicate jsonrpc id`. This caps the JWT loadtest at 1 worker (10-worker run: 1 sample / 97 errors). Sequential traffic is unaffected (30/30 smoke OK).
-
-Neither limitation affects the profile B evidence (single-stream smoke with small ids).
+Known multiplexing caveats (upstream JSON-RPC id forwarding, concurrent `tools/list` fan-out) are documented in [errors.md](../errors.md#known-limitations-multiplexing). Reference clients in this repo use small monotonic ids; profile B smoke evidence is unaffected.
 
 ---
 

@@ -52,7 +52,7 @@ Equivalent side-effects for `resources/*` and `prompts/*` list-change notificati
 
 - Security and consent semantics stay clear: granular least-privilege is guaranteed for tool execution, while resources/prompts remain transport pass-through once authenticated.
 - Operators should treat `resources/*` and `prompts/*` controls as backend-side responsibility until gateway-level AuthZ expansion is intentionally implemented.
-- Method support and notification behavior are now explicit for OpenAPI, deployment comments, and thesis/security review references.
+- Method support and notification behavior are now explicit for OpenAPI, deployment comments, and security review references.
 
 ## References
 

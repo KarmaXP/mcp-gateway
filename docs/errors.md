@@ -45,7 +45,25 @@ Standard JSON-RPC errors may also appear (from gateway or forwarded upstream):
 | **-32602** | `InvalidParams` | Invalid arguments (including JSON Schema validation on `tools/call`) |
 | **-32603** | `InternalError` | Generic internal error |
 
-Schema validation errors on `tools/call` **must not** echo argument values in the message (SEC5).
+Schema validation errors on `tools/call` must not echo argument values in the message (see policy audit rules in [configuration.md](configuration.md#policy-block)).
+
+---
+
+## Known limitations (multiplexing)
+
+These behaviors are documented for operators running reference clients and load tests. They do not affect single-stream smoke tests with small JSON-RPC ids.
+
+### Upstream JSON-RPC id forwarding (`tools/call`)
+
+The multiplexor forwards the host JSON-RPC `id` verbatim to upstream MCP servers. Node-based MCP servers parse JSON numbers as IEEE-754 doubles, so ids above 2^53 lose precision and the gateway may fail to match the upstream response (`-32000` backend call failed).
+
+**Workaround:** use small monotonic ids in your host client. The in-repo reference clients (`scripts/mcp_host_demo`, `scripts/loadtest`) and `scripts/smoke_e2e.sh` follow this pattern.
+
+### Concurrent `tools/list` fan-out
+
+When aggregating `tools/list`, the gateway may reuse a fixed JSON-RPC id per upstream backend within a single fan-out. Concurrent `tools/list` requests targeting the same upstream can collide (`duplicate jsonrpc id`).
+
+**Workaround:** serialize `tools/list` per session or cap loadtest workers to 1 under JWT. Sequential smoke traffic is unaffected.
 
 ---
 

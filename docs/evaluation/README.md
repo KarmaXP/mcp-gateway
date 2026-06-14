@@ -4,6 +4,8 @@ Guides for validating gateway behavior beyond unit tests: scripted scenarios, lo
 
 **Integrated lab (2026-05-30):** [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) + [calibration-results.md](calibration-results.md).
 
+**Full lab session (2026-06-08, profile C):** [integration-checklist.md](integration-checklist.md) profile C + calibration-results *Full lab session*.
+
 ---
 
 ## Operational walkthroughs
@@ -36,10 +38,10 @@ Host client: [`scripts/mcp_host_demo/README.md`](../../scripts/mcp_host_demo/REA
 | Guide | Purpose |
 |-------|---------|
 | [calibration-run.md](calibration-run.md) | Procedure: Qdrant + embed + gateway + metrics (baseline, mocks) |
-| [calibration-results.md](calibration-results.md) | **Canonical recorded numbers** — baseline 2026-05-18 + integrated run 2026-05-30 |
+| [calibration-results.md](calibration-results.md) | **Canonical recorded numbers** — baseline 2026-05-18, integrated run 2026-05-30, full lab 2026-06-08 |
 | [router-trace-capture.md](router-trace-capture.md) | Capture semantic-router spans in Tempo (optional) |
 
-Load testing: [`scripts/loadtest/README.md`](../../scripts/loadtest/README.md) (`AUTH_MODE=none` only unless you add Bearer yourself).
+Load testing: [`scripts/loadtest/README.md`](../../scripts/loadtest/README.md) (`AUTH_MODE=none` by default; pass `-token` or `LOADTEST_JWT` under JWT — see [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md)).
 
 ---
 

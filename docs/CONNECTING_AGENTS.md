@@ -327,4 +327,4 @@ See also the **[error reference](errors.md)** for HTTP status codes and JSON-RPC
 - [errors.md](errors.md)
 - [mcp-capabilities.md](mcp-capabilities.md)
 - [DEVELOPER.md](DEVELOPER.md)
-- [README.md](README.md): documentation index
+- [docs/README.md](docs/README.md): documentation index

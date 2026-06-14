@@ -80,7 +80,7 @@ func TestDispatchResponseDeliversToPending(t *testing.T) {
 }
 
 // TestDispatchResponseAbortsPendingWhenChannelFull asserts dispatch records pendingErr when the
-// pending channel is full. Call() checks pendingErr after <-ch (parity with mcphttp/client.go FIX-11).
+// pending channel is full. Call() checks pendingErr after <-ch (parity with mcphttp/client.go).
 // mcphttp has TestCallReturnsErrorWhenPendingChannelFull (blocked POST holds Call before select);
 // stdio has no stable equivalent—write returns before select, so a mirror E2E races and is omitted.
 func TestDispatchResponseAbortsPendingWhenChannelFull(t *testing.T) {

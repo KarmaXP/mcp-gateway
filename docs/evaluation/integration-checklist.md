@@ -14,7 +14,7 @@ Recorded numbers: [calibration-results.md](calibration-results.md) — *Integrat
 | **B — Real stdio + JWT (integrated lab)** | `gateway.real.yaml` | `AUTH_MODE=jwt` | stdio MCP via `npx` | Gateway evidence (smoke, JWT, Prom means, recall) — [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) |
 | **C — Full lab session** | Same as B | `AUTH_MODE=jwt` | Same as B | **B plus** MCP host demo, agent (e.g. LangGraph), Tempo capture, JWT load — section [Profile C](#profile-c--full-lab-session) below |
 
-Profile B **does not** use `make sre-up`. Profile B **does not** run `scripts/loadtest` (no Bearer header); use JWT smoke traffic + Prometheus internal means instead (documented in calibration-results).
+Profile B **does not** use `make sre-up`. Profile B primary load evidence uses JWT smoke traffic + Prometheus internal means (documented in calibration-results). JWT-aware `scripts/loadtest` is supported via `-token` and was measured in profile C.
 
 Profile C **extends** B in the same session (or immediately after, same gateway config). Record outcomes under *Full lab session* in [calibration-results.md](calibration-results.md).
 
@@ -72,7 +72,7 @@ Proves SSE + `Mcp-Session-Id` + initialize handshake without an LLM.
 GATEWAY_URL=http://127.0.0.1:${PORT} go run ./scripts/mcp_host_demo
 ```
 
-With JWT (profile B): set `Authorization: Bearer` in your client or use `scripts/smoke_e2e.sh` with `SMOKE_JWT`.
+With JWT (profile B): set `GATEWAY_JWT` or use `scripts/smoke_e2e.sh` with `SMOKE_JWT`.
 
 | Check | Done |
 |-------|------|
@@ -114,7 +114,7 @@ Repeat `scripts/smoke_e2e.sh` (parallel + sequential) with `SMOKE_JWT`. Record P
 
 | Mode | Profile B status (2026-05-30) |
 |------|-------------------------------|
-| loadtest direct/semantic | Not measured (no JWT in loadtest) |
+| loadtest direct/semantic under JWT | Not measured in profile B (historical); measured in profile C with `-token` |
 | JWT smoke | 60× parallel + 20× sequential |
 
 More detail: [calibration-run.md](calibration-run.md), [scripts/loadtest/README.md](../../scripts/loadtest/README.md).
@@ -156,7 +156,7 @@ Run **after** profile B checks (or repeat B sanity first). Goal: close gaps left
 
 ### C.1 — MCP host demo (no LLM)
 
-Same protocol as step [2. Minimal MCP host](#2-minimal-mcp-host-same-protocol-as-your-agent), with JWT on every HTTP call.
+Same protocol as step [2. Minimal MCP host](#2-minimal-mcp-host-same-protocol-as-your-agent), with JWT on every HTTP call via `GATEWAY_JWT`.
 
 | Check | Expected |
 |-------|----------|
@@ -164,7 +164,7 @@ Same protocol as step [2. Minimal MCP host](#2-minimal-mcp-host-same-protocol-as
 | `tools/list` | Namespaced tools |
 | `tools/call` | At least one success on a namespaced tool |
 
-If the demo binary has no JWT flag yet, use `scripts/smoke_e2e.sh` only for JWT proof and track demo as **blocked** with reason in calibration-results.
+See [scripts/mcp_host_demo/README.md](../../scripts/mcp_host_demo/README.md) for `GATEWAY_JWT` and `TOOL_ARGS`.
 
 ### C.2 — Agent (LangGraph or equivalent)
 
@@ -172,7 +172,7 @@ If the demo binary has no JWT flag yet, use `scripts/smoke_e2e.sh` only for JWT 
 |-------|----------|
 | Same `GATEWAY_URL` as B | No config drift |
 | `Authorization: Bearer` | When `AUTH_MODE=jwt` |
-| `tools/call` via agent | ≥1 success; log or screenshot for thesis demo |
+| `tools/call` via agent | ≥1 success; capture log or trace id for the evaluation record |
 
 Optional: `X-MCP-Intent` on an ambiguous call when the router is on.
 
@@ -191,8 +191,8 @@ If skipped: **Not measured** + reason in *Full lab session* table.
 
 | Option | Command / approach |
 |--------|-------------------|
-| **Preferred (after code change)** | Extend `scripts/loadtest` to send `Authorization: Bearer`; then direct/semantic runs like profile A |
-| **Until then** | Repeat JWT `smoke_e2e` (parallel + sequential) as in B; record Prom **means** only — do not claim histogram p95 for sub-ms phases |
+| **Preferred** | `scripts/loadtest` with `-token` / `LOADTEST_JWT`, `-tool`, `-args` (use `-workers 1` under JWT; see [errors.md](../errors.md#known-limitations-multiplexing)) |
+| **Alternative** | Repeat JWT `smoke_e2e` (parallel + sequential) as in B; record Prom **means** only |
 
 ### C.5 — Record results
 
@@ -201,7 +201,7 @@ Copy all measured values into [calibration-results.md](calibration-results.md) �
 ### What profile C does not claim
 
 - Production Kubernetes / Prometheus / GitHub APIs (still reference MCP servers over stdio).
-- Replacing profile B numbers — B remains the primary gateway benchmark for the thesis.
+- Replacing profile B numbers. B remains the primary recorded gateway benchmark.
 - Fixing OTel histogram p95 artefacts for sub-ms internal phases (still use means unless buckets change).
 
 ---

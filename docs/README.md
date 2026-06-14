@@ -45,7 +45,6 @@ Start with the [repository README](../README.md), then use this map.
 | Real backends + JWT (integrated lab) | [evaluation/scenario-real-backends-jwt.md](evaluation/scenario-real-backends-jwt.md) |
 | Recorded calibration numbers | [evaluation/calibration-results.md](evaluation/calibration-results.md) |
 | Multi-backend SRE routing | [evaluation/scenario-sre-multibackend.md](evaluation/scenario-sre-multibackend.md) |
-| Real stdio backends + JWT | [evaluation/scenario-real-backends-jwt.md](evaluation/scenario-real-backends-jwt.md) |
 | JWT tool allow-list | [evaluation/scenario-jwt-allowlist.md](evaluation/scenario-jwt-allowlist.md) |
 | Backend unavailable | [evaluation/scenario-backend-down.md](evaluation/scenario-backend-down.md) |
 

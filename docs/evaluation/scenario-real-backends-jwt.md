@@ -28,18 +28,18 @@ make docker-up          # Qdrant, embed, OTel collector, Prometheus, Grafana —
 Generate JWT key pair (once):
 
 ```bash
-openssl genrsa -out /tmp/mcp-tfm-jwt.key 2048
-openssl rsa -in /tmp/mcp-tfm-jwt.key -pubout -out /tmp/mcp-tfm-jwt.pub.pem
+openssl genrsa -out /tmp/mcp-lab-jwt.key 2048
+openssl rsa -in /tmp/mcp-lab-jwt.key -pubout -out /tmp/mcp-lab-jwt.pub.pem
 ```
 
 Filesystem backend root (macOS): create allowed directory and a sample file:
 
 ```bash
-mkdir -p /private/tmp/mcp-tfm-tribunal
-echo 'tfm smoke' > /private/tmp/mcp-tfm-tribunal/readme.txt
+mkdir -p /private/tmp/mcp-gateway-lab
+echo 'lab smoke' > /private/tmp/mcp-gateway-lab/readme.txt
 ```
 
-On macOS, `/tmp/...` is **not** the same path as `/private/tmp/...` for the filesystem MCP server. Use `/private/tmp/mcp-tfm-tribunal/...` in tool arguments and in YAML.
+On macOS, `/tmp/...` is **not** the same path as `/private/tmp/...` for the filesystem MCP server. Use `/private/tmp/mcp-gateway-lab/...` in tool arguments and in YAML.
 
 ---
 
@@ -49,8 +49,8 @@ On macOS, `/tmp/...` is **not** the same path as `/private/tmp/...` for the file
 export PORT=18080
 export MCP_GATEWAY_CONFIG=deployments/gateway.real.yaml
 export AUTH_MODE=jwt
-export JWT_PUBLIC_KEY_FILE=/tmp/mcp-tfm-jwt.pub.pem
-export JWT_ISS=https://tfm.local
+export JWT_PUBLIC_KEY_FILE=/tmp/mcp-lab-jwt.pub.pem
+export JWT_ISS=https://lab.local
 export JWT_AUD=mcp-gateway
 export ROUTER_MODE=on
 export QDRANT_URL=http://127.0.0.1:6333
@@ -77,16 +77,16 @@ Confirm log line shows `"addr":":18080"`.
 
 ```bash
 export JWT_ADMIN="$(go run ./tools/gen-jwt \
-  -key /tmp/mcp-tfm-jwt.key -iss https://tfm.local -aud mcp-gateway \
-  -sub tribunal-admin -mcp-tools 'prom__read_text_file,k8s__echo,gh__create_entities')"
+  -key /tmp/mcp-lab-jwt.key -iss https://lab.local -aud mcp-gateway \
+  -sub lab-admin -mcp-tools 'prom__read_text_file,k8s__echo,gh__create_entities')"
 ```
 
 Restricted token (allow-list demo):
 
 ```bash
 export JWT_RESTRICTED="$(go run ./tools/gen-jwt \
-  -key /tmp/mcp-tfm-jwt.key -iss https://tfm.local -aud mcp-gateway \
-  -sub tribunal-restricted -mcp-tools prom__read_text_file)"
+  -key /tmp/mcp-lab-jwt.key -iss https://lab.local -aud mcp-gateway \
+  -sub lab-restricted -mcp-tools prom__read_text_file)"
 ```
 
 ---
@@ -96,7 +96,7 @@ export JWT_RESTRICTED="$(go run ./tools/gen-jwt \
 ```bash
 GATEWAY_URL=http://127.0.0.1:18080 SMOKE_JWT="$JWT_ADMIN" \
   SMOKE_EXPECT_TOOL=prom__read_text_file \
-  SMOKE_TOOL_ARGS='{"path":"/private/tmp/mcp-tfm-tribunal/readme.txt"}' \
+  SMOKE_TOOL_ARGS='{"path":"/private/tmp/mcp-gateway-lab/readme.txt"}' \
   bash scripts/smoke_e2e.sh
 
 GATEWAY_URL=http://127.0.0.1:18080 SMOKE_JWT="$JWT_ADMIN" \
@@ -105,7 +105,7 @@ GATEWAY_URL=http://127.0.0.1:18080 SMOKE_JWT="$JWT_ADMIN" \
 
 GATEWAY_URL=http://127.0.0.1:18080 SMOKE_JWT="$JWT_ADMIN" \
   SMOKE_EXPECT_TOOL=gh__create_entities \
-  SMOKE_TOOL_ARGS='{"entities":[{"name":"tfm","entityType":"note","observations":["smoke"]}]}' \
+  SMOKE_TOOL_ARGS='{"entities":[{"name":"lab-smoke","entityType":"note","observations":["smoke"]}]}' \
   bash scripts/smoke_e2e.sh
 ```
 
@@ -118,7 +118,7 @@ Each run should print `SMOKE OK`.
 ```bash
 GATEWAY_URL=http://127.0.0.1:18080 SMOKE_JWT="$JWT_RESTRICTED" \
   SMOKE_EXPECT_TOOL=prom__list_directory \
-  SMOKE_TOOL_ARGS='{"path":"/private/tmp/mcp-tfm-tribunal"}' \
+  SMOKE_TOOL_ARGS='{"path":"/private/tmp/mcp-gateway-lab"}' \
   bash scripts/smoke_e2e.sh || true
 ```
 
@@ -126,15 +126,24 @@ Expect JSON-RPC **-32003** (`tool "prom__list_directory" not allowed for this pr
 
 ---
 
-## Load for Prometheus (JWT smoke)
+## Load for Prometheus (JWT)
 
-`scripts/loadtest` does not send `Authorization: Bearer`. Under `AUTH_MODE=jwt`, generate traffic with repeated smoke instead:
+`scripts/loadtest` sends `Authorization: Bearer` when you pass `-token` or set `LOADTEST_JWT`. Use **one worker** under JWT until concurrent `tools/list` fan-out is addressed ([known limitations](../errors.md#known-limitations-multiplexing)).
+
+```bash
+go run ./scripts/loadtest -url http://127.0.0.1:18080 -mode direct -workers 1 -duration 30s \
+  -token "$JWT_ADMIN" \
+  -tool prom__read_text_file \
+  -args '{"path":"/private/tmp/mcp-gateway-lab/readme.txt"}'
+```
+
+Alternative (smoke loop, any worker count per process):
 
 ```bash
 for i in $(seq 1 60); do
   GATEWAY_URL=http://127.0.0.1:18080 SMOKE_JWT="$JWT_ADMIN" \
     SMOKE_EXPECT_TOOL=prom__read_text_file \
-    SMOKE_TOOL_ARGS='{"path":"/private/tmp/mcp-tfm-tribunal/readme.txt"}' \
+    SMOKE_TOOL_ARGS='{"path":"/private/tmp/mcp-gateway-lab/readme.txt"}' \
     bash scripts/smoke_e2e.sh &
 done
 wait
@@ -158,7 +167,7 @@ Expected: recall@1 = recall@3 = 1.000 (26/26).
 
 ## Record results
 
-Copy measured values into [calibration-results.md](calibration-results.md) → **Integrated lab run (2026-05-30)**.
+Copy measured values into [calibration-results.md](calibration-results.md) → **Integrated lab run (2026-05-30)** or **Full lab session (profile C)**.
 
 ---
 
@@ -167,3 +176,4 @@ Copy measured values into [calibration-results.md](calibration-results.md) → *
 - [scenario-jwt-allowlist.md](scenario-jwt-allowlist.md) — JWT mechanics
 - [calibration-run.md](calibration-run.md) — baseline calibration (mocks, `AUTH_MODE=none`)
 - [integration-checklist.md](integration-checklist.md) — profile A (mocks) vs profile B (this doc)
+- [scripts/loadtest/README.md](../../scripts/loadtest/README.md) — JWT loadtest flags

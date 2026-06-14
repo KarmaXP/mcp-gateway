@@ -92,7 +92,7 @@ JWKS or signature failure → **401** (fail-closed). There is no bypass when JWK
 | Field / env | Description |
 |-------------|-------------|
 | `version` / `POLICY_VERSION` | Audit/policy version string |
-| `elevated_tools` | Tools that require compiled JSON Schema (SEC3) |
+| `elevated_tools` | Tools that require compiled JSON Schema (elevated-tools policy) |
 | `tool_groups` | Named groups for JWT `mcp_tool_groups` |
 | `allow_on_eval_failure` / `POLICY_ALLOW_ON_EVAL_FAILURE` | If `true`, malformed RAR falls back to JWT-only lists instead of 401 |
 | `harden_schemas` / `POLICY_HARDEN_SCHEMAS` | Stricter schema compilation for elevated tools |

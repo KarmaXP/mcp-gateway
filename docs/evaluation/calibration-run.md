@@ -204,7 +204,7 @@ Operator checklist to confirm trace exemplars are linked from histogram panels:
 3. In Grafana, open a histogram-backed panel/query such as `mcp_gateway_internal_duration_seconds_bucket` (or your translated name) and enable exemplar markers.
 4. Click an exemplar marker on the histogram series and open the linked Tempo trace.
 5. Verify the trace contains gateway spans for the same request window (`mcp.host.request` and child spans like security/router/mux).
-6. If exemplar markers are absent, note datasource/link configuration and keep this check pending.
+6. If exemplar markers are absent, note datasource/link configuration and record the outcome in calibration-results.
 
 If the full stack is not runnable in your environment, document this as: **"capture during full-stack calibration run"**.
 

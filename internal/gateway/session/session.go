@@ -257,7 +257,7 @@ func (s *Session) EnqueueResponse(resp *rpc.Response) error {
 }
 
 // enqueueDispatchResponse delivers resp on the SSE stream. When the outbound buffer is
-// full it emits a JSON-RPC error on SSE and returns nil so POST stays 202 Accepted (M25).
+// full it emits a JSON-RPC error on SSE and returns nil so POST stays 202 Accepted.
 func (s *Session) enqueueDispatchResponse(resp *rpc.Response) error {
 	if resp == nil {
 		return fmt.Errorf("session: nil rpc response")

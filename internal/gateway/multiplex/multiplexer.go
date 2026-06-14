@@ -103,7 +103,7 @@ func WithSemanticRouter(sr *router.SemanticRouter) Option {
 	return func(a *Multiplexer) { a.semantic = sr }
 }
 
-// Reloadable policy (elevated tools / SEC3).
+// Reloadable policy (elevated tools).
 func WithPolicyHolder(h *policy.Holder) Option {
 	return func(a *Multiplexer) { a.policyHolder = h }
 }
