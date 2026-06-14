@@ -26,7 +26,7 @@ Gateway listens on **`PORT`** (default **8080**). See [local-ports.md](local-por
 | `make docker-up` | (default services) | Qdrant, embed, otel-collector, Tempo, Prometheus, Grafana |
 | `make docker-up-full` | `gateway` | Above + gateway container on `:8080` |
 | `make docker-up-demo` | `demo` | Default stack + mock alpha/beta on **3101/3102** |
-| `make docker-up-sre` | `sre` | Default stack + k8s/prom/gh mocks on **3201, 3203** |
+| `make docker-up-sre` | `sre` | Default stack + k8s/prom/gh mocks on **3201–3203** |
 
 Stop everything: `make docker-down`.
 
@@ -34,7 +34,7 @@ Stop everything: `make docker-down`.
 
 ## Published ports (defaults)
 
-Override with `HOST_PORT_*` in `.env` (see [configuration.md](configuration.md)).
+Override with `HOST_PORT_*` in `.env` (see [`.env.example`](../.env.example) — Infra / Docker Compose section).
 
 | Port | Service |
 |------|---------|

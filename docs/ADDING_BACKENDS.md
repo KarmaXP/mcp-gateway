@@ -241,13 +241,13 @@ Optional `aggregation:` block in YAML (see comments in `gateway.example.yaml`):
 
 ---
 
-## Checklist
+## Verification steps
 
-- [ ] Unique `id` and `prefix` per backend.
-- [ ] Upstream reachable (`url` or `command` works).
-- [ ] Tools appear in `tools/list` with correct `prefix__` names.
-- [ ] `tools/call` with namespaced name succeeds.
-- [ ] If using JWT: token includes allowed `mcp_tools` or RAR entries for those names.
+- Unique `id` and `prefix` per backend.
+- Upstream reachable (`url` or `command` works).
+- Tools appear in `tools/list` with correct `prefix__` names.
+- `tools/call` with namespaced name succeeds.
+- If using JWT: token includes allowed `mcp_tools` or RAR entries for those names.
 
 ---
 

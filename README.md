@@ -89,9 +89,9 @@ make run
 | ✅ **Available** | Host transport (SSE + JSON-RPC), multi-backend merge, JWT + policy, semantic router, compose observability stack, local mocks and smoke targets |
 | ✅ **Available** | Example configs: single-backend demo, alpha/beta, SRE three-backend layout |
 | 📖 **Documented pattern** | LangGraph (or any MCP host) calling the gateway, see [Connecting agents](docs/CONNECTING_AGENTS.md); you implement the agent in your own repo |
-| 🔧 **You provide** | Real MCP backends (Kubernetes, Prometheus, GitHub, …) and production deployment |
+| Operator-owned | Real MCP backends (Kubernetes, Prometheus, GitHub, …) and production deployment |
 | 📊 **Recorded** | Lab results in [calibration-results.md](docs/evaluation/calibration-results.md) (baseline 2026-05-18, integrated run 2026-05-30, full lab 2026-06-08) |
-| 📊 **Optional** | Re-run calibration when tuning; see [calibration runbook](docs/evaluation/calibration-run.md) |
+| Optional re-calibration | Re-run when tuning router or stack; see [calibration runbook](docs/evaluation/calibration-run.md). Canonical results: [calibration-results.md](docs/evaluation/calibration-results.md) |
 
 ---
 
@@ -101,7 +101,7 @@ Contributors and maintainers:
 
 ```bash
 make ci         # lint + vet + race tests (matches GitHub Actions)
-make test-integration  # JWT + router integration (needs Qdrant/embed when running full stack)
+make test-integration  # -tags=integration (httpserver, router, telemetry); deps when reachable — see DEVELOPER.md
 ```
 
 See **[docs/DEVELOPER.md](docs/DEVELOPER.md)** for auth setup, OpenAPI, and integration-test prerequisites.

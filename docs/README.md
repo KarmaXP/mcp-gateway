@@ -6,7 +6,7 @@ Start with the [repository README](../README.md), then use this map.
 
 | Goal | Document |
 |------|----------|
-| Run the gateway locally in one command | [README — Quick start](../README.md#-quick-start) |
+| Run the gateway locally in one command | [README — Quick start](../README.md#quick-start) |
 | Understand local ports and example configs | [local-ports.md](local-ports.md) |
 | Register upstream MCP servers | [ADDING_BACKENDS.md](ADDING_BACKENDS.md) |
 | Connect an IDE, script, or agent | [CONNECTING_AGENTS.md](CONNECTING_AGENTS.md) |

@@ -287,7 +287,7 @@ Follow the **[integration checklist](evaluation/integration-checklist.md)** in o
 1. Confirm upstreams and `tools/call` — profile A: `make sre-smoke` or [scenario-sre-multibackend.md](evaluation/scenario-sre-multibackend.md); profile B (real stdio + JWT): [scenario-real-backends-jwt.md](evaluation/scenario-real-backends-jwt.md).
 2. Run `go run ./scripts/mcp_host_demo` with your `GATEWAY_URL` (and JWT when required).
 3. JWT allow-list: [scenario-jwt-allowlist.md](evaluation/scenario-jwt-allowlist.md) / profile B walkthrough.
-4. Loadtest (`AUTH_MODE=none`) or JWT smoke + Prometheus — see [calibration-results.md](evaluation/calibration-results.md).
+4. Loadtest (`AUTH_MODE=none`) or JWT loadtest (`-token` / `LOADTEST_JWT`, one worker) or JWT smoke + Prometheus. See [calibration-results.md](evaluation/calibration-results.md) and [errors.md](errors.md#known-limitations-multiplexing).
 5. Wire your host to the same base URL, SSE session, and headers documented above.
 
 ---
@@ -317,6 +317,7 @@ See also the **[error reference](errors.md)** for HTTP status codes and JSON-RPC
 | `-32004` ToolRoutingAmbiguous | Router could not pick one tool; use exact name or clearer `X-MCP-Intent`. |
 | Empty `tools/list` entry | Backend down or returned `MethodNotFound` for list. |
 | POST `202` but no SSE result | SSE connection closed or not read in parallel. |
+| High loadtest errors under JWT with many workers | Concurrent `tools/list` fan-out; use `-workers 1`. See [errors.md](errors.md#known-limitations-multiplexing). |
 
 ---
 
@@ -327,4 +328,4 @@ See also the **[error reference](errors.md)** for HTTP status codes and JSON-RPC
 - [errors.md](errors.md)
 - [mcp-capabilities.md](mcp-capabilities.md)
 - [DEVELOPER.md](DEVELOPER.md)
-- [docs/README.md](docs/README.md): documentation index
+- [README.md](README.md): documentation index

@@ -50,7 +50,7 @@ flowchart LR
 - **Agent token metadata:** Optional header **`X-Agent-Tokens-Used`** on `POST /mcp/rpc` (non-negative integer) is recorded on the host request span as OTel attribute **`mcp.agent.tokens_used`** when valid. Empty or invalid values are ignored.
 - **Core:** `internal/gateway/multiplex` (`Multiplexer`) merges `initialize` and `tools/list`; `tools/call` is forwarded with stable namespacing (`prefix__tool`).
 - **Router:** `internal/router` optionally rewrites ambiguous tool names using embeddings + vector search (see [ADR 0001](adr/0001-architecture-decisions.md)). **`filter_list`** (intent-filtered `tools/list`) is implemented behind `ROUTER_MODE=filter_list` / `router.mode: filter_list`, [ADR 0002](adr/0002-filter-list-mode.md). With **`filter_list`**, empty intent returns the **full** merged catalog (after JWT/RAR allow-list only), same as `assist_list` for that request; there is no reuse of intent from earlier RPCs. Vector/embed failures or catalog/index mismatch **degrade** to the full allow-listed catalog (warn logs).
-- **Security (RAR ∩ JWT, fail mode):** [ADR 0003](adr/0003-security-rar-jwt-merge-failmode.md) documents the canonical `authorization_details` shape for MCP tools, merge rules for JWT vs RAR allow lists, and fail-closed vs opt-in degradation. **Empty JWT `mcp_tools` allow-list** (after merge) exposes the **full merged tool catalog** (intentional for dev; lock down in production). [ADR 0004](adr/0004-gateway-scope.md) defines method scope boundaries: JWT/RAR AuthZ is **tools-only**; `resources/*` and `prompts/*` are pass-through after AuthN (no change planned unless a new ADR says otherwise).
+- **Security (RAR ∩ JWT, fail mode):** [ADR 0003](adr/0003-security-rar-jwt-merge-failmode.md) documents the canonical `authorization_details` shape for MCP tools, merge rules for JWT vs RAR allow lists, and fail-closed vs opt-in degradation. **Empty JWT `mcp_tools` allow-list** (after merge) exposes the **full merged tool catalog** (intentional for dev; lock down in production). [ADR 0004](adr/0004-gateway-scope.md) defines method scope boundaries: JWT/RAR AuthZ is **tools-only**; `resources/*` and `prompts/*` are pass-through after AuthN (fixed by ADR 0004 unless a future ADR expands scope).
 
 ## Why this stack
 
@@ -78,7 +78,7 @@ make demo        # recommended first run: no Docker, E2E MCP on localhost
 | **18082** | Gateway (JWT smoke) | `scripts/smoke_jwt.sh`; freed by `make stop` |
 | **31400** | `scripts/smoke_upstream` | Default upstream for `deployments/gateway.demo.yaml` |
 | **3101** / **3102** | Alpha / beta mocks | Host: `gateway.example.yaml` + `make demo-backends`. Compose gateway: `gateway.example.docker.yaml` |
-| **3201, 3203** | SRE mocks (k8s / prom / gh) | `gateway.sre.example.yaml` after `make sre-backends` or `make docker-up-sre` |
+| **3201, 3202, 3203** | SRE mocks (k8s / prom / gh) | `gateway.sre.example.yaml` after `make sre-backends` or `make docker-up-sre` |
 
 See [`docs/local-ports.md`](local-ports.md) for the port and mock upstream reference.
 
@@ -224,7 +224,7 @@ With `make docker-up`, Compose brings up a minimal observability stack (exact se
 - Tracing policy decisions (closed): each processed JSON-RPC message creates exactly one root span, **`mcp.host.request`**.
 - W3C propagation policy (closed): `traceparent` / `tracestate` are always propagated on outgoing HTTP upstream backend calls.
 - Agent token policy (closed): `X-Agent-Tokens-Used` is recorded only as span attribute **`mcp.agent.tokens_used`** when valid; there is no Prometheus token-usage metric (O5).
-- **Security-oriented counters** (low-cardinality labels only; no user IDs or request IDs, O5): `mcp.gateway.policy.decisions`, `mcp.gateway.auth.jwks.lookups`, `mcp.gateway.tool_args.validation`, `mcp.gateway.ratelimit.events`, `mcp.gateway.payload.bytes_rejected`. Label enums are defined in `internal/defaults/metrics.go`. Import [`artifacts/grafana/mcp-gateway-observability.json`](artifacts/grafana/mcp-gateway-observability.json) for a **Security** row with PromQL regex matchers.
+- **Security-oriented counters** (low-cardinality labels only; no user IDs or request IDs, O5): `mcp.gateway.policy.decisions`, `mcp.gateway.auth.jwks.lookups`, `mcp.gateway.tool_args.validation`, `mcp.gateway.ratelimit.events`, `mcp.gateway.payload.bytes_rejected`. **Session backpressure:** `mcp.gateway.session.broadcast_tasks_dropped`, `mcp.gateway.session.notifications_dropped` (label **`reason`**: `broadcast_queue_full`, `notification_outbound_full`). Label enums are defined in `internal/defaults/metrics.go`. Import [`artifacts/grafana/mcp-gateway-observability.json`](artifacts/grafana/mcp-gateway-observability.json) for a **Security** row with PromQL regex matchers.
 
 Example PromQL (Grafana “Security” row, rate over 5m):
 
@@ -249,6 +249,7 @@ Prometheus-facing metrics in this repo intentionally use bounded label sets:
 - `mcp.gateway.tool_args.validation` -> `stage`, `result`
 - `mcp.gateway.ratelimit.events` -> `result`
 - `mcp.gateway.payload.bytes_rejected` -> `reason`
+- `mcp.gateway.session.broadcast_tasks_dropped` / `notifications_dropped` -> `reason`
 
 Policy for new metrics:
 
@@ -272,7 +273,7 @@ Grafana provisioning links Prometheus exemplars field `trace_id` to the Tempo da
 
 ## Repository layout
 
-Standard Go layout: `cmd/`, `internal/`, `deployments/`, `docs/`, `scripts/`. Public reusable libraries would live under `pkg/` if added; this module is primarily an application.
+Standard Go layout: `cmd/`, `internal/`, `deployments/`, `docs/`, `scripts/`. This module is an application; there is no `pkg/` export surface.
 
 ## Code quality guardrail (defaults, performance, structure)
 
@@ -280,8 +281,8 @@ Standard Go layout: `cmd/`, `internal/`, `deployments/`, `docs/`, `scripts/`. Pu
 - MCP wire/protocol strings are centralized in `internal/gateway/mcpwire`.
 - Do not introduce raw numeric literals for tunable behavior in production code; use named constants/defaults.
 - CI lint includes `mnd` to catch newly introduced magic numbers in non-test Go code.
-- **Performance on hot paths** (`tools/list`, `tools/call`, semantic reindex, vector query): avoid unmarshaling or marshaling the same catalog payload twice when maps or rows are already in memory; use appropriate sorting (`sort.Slice` vs nested loops), preallocate when size is known, and reuse derived text (e.g. formatted tool docs) across embedding and rerank. See `.ai/rules/first-pass-quality.md` section 7 (in the parent workspace).
-- **Readability:** prefer short functions with one responsibility and split large types across focused files in the same package (e.g. `tools_list.go`, `semantic_router_resolve.go`) rather than growing a single source file. See `.ai/rules/first-pass-quality.md` section 8 and `.ai/rules/go.md`.
+- **Performance on hot paths** (`tools/list`, `tools/call`, semantic reindex, vector query): avoid unmarshaling or marshaling the same catalog payload twice when maps or rows are already in memory; use appropriate sorting (`sort.Slice` vs nested loops), preallocate when size is known, and reuse derived text (e.g. formatted tool docs) across embedding and rerank.
+- **Readability:** prefer short functions with one responsibility and split large types across focused files in the same package (e.g. `tools_list.go`, `semantic_router_resolve.go`) rather than growing a single source file.
 
 ## Continuous integration
 
@@ -301,7 +302,7 @@ GitHub Actions: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
 2. **Run:** `make test-integration`.
 3. **Behavior:**
   - **`internal/gateway/httpserver`:** JWT **`mcp_tools`** allow-list denial for **`tools/call`** is always exercised (in-process `httptest`; no external services).
-  - **`internal/router`:** semantic routing against live Qdrant + embed runs when both are reachable. Integration tests call the sidecar at **`EMBED_URL`** with **`POST /embed`** and JSON field **`texts`** (not `inputs`; see [`deployments/embed/server.py`](../../deployments/embed/server.py)). Wait until embed answers at **`/healthz`** before running tests. If Qdrant or embed is down and **`CI` is unset**, the test **skips** with a clear message (on CI, missing deps **fail** the job).
+  - **`internal/router`:** semantic routing against live Qdrant + embed runs when both are reachable. Integration tests call the sidecar at **`EMBED_URL`** with **`POST /embed`** and JSON field **`texts`** (not `inputs`; see [`deployments/embed/server.py`](../deployments/embed/server.py)). Wait until embed answers at **`/healthz`** before running tests. If Qdrant or embed is down and **`CI` is unset**, the test **skips** with a clear message (on CI, missing deps **fail** the job).
   - **`internal/telemetry`:** OTLP shutdown test runs when the collector answers at `OTEL_EXPORTER_OTLP_ENDPOINT`; otherwise it **skips**.
 
 Use **`go test -tags=integration -short ./...`** to skip tests that call `testing.Short()` (currently the JWT policy integration test).
