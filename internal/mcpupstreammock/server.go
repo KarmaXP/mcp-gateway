@@ -26,14 +26,12 @@ type Tool struct {
 	CallText    string
 }
 
-// Config holds listen address and catalog for the mock MCP server.
 type Config struct {
 	ListenAddr string
 	ServerName string
 	Tools      []Tool
 }
 
-// Run starts the HTTP server and blocks until it exits.
 func Run(cfg Config) error {
 	if cfg.ListenAddr == "" {
 		return fmt.Errorf("listen address required")

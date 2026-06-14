@@ -51,12 +51,16 @@ trap cleanup EXIT
 
 wait_http_ok() {
   local url="$1"
-  local attempts="${2:-40}"
-  local delay="${3:-0.15}"
+  local attempts="${2:-120}"
+  local delay="${3:-0.25}"
   local i
   for ((i = 1; i <= attempts; i++)); do
     if curl -sf "${url}" >/dev/null 2>&1; then
       return 0
+    fi
+    if [[ -n "${GW_PID:-}" ]] && ! kill -0 "${GW_PID}" 2>/dev/null; then
+      echo "gateway process exited before ${url} became healthy" >&2
+      return 1
     fi
     sleep "${delay}"
   done
@@ -107,8 +111,17 @@ EOF
   export MCP_GATEWAY_CONFIG="${TMPYAML}"
 fi
 
+UPSTREAM_BIN="${SMOKE_UPSTREAM_BIN:-}"
+if [[ -z "${UPSTREAM_BIN}" ]]; then
+  UPSTREAM_BIN="go run ./scripts/smoke_upstream"
+fi
+GATEWAY_BIN="${SMOKE_GATEWAY_BIN:-}"
+if [[ -z "${GATEWAY_BIN}" ]]; then
+  GATEWAY_BIN="go run ./cmd/gateway"
+fi
+
 echo "==> starting smoke upstream on 127.0.0.1:${UPSTREAM_PORT}"
-go run ./scripts/smoke_upstream/main.go -listen "127.0.0.1:${UPSTREAM_PORT}" &
+${UPSTREAM_BIN} -listen "127.0.0.1:${UPSTREAM_PORT}" &
 UP_PID=$!
 sleep 0.5
 
@@ -131,11 +144,11 @@ fi
 
 if [[ "${SMOKE_AUTO_START_GATEWAY:-}" == "1" ]]; then
   echo "==> auto-starting gateway PORT=${GATEWAY_PORT} config=${MCP_GATEWAY_CONFIG} (JSON logs on stdout)"
-  AUTH_MODE=none PORT="${GATEWAY_PORT}" \
-    go run ./cmd/gateway/main.go &
+  MCP_GATEWAY_CONFIG="${MCP_GATEWAY_CONFIG}" AUTH_MODE=none PORT="${GATEWAY_PORT}" \
+    ${GATEWAY_BIN} &
   GW_PID=$!
   wait_http_ok "${GATEWAY_URL}/healthz" || {
-    echo "gateway failed to become healthy"
+    echo "gateway failed to become healthy at ${GATEWAY_URL}/healthz" >&2
     exit 1
   }
 fi

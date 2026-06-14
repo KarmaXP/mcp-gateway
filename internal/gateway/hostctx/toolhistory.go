@@ -19,7 +19,6 @@ func WithMCPSessionID(parent context.Context, id string) context.Context {
 	return context.WithValue(parent, mcpSessionIDKey{}, id)
 }
 
-// MCPSessionIDFromContext returns the session id if present.
 func MCPSessionIDFromContext(ctx context.Context) string {
 	if ctx == nil {
 		return ""
@@ -46,7 +45,6 @@ func WithToolCallRecorder(parent context.Context, r SuccessfulToolCallRecorder) 
 	return context.WithValue(parent, toolCallRecorderKey{}, r)
 }
 
-// RecordSuccessfulToolCall notifies the session recorder, if any.
 func RecordSuccessfulToolCall(ctx context.Context, namespaced string) {
 	if ctx == nil || namespaced == "" {
 		return
@@ -71,7 +69,6 @@ func WithRecentToolNames(parent context.Context, names []string) context.Context
 	return context.WithValue(parent, recentToolNamesKey{}, cp)
 }
 
-// RecentToolNamesFromContext returns names attached for routing (may be nil).
 func RecentToolNamesFromContext(ctx context.Context) []string {
 	if ctx == nil {
 		return nil

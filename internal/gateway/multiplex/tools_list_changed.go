@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-// HandleToolsListChanged invalidates the tools cache and schedules a debounced semantic catalog refresh.
 func (a *Multiplexer) HandleToolsListChanged(ctx context.Context) {
 	a.invalidateToolCache()
 	if a.semantic == nil || !a.semantic.Enabled() {

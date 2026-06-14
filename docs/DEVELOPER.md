@@ -307,6 +307,29 @@ GitHub Actions: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
 
 Use **`go test -tags=integration -short ./...`** to skip tests that call `testing.Short()` (currently the JWT policy integration test).
 
+## Git commit identity
+
+Public contributors may prefer not to expose a work email in `git log`. This repo uses the GitHub **noreply** address for commits when privacy is enabled:
+
+- **`120461080+KarmaXP@users.noreply.github.com`** (GitHub user `KarmaXP`)
+
+Enable **Settings → Emails → Keep my email addresses private** on GitHub, then set locally (without changing global git config for other repos):
+
+```bash
+git config user.email "120461080+KarmaXP@users.noreply.github.com"
+git config user.name "Carlos Palomero"
+```
+
+Or per command:
+
+```bash
+GIT_AUTHOR_EMAIL="120461080+KarmaXP@users.noreply.github.com" \
+GIT_COMMITTER_EMAIL="120461080+KarmaXP@users.noreply.github.com" \
+git commit ...
+```
+
+To rewrite **existing** commits that used another address, use `git filter-repo` or `git filter-branch` and then **`git push --force-with-lease`** (rewrites history; coordinate if others clone the repo).
+
 ## Further reading
 
 - [Documentation index](README.md)

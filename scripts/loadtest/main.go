@@ -59,7 +59,6 @@ var (
 	loadtestToolsCallTimeout = 60 * time.Second
 )
 
-// callConfig is shared read-only across workers.
 type callConfig struct {
 	bearer       string
 	directTool   string

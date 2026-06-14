@@ -16,9 +16,9 @@ var (
 	_ Upstream = (*mcpstdio.StdioMCPUpstream)(nil)
 )
 
-// cleanup closes transports in reverse registration order.
 func ConnectUpstreams(ctx context.Context, defs []config.UpstreamDefinition) ([]Upstream, func(), error) {
 	var cleaners []func()
+	// Closes transports in reverse registration order.
 	cleanup := func() {
 		for i := len(cleaners) - 1; i >= 0; i-- {
 			cleaners[i]()

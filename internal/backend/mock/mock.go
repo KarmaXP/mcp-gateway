@@ -36,10 +36,8 @@ type MockUpstream struct {
 	InitTransportErr   error
 	InitJSONRPCMessage string // if set, initialize returns this JSON-RPC error message
 
-	// tools/list failure (strict list tests).
 	ToolsListJSONRPCMessage string
 
-	// resources/list and prompts/list failures (strict list tests).
 	ResourcesListJSONRPCMessage string
 	PromptsListJSONRPCMessage   string
 
