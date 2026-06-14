@@ -1,8 +1,8 @@
 # Integration checklist (gateway + backends + optional agent)
 
-Use a **single session** to validate the gateway (and optionally the full host stack) with one gateway process up; do not restart between steps unless noted.
+Reproducibility runbook for lab profiles A/B/C. **Canonical recorded results** for profiles B and C are already in [calibration-results.md](calibration-results.md) (*Integrated lab run* 2026-05-30; *Full lab session* 2026-06-08). Use this checklist to re-run or verify; you do not need to re-record unless you change stack or config.
 
-Recorded numbers: [calibration-results.md](calibration-results.md) — *Integrated lab run* (profile B, 2026-05-30); *Full lab session* (profile C, 2026-06-08).
+Use a **single session** to validate the gateway (and optionally the full host stack) with one gateway process up; do not restart between steps unless noted.
 
 ---
 
@@ -129,7 +129,7 @@ With `make docker-up` and OTLP exported from the gateway:
 2. Query internal phase latency — **mean** recommended when samples are sub-ms ([calibration-results.md](calibration-results.md)).
 3. Optional Tempo: [router-trace-capture.md](router-trace-capture.md) (Tempo is in-cluster only in default Compose; host capture via Grafana).
 
-If skipped, record **Not measured** with reason in calibration-results.
+During a re-run, if Prometheus/Tempo steps are skipped, mark **Not measured** with reason in [calibration-results.md](calibration-results.md). Profile B (2026-05-30) means are already recorded there.
 
 ---
 
@@ -148,7 +148,7 @@ Host integration: [CONNECTING_AGENTS.md](../CONNECTING_AGENTS.md).
 
 ## Profile C — Full lab session
 
-Run **after** profile B checks (or repeat B sanity first). Goal: close gaps left by B — MCP host without smoke-only path, conversational agent, optional Tempo, JWT-aware load.
+Run **after** profile B checks (or repeat B sanity first). Extends B with MCP host demo, conversational agent, optional Tempo, and JWT-aware load.
 
 ### C.0 — Same prerequisites as B
 
@@ -182,10 +182,10 @@ Details: [CONNECTING_AGENTS.md](../CONNECTING_AGENTS.md).
 
 1. Generate traffic (agent or smoke).
 2. Open Grafana (Compose stack), Prometheus + Tempo datasources.
-3. Follow [router-trace-capture.md](router-trace-capture.md).
-4. Store one trace link or screenshot next to results.
+3. Follow [router-trace-capture.md](router-trace-capture.md) (optional; profile C 2026-06-08 recorded one Tempo trace as **Measured** via Grafana proxy — see [calibration-results.md](calibration-results.md)).
+4. On re-runs only: store one trace link or screenshot next to new results.
 
-If skipped: **Not measured** + reason in *Full lab session* table.
+If Tempo capture is skipped during a re-run, mark **Not measured** with reason in the *Full lab session* table (profile C 2026-06-08 already records one trace as **Measured** via Grafana proxy; see [calibration-results.md](calibration-results.md)).
 
 ### C.4 — Load under JWT
 
@@ -194,15 +194,15 @@ If skipped: **Not measured** + reason in *Full lab session* table.
 | **Preferred** | `scripts/loadtest` with `-token` / `LOADTEST_JWT`, `-tool`, `-args` (use `-workers 1` under JWT; see [errors.md](../errors.md#known-limitations-multiplexing)) |
 | **Alternative** | Repeat JWT `smoke_e2e` (parallel + sequential) as in B; record Prom **means** only |
 
-### C.5 — Record results
+### C.5 — Record results (re-runs only)
 
-Copy all measured values into [calibration-results.md](calibration-results.md) → **Full lab session**. Do not invent numbers. Mark **Not measured** with a one-line reason for every skipped row.
+When re-running profile C after stack or config changes, copy measured values into [calibration-results.md](calibration-results.md) → **Full lab session**. Do not invent numbers. Mark **Not measured** with a one-line reason for every skipped row. The 2026-06-08 session is already recorded; reviewers can cite that table as-is.
 
 ### What profile C does not claim
 
 - Production Kubernetes / Prometheus / GitHub APIs (still reference MCP servers over stdio).
 - Replacing profile B numbers. B remains the primary recorded gateway benchmark.
-- Fixing OTel histogram p95 artefacts for sub-ms internal phases (still use means unless buckets change).
+- OTel histogram p95 artefacts for sub-ms internal phases (documented limitation; use **means** — see [calibration-results.md](calibration-results.md) and [errors.md](../errors.md#known-limitations-multiplexing)).
 
 ---
 

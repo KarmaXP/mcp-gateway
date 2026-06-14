@@ -116,7 +116,7 @@ Check gateway internal phase histogram for both methods:
   - `method="tools/list"` and `phase="mux"`
   - `method="tools/call"` and `phase="mux"`
 
-Suggested sanity queries (adapt metric naming to your pipeline):
+Example sanity queries (adapt metric naming to your pipeline):
 
 ```promql
 sum by (method, phase) (rate(mcp_gateway_internal_duration_seconds_count{method=~"tools/list|tools/call"}[5m]))

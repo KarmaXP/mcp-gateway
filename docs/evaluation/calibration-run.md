@@ -43,6 +43,8 @@ export PORT=${PORT:-8080}
 make run
 ```
 
+Recorded profiles B/C in [calibration-results.md](calibration-results.md) used **`PORT=18080`** on the host gateway (compose gateway may still bind **8080**).
+
 Gateway health/readiness check (works with current or stricter future readiness):
 
 ```bash
@@ -98,20 +100,29 @@ go test ./internal/router/eval/... -run TestGoldenCasesMRRAndNDCG -v
 
 Run from the `mcp-gateway/` module root in two terminals.
 
+Examples default to **`PORT=8080`**. To reproduce recorded profile B/C numbers, use **`PORT=18080`** (or `GATEWAY_URL=http://127.0.0.1:18080` in smoke scripts).
+
 ### Go MCP loadtest (`scripts/loadtest/main.go`)
 
+See also [scripts/loadtest/README.md](../../scripts/loadtest/README.md). Default direct tool is **`alpha__echo`** (`gateway.example.yaml` + `make demo-backends`).
+
 ```bash
-# Direct path (exact tool name), router off
-PORT=8080 go run ./cmd/gateway
+# Terminal 1: direct path (exact tool name), router off
+make demo-backends
+MCP_GATEWAY_CONFIG=deployments/gateway.example.yaml PORT=8080 make run
 ```
 
 ```bash
+# Terminal 2
 go run ./scripts/loadtest -url http://127.0.0.1:8080 -mode direct -workers 10 -duration 45s
 ```
 
 ```bash
 # Semantic path (vector router), router on + embed sidecar
-ROUTER_MODE=on EMBED_URL=http://127.0.0.1:8001 QDRANT_URL=http://127.0.0.1:6333 PORT=8080 go run ./cmd/gateway
+make docker-up
+make demo-backends
+ROUTER_MODE=on EMBED_URL=http://127.0.0.1:8001 QDRANT_URL=http://127.0.0.1:6333 \
+  MCP_GATEWAY_CONFIG=deployments/gateway.example.yaml PORT=8080 make run
 ```
 
 ```bash
@@ -157,9 +168,9 @@ ArgumentKeys: <sorted_comma_separated_argument_keys_or_(none)>
 
 For reproducible runs, record both the catalog identifier and template version together (for example: `catalog=router-eval-sre template=v1`).
 
-## Record (template)
+## Record (template for new runs)
 
-Fill in after each run. Do not invent numbers. Prefer explicit **Not measured** / **Not used** with reason (see [calibration-results.md](calibration-results.md)).
+Use when capturing a **new** calibration session. Canonical numbers for baseline (2026-05-18), integrated lab (2026-05-30), and full lab (2026-06-08) are already in [calibration-results.md](calibration-results.md). Do not invent numbers; prefer explicit **Not measured** / **Not used** with reason.
 
 | Metric / artifact | Command or source | Value | Notes |
 | ----------------- | ----------------- | ----- | ----- |
@@ -294,7 +305,7 @@ Procedure:
    - `T_internal_exclusive = T_total - backend critical path`.
 5. Cross-check that trace-derived internal latency trends match Prometheus phase quantiles from the internal phase quantiles section above.
 
-Store one Tempo trace URL (or screenshot) per run next to the quantitative results so decomposition is auditable.
+For **new** calibration runs (canonical numbers already in [calibration-results.md](calibration-results.md)): store one Tempo trace URL or screenshot next to quantitative results so decomposition is auditable.
 
 ## Recorded results (repository)
 
@@ -304,13 +315,16 @@ Canonical numbers live in [calibration-results.md](calibration-results.md):
 |-----|------|---------|
 | Baseline calibration | 2026-05-18 | `gateway.example.yaml`, demo mocks, `AUTH_MODE=none`, recall + direct loadtest |
 | Integrated lab run | 2026-05-30 | `gateway.real.yaml`, stdio MCP, JWT, OTLP; see [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) |
+| Full lab session (profile C) | 2026-06-08 | Same as B + MCP host demo, LangGraph agent, Tempo trace, JWT loadtest; see [integration-checklist.md](integration-checklist.md) profile C |
 
 **Internal 50 ms budget (integrated run):** evidence uses Prometheus **mean** latency per phase (`tools/call`), all ≪ 50 ms. Histogram p95 is **not used** when sub-ms samples fall into the first 5 s bucket (artefact ~4750 ms).
 
-## Post-baseline (optional)
+## Post-baseline (operator tuning, optional)
 
-- **Hybrid reranking:** RRF vs `hybrid_alpha` ablation, only after completing the baseline recall and hyperparameter pass.
-- **Vector index tuning:** Qdrant HNSW tuning, only if recall/latency results justify the extra tuning pass.
+These are not required for the reference repository; baseline and integrated lab numbers are already recorded in [calibration-results.md](calibration-results.md).
+
+- **Hybrid reranking:** RRF vs `hybrid_alpha` ablation when retuning router weights.
+- **Vector index tuning:** Qdrant HNSW tuning when recall/latency goals change.
 
 ## References
 

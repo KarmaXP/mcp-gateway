@@ -105,7 +105,7 @@ Config: `deployments/gateway.real.yaml`. Procedure: [`integration-checklist.md`]
 | Gateway commit | `a889bff2779a7ac8630dc4224b2d44ab56a99fe5` |
 | Environment | Host gateway (`PORT=18080`) + Docker deps (`make docker-up`); macOS, Docker Compose |
 | `MCP_GATEWAY_CONFIG` | `deployments/gateway.real.yaml` |
-| `AUTH_MODE` | `jwt` (`JWT_ISS=https://lab.local`, `JWT_AUD=mcp-gateway`, key `/tmp/mcp-lab-jwt.key`) |
+| `AUTH_MODE` | `jwt` (`JWT_ISS=https://lab.local`, `JWT_AUD=mcp-gateway`, `JWT_PUBLIC_KEY_FILE=/tmp/mcp-lab-jwt.pub.pem`) |
 | `ROUTER_MODE` | `on` |
 | `GATEWAY_URL` | `http://127.0.0.1:18080` |
 | `QDRANT_URL` / `EMBED_URL` | `http://127.0.0.1:6333` / `http://127.0.0.1:8001` |
@@ -187,7 +187,7 @@ Procedure: [integration-checklist.md](integration-checklist.md) profile C and [s
 | Field | Value |
 | ----- | ----- |
 | Date (UTC) | 2026-06-08 |
-| Gateway commit | `2e885e9a24397e2b4c6caa36130a040fbc837c9e` (`make ci` OK 2026-06-08) |
+| Gateway commit | `2e885e9a24397e2b4c6caa36130a040fbc837c9e` (session measurement 2026-06-08; later commits on `main` are documentation and config alignment only) |
 | Environment | Host gateway (`PORT=18080`) + Docker deps (`make docker-up`); macOS, Docker Compose |
 | `MCP_GATEWAY_CONFIG` / `AUTH_MODE` / `ROUTER_MODE` | `deployments/gateway.real.yaml` / `jwt` / `on` |
 | Backends (real, stdio) | `server-everything`→`k8s`; `server-filesystem`→`prom` (root `/private/tmp/mcp-gateway-lab`); `server-memory`→`gh` |

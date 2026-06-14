@@ -1,6 +1,6 @@
 # Router trace capture (OTLP/Tempo)
 
-Use this during calibration runs to capture the semantic-router decision path for reports or diagrams.
+Optional procedure for **new** calibration runs when you want Tempo trace figures alongside Prometheus numbers. Canonical lab sessions are in [calibration-results.md](calibration-results.md): profile B (2026-05-30) marks Tempo host decomposition **Not measured**; profile C (2026-06-08) records one representative trace as **Measured** via Grafana datasource proxy.
 
 ## 1) Spans and attributes to capture
 
@@ -46,9 +46,9 @@ Optional narrowing for one host session:
 { name = "mcp.host.request" && span.mcp.method = "tools/call" && span.mcp.session.id = "<session-id>" }
 ```
 
-## 3) Capture procedure
+## 3) Capture procedure (re-runs)
 
-1. Run the calibration workload from `docs/evaluation/calibration-run.md` (semantic mode, not direct mode).
+1. Run the calibration workload from [calibration-run.md](calibration-run.md) (semantic mode, not direct mode).
 2. Open a matching trace in Tempo using the query above.
 3. In the selected trace, include at least:
    - `mcp.host.request`
@@ -60,8 +60,8 @@ Optional narrowing for one host session:
    - top-K candidates (`Candidates[]` names + scores)
    - routing outcome/layer (`Outcome`, `FallbackLayer`)
 5. If your Tempo span view does not expose all decision fields, correlate by `trace_id` with gateway structured logs (`router decision`) for top-K and scores; keep the same trace id in the figure notes.
-6. Take the screenshot during this calibration run window and store it with the same run id/timestamp used in your calibration notes.
+6. Optional: capture a Grafana screenshot during the run window and store it with the same run id/timestamp as your calibration notes.
 
-## 4) Calibration screenshot note
+## 4) Primary latency evidence
 
-When you run calibration, capture the screenshot immediately after the semantic run completes (before rotating logs/containers) so trace data and run metrics remain aligned in time.
+For evaluation review, prefer Prometheus **mean** internal phase latency from [calibration-results.md](calibration-results.md) when sub-ms samples make histogram p95 unreliable. Tempo traces supplement qualitative decomposition when captured; they are not required when marked **Not measured** with reason.

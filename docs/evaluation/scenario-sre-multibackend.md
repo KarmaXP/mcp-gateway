@@ -79,7 +79,7 @@ make sre-smoke
 Manual sequence with `scripts/smoke_e2e.sh` (three runs; gateway must already be listening):
 
 ```bash
-export GATEWAY_URL=http://127.0.0.1:${PORT:-8080}
+export GATEWAY_URL=http://127.0.0.1:${PORT:-18080}
 
 SMOKE_EXPECT_TOOL=k8s__get_pod_logs SMOKE_EXPECT_TEXT=k8s-ok bash scripts/smoke_e2e.sh
 SMOKE_EXPECT_TOOL=prom__query_instant SMOKE_EXPECT_TEXT=prom-ok bash scripts/smoke_e2e.sh

@@ -128,7 +128,9 @@ Expect JSON-RPC **-32003** (`tool "prom__list_directory" not allowed for this pr
 
 ## Load for Prometheus (JWT)
 
-`scripts/loadtest` sends `Authorization: Bearer` when you pass `-token` or set `LOADTEST_JWT`. Use **one worker** under JWT until concurrent `tools/list` fan-out is addressed ([known limitations](../errors.md#known-limitations-multiplexing)).
+**Profile C only** — profile B substitutes 60× parallel + 20× sequential smoke (below) and Prometheus **mean** phase latency. Profile C adds JWT `loadtest` with `-token` ([calibration-results.md](calibration-results.md), [integration-checklist.md](integration-checklist.md) profile C).
+
+`scripts/loadtest` sends `Authorization: Bearer` when you pass `-token` or set `LOADTEST_JWT`. Use **one worker** under JWT because concurrent `tools/list` fan-out can collide on upstream JSON-RPC ids (see [known limitations](../errors.md#known-limitations-multiplexing)).
 
 ```bash
 go run ./scripts/loadtest -url http://127.0.0.1:18080 -mode direct -workers 1 -duration 30s \
@@ -147,6 +149,12 @@ for i in $(seq 1 60); do
     bash scripts/smoke_e2e.sh &
 done
 wait
+for i in $(seq 1 20); do
+  GATEWAY_URL=http://127.0.0.1:18080 SMOKE_JWT="$JWT_ADMIN" \
+    SMOKE_EXPECT_TOOL=prom__read_text_file \
+    SMOKE_TOOL_ARGS='{"path":"/private/tmp/mcp-gateway-lab/readme.txt"}' \
+    bash scripts/smoke_e2e.sh
+done
 ```
 
 Then query internal **mean** latency per phase (see [calibration-results.md](calibration-results.md)). Do **not** use histogram p95 when sub-ms samples land in the first 5 s bucket (artefact ~4750 ms).

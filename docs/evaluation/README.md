@@ -12,7 +12,7 @@ Guides for validating gateway behavior beyond unit tests: scripted scenarios, lo
 
 | Guide | What it exercises |
 |-------|-------------------|
-| [integration-checklist.md](integration-checklist.md) | **End-to-end validation** in one session (profile A mocks or profile B real+JWT) |
+| [integration-checklist.md](integration-checklist.md) | **End-to-end validation** — profiles A (mocks), B (real+JWT), C (full lab) |
 | [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) | **Real stdio MCP** (everything, filesystem, memory) + JWT + OTLP + Prom |
 | [scenario-sre-multibackend.md](scenario-sre-multibackend.md) | Three HTTP mocks, namespaced tools, semantic router |
 | [scenario-jwt-allowlist.md](scenario-jwt-allowlist.md) | `AUTH_MODE=jwt`, `mcp_tools` filtering and deny on `tools/call` |
@@ -58,6 +58,6 @@ Integration recall test: `TestRouterEvalVectorRecallMiniLM` — recall@1/@3 = 1.
 
 ## Related
 
-- [../README.md](../README.md): documentation index
+- [Documentation index](../README.md)
 - [../CONNECTING_AGENTS.md](../CONNECTING_AGENTS.md): host integration
 - [../DEVELOPER.md](../DEVELOPER.md): CI and observability
