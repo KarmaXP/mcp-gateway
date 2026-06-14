@@ -2,7 +2,7 @@
 
 Use a **single session** to validate the gateway (and optionally the full host stack) with one gateway process up; do not restart between steps unless noted.
 
-Recorded numbers: [calibration-results.md](calibration-results.md) — *Integrated lab run* (profile B, 2026-05-30); *Full lab session* (profile C, when executed).
+Recorded numbers: [calibration-results.md](calibration-results.md) — *Integrated lab run* (profile B, 2026-05-30); *Full lab session* (profile C, 2026-06-08).
 
 ---
 
