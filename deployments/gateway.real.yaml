@@ -29,7 +29,7 @@ router:
 
 policy:
   tool_groups:
-    lab_read:
+    lab_read:   # example group for JWT mcp_tool_groups demos
       - prom__read_text_file
       - prom__list_directory
 

@@ -29,7 +29,7 @@ services:
     ports:
       # HTTP (dashboard + REST).  Override: HOST_PORT_QDRANT_HTTP=16333
       - "${HOST_PORT_QDRANT_HTTP:-6333}:6333"
-      # gRPC — used by the gateway when running locally.  Override: HOST_PORT_QDRANT_GRPC=16334
+      # gRPC (optional; other clients). Gateway uses Qdrant HTTP REST on 6333. Override: HOST_PORT_QDRANT_GRPC=16334
       - "${HOST_PORT_QDRANT_GRPC:-6334}:6334"
     volumes:
       - qdrant-data:/qdrant/storage
@@ -148,6 +148,7 @@ services:
     volumes:
       - grafana-data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../docs/artifacts/grafana/mcp-gateway-observability.json:/etc/grafana/provisioning/dashboards/mcp-gateway-observability.json:ro
     networks:
       - mcp-gateway-net
     depends_on:
@@ -254,7 +255,7 @@ services:
     volumes:
       - ./gateway.example.docker.yaml:/etc/mcp-gateway/gateway.yaml:ro
     ports:
-      # Override: HOST_PORT_GATEWAY=9090
+      # Override: HOST_PORT_GATEWAY=18080
       - "${HOST_PORT_GATEWAY:-8080}:8080"
     networks:
       - mcp-gateway-net
