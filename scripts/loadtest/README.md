@@ -37,7 +37,7 @@ GET and every POST, and `-tool` / `-args` to target a real namespaced tool:
 go run ./scripts/loadtest -url http://127.0.0.1:18080 -mode direct -workers 10 -duration 45s \
   -token "$JWT_ADMIN" \
   -tool prom__read_text_file \
-  -args '{"path":"/private/tmp/mcp-tfm-tribunal/readme.txt"}'
+  -args '{"path":"/private/tmp/mcp-gateway-lab/readme.txt"}'
 ```
 
 | Flag | Default | Purpose |

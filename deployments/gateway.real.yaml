@@ -8,7 +8,7 @@ backends:
 
   - id: backend-filesystem
     prefix: prom
-    command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/private/tmp/mcp-tfm-tribunal"]
+    command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/private/tmp/mcp-gateway-lab"]
     max_concurrency: 2
 
   - id: backend-memory
@@ -29,7 +29,7 @@ router:
 
 policy:
   tool_groups:
-    tribunal_read:
+    lab_read:
       - prom__read_text_file
       - prom__list_directory
 

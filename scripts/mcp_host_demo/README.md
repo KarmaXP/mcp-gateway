@@ -38,7 +38,7 @@ every POST, and pass `TOOL_ARGS` for tools that need arguments:
 ```bash
 PORT=18080
 TOOL_NAME=prom__read_text_file \
-TOOL_ARGS='{"path":"/private/tmp/mcp-tfm-tribunal/readme.txt"}' \
+TOOL_ARGS='{"path":"/private/tmp/mcp-gateway-lab/readme.txt"}' \
 GATEWAY_URL=http://127.0.0.1:${PORT} \
 GATEWAY_JWT="$JWT_ADMIN" \
 go run ./scripts/mcp_host_demo
@@ -51,7 +51,7 @@ Optional env vars:
 - `GATEWAY_URL`: Gateway base URL (default `http://127.0.0.1:8080`)
 - `GATEWAY_JWT`: Bearer token sent on SSE and every POST. Required when the gateway runs with `AUTH_MODE=jwt`.
 - `TOOL_NAME`: Tool to call after `tools/list`. If empty, the first tool returned by `tools/list` is used (e.g. `alpha__echo` with `make demo-backends`).
-- `TOOL_ARGS`: JSON object passed as `tools/call` arguments (default `{}`). Example: `{"path":"/private/tmp/mcp-tfm-tribunal/readme.txt"}`.
+- `TOOL_ARGS`: JSON object passed as `tools/call` arguments (default `{}`). Example: `{"path":"/private/tmp/mcp-gateway-lab/readme.txt"}`.
 
 ## Example output
 

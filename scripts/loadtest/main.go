@@ -7,7 +7,7 @@
 // Under AUTH_MODE=jwt (profile B/C) pass -token (or set LOADTEST_JWT); it is sent
 // as Authorization: Bearer on the SSE GET and every POST. -tool / -args select the
 // direct tool and its JSON arguments so the call can target real backends, e.g.
-// -tool prom__read_text_file -args '{"path":"/private/tmp/mcp-tfm-tribunal/readme.txt"}'.
+// -tool prom__read_text_file -args '{"path":"/private/tmp/mcp-gateway-lab/readme.txt"}'.
 package main
 
 import (

@@ -9,7 +9,7 @@ func TestResolveAlias(t *testing.T) {
 		alias string
 		want  string
 	}{
-		{name: "alias overrides long", long: "https://dev.local", alias: "https://tfm.local", want: "https://tfm.local"},
+		{name: "alias overrides long", long: "https://dev.local", alias: "https://lab.local", want: "https://lab.local"},
 		{name: "long used when alias empty", long: "https://dev.local", alias: "", want: "https://dev.local"},
 		{name: "alias whitespace falls back to long", long: "mcp-gateway", alias: "   ", want: "mcp-gateway"},
 		{name: "both empty", long: "", alias: "", want: ""},
