@@ -59,11 +59,17 @@ RUN pip install --no-cache-dir "optimum[onnxruntime]==1.23.0"
 
 RUN pip install --no-cache-dir fastapi==0.115.6 "uvicorn[standard]==0.34.0"
 
-COPY --from=model-builder /model-cache /model-cache
-
-COPY server.py .
-
+# Create the runtime user first so the baked cache can be owned by it.
 RUN addgroup --system embed && adduser --system --ingroup embed embed
+
+# sentence-transformers (onnx backend) calls huggingface_hub.list_repo_files on
+# load and writes the resolved commit hash into the cache (refs/main). With a
+# root-owned cache the non-root user hits PermissionError and crash-loops, so the
+# baked cache must be writable by the embed user.
+COPY --from=model-builder --chown=embed:embed /model-cache /model-cache
+
+COPY --chown=embed:embed server.py .
+
 USER embed
 
 EXPOSE 8001
