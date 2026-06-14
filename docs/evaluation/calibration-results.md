@@ -25,14 +25,14 @@ Hyperparameters: `deployments/gateway.example.yaml` (`top_k=8`, `score_min=0.35`
 | Environment | Host gateway (`PORT=18080`) + Docker deps (`make docker-up`) + demo mocks (`make demo-backends`) |
 | Catalog | default `docs/evaluation/router-eval-catalog.json` |
 | Qdrant URL | `http://127.0.0.1:6333` |
-| Embed URL | `http://127.0.0.1:18001` (`.env` `HOST_PORT_EMBED=18001`) |
+| Embed URL | `http://127.0.0.1:8001` (default compose host mapping; override via `HOST_PORT_EMBED` / `EMBED_URL`) |
 | `ROUTER_MODE` | `assist_list` (env override) |
 | Load profile | loadtest L2: `alpha__echo` direct, workers=10, duration=45s |
 
 ### Vector recall (MiniLM + Qdrant)
 
 ```bash
-QDRANT_URL=http://127.0.0.1:6333 EMBED_URL=http://127.0.0.1:18001 \
+QDRANT_URL=http://127.0.0.1:6333 EMBED_URL=http://127.0.0.1:8001 \
  go test -tags=integration -race -count=1 \
  ./internal/router/eval -run TestRouterEvalVectorRecallMiniLM -v
 ```
@@ -102,13 +102,13 @@ Config: `deployments/gateway.real.yaml`. Procedure: [`integration-checklist.md`]
 | Field | Value |
 | ----- | ----- |
 | Date (UTC) | 2026-05-30 |
-| Gateway commit | `a889bff2779a7ac8630dc4224b2d44ab56a99fe5` (includes `gateway.real.yaml`; prior lab session on `cb0a5aa`) |
+| Gateway commit | `a889bff2779a7ac8630dc4224b2d44ab56a99fe5` |
 | Environment | Host gateway (`PORT=18080`) + Docker deps (`make docker-up`); macOS, Docker Compose |
 | `MCP_GATEWAY_CONFIG` | `deployments/gateway.real.yaml` |
 | `AUTH_MODE` | `jwt` (`JWT_ISS=https://lab.local`, `JWT_AUD=mcp-gateway`, key `/tmp/mcp-lab-jwt.key`) |
 | `ROUTER_MODE` | `on` |
 | `GATEWAY_URL` | `http://127.0.0.1:18080` |
-| `QDRANT_URL` / `EMBED_URL` | `http://127.0.0.1:6333` / `http://127.0.0.1:18001` |
+| `QDRANT_URL` / `EMBED_URL` | `http://127.0.0.1:6333` / `http://127.0.0.1:8001` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://127.0.0.1:4318` |
 | Backends (real, stdio) | `@modelcontextprotocol/server-everything` → `k8s`; `server-filesystem` → `prom` (root `/private/tmp/mcp-gateway-lab`); `server-memory` → `gh` |
 | JWT traffic | `scripts/smoke_e2e.sh` with admin JWT: 60× parallel + 20× sequential (`prom__read_text_file`) |
@@ -120,7 +120,7 @@ Config: `deployments/gateway.real.yaml`. Procedure: [`integration-checklist.md`]
 Re-run on 2026-05-30 to confirm no regression with stack up:
 
 ```bash
-QDRANT_URL=http://127.0.0.1:6333 EMBED_URL=http://127.0.0.1:18001 \
+QDRANT_URL=http://127.0.0.1:6333 EMBED_URL=http://127.0.0.1:8001 \
  go test -tags=integration -race -count=1 \
  ./internal/router/eval -run TestRouterEvalVectorRecallMiniLM -v
 ```

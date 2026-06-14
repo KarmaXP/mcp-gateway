@@ -54,7 +54,7 @@ export JWT_ISS=https://lab.local
 export JWT_AUD=mcp-gateway
 export ROUTER_MODE=on
 export QDRANT_URL=http://127.0.0.1:6333
-export EMBED_URL=http://127.0.0.1:18001
+export EMBED_URL=http://127.0.0.1:8001
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
 
 make run
@@ -65,7 +65,7 @@ Verify:
 ```bash
 curl -sf http://127.0.0.1:18080/readyz
 curl -sf http://127.0.0.1:6333/healthz
-curl -sf http://127.0.0.1:18001/healthz
+curl -sf http://127.0.0.1:8001/healthz
 curl -sf http://127.0.0.1:4318/
 ```
 
@@ -156,7 +156,7 @@ Then query internal **mean** latency per phase (see [calibration-results.md](cal
 ## Router recall regression (optional, same session)
 
 ```bash
-QDRANT_URL=http://127.0.0.1:6333 EMBED_URL=http://127.0.0.1:18001 \
+QDRANT_URL=http://127.0.0.1:6333 EMBED_URL=http://127.0.0.1:8001 \
  go test -tags=integration -race -count=1 \
  ./internal/router/eval -run TestRouterEvalVectorRecallMiniLM -v
 ```

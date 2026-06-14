@@ -50,7 +50,7 @@ export AUTH_MODE=none
 export MCP_GATEWAY_CONFIG=deployments/gateway.sre.example.yaml
 export ROUTER_MODE=on
 export QDRANT_URL=http://127.0.0.1:6333
-export EMBED_URL=http://127.0.0.1:18001
+export EMBED_URL=http://127.0.0.1:8001
 export PORT=18080
 make run
 ```

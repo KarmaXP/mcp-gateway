@@ -34,11 +34,13 @@ Pass `-token` (or set `LOADTEST_JWT`) to send `Authorization: Bearer` on the SSE
 GET and every POST, and `-tool` / `-args` to target a real namespaced tool:
 
 ```bash
-go run ./scripts/loadtest -url http://127.0.0.1:18080 -mode direct -workers 10 -duration 45s \
+go run ./scripts/loadtest -url http://127.0.0.1:18080 -mode direct -workers 1 -duration 30s \
   -token "$JWT_ADMIN" \
   -tool prom__read_text_file \
   -args '{"path":"/private/tmp/mcp-gateway-lab/readme.txt"}'
 ```
+
+Under JWT, use **one worker** because concurrent `tools/list` can collide (see [errors.md](../../docs/errors.md#known-limitations-multiplexing)).
 
 | Flag | Default | Purpose |
 |------|---------|---------|
