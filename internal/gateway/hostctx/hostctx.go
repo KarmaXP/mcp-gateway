@@ -36,9 +36,9 @@ type AllowListMode int
 const (
 	// AllowListUnrestricted: no allow-list in context (full catalog for principal).
 	AllowListUnrestricted AllowListMode = iota
-	// AllowListDenyAll — explicit empty intersection or empty policy list (deny every tool).
+	// AllowListDenyAll: explicit empty intersection or empty policy list (deny every tool).
 	AllowListDenyAll
-	// AllowListRestricted — non-empty allow-list.
+	// AllowListRestricted: non-empty allow-list.
 	AllowListRestricted
 )
 

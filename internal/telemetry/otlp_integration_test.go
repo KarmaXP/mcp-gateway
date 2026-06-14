@@ -19,7 +19,7 @@ func TestInitShutdownWithLiveOTLPCollector(t *testing.T) {
 		ep = "http://127.0.0.1:4318"
 	}
 	if !probeHealth(context.Background(), ep) {
-		t.Skip("OTLP collector not reachable at ", ep, " — start compose (otel-collector) or set OTEL_EXPORTER_OTLP_ENDPOINT; not required in default CI integration job")
+		t.Skip("OTLP collector not reachable at ", ep, " — start compose (otel-collector) or set OTEL_EXPORTER_OTLP_ENDPOINT; not required for default unit CI (lint-and-unit); CI integration job starts otel-collector and fails if unreachable")
 	}
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", ep)
 

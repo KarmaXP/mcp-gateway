@@ -4,7 +4,7 @@
 //	openssl genrsa -out /tmp/jwt.key 2048
 //	openssl rsa -in /tmp/jwt.key -pubout -out /tmp/jwt.pub.pem
 //	export JWT_PUBLIC_KEY_PEM="$(cat /tmp/jwt.pub.pem)"
-//	go run ./tools/gen-jwt -issuer https://dev -audience mcp -key /tmp/jwt.key
+//	go run ./tools/gen-jwt -iss https://lab.local -aud mcp-gateway -key /tmp/jwt.key
 //
 // The short aliases -iss / -aud / -sub mirror the long flags so the
 // evaluation runbooks (scenario-real-backends-jwt.md, integration-checklist.md
