@@ -12,7 +12,7 @@ Copy [`.env.example`](../.env.example) with `make bootstrap`. Example YAML files
 |------|----------|--------|----------|
 | [`gateway.demo.yaml`](../deployments/gateway.demo.yaml) | 1× smoke mock `:31400` | `off` | First run (`make demo`, default `make run`) |
 | [`gateway.example.yaml`](../deployments/gateway.example.yaml) | alpha `:3101`, beta `:3102` | `off` (tunable) | Multi-backend lab (`make demo-backends`, `make demo-full`) |
-| [`gateway.sre.example.yaml`](../deployments/gateway.sre.example.yaml) | k8s/prom/gh mocks `:3201, 3203` | `on` | SRE walkthrough (`make sre-up`, `make sre-smoke`) |
+| [`gateway.sre.example.yaml`](../deployments/gateway.sre.example.yaml) | k8s/prom/gh mocks `:3201–3203` | `on` | SRE walkthrough (`make sre-up`, `make sre-smoke`) |
 | [`gateway.real.yaml`](../deployments/gateway.real.yaml) | stdio MCP (`npx` everything, filesystem, memory) | `on` | Real backends + JWT lab ([scenario-real-backends-jwt.md](evaluation/scenario-real-backends-jwt.md)) |
 
 Ports: [local-ports.md](local-ports.md).
@@ -59,7 +59,7 @@ Exact tool names skip vector search. See [Connecting agents — Semantic routing
 
 **`filter_list` degradation:** if the catalog is stale, embed/query fails, or no tool clears `score_min`, the router returns the full merged catalog in memory; the gateway still applies JWT/RAR filtering on the response (`tools/list` never bypasses AuthZ).
 
-**SSE catalog notifications:** `notifications/tools/list_changed` (and resource/prompt variants) are delivered on a **best-effort** broadcast queue (bounded workers + queue). Under heavy load some sessions may miss a hint; hosts should refresh via `tools/list` when needed. Metrics: `mcp.gateway.session.broadcast_tasks_dropped`, `mcp.gateway.session.notifications_dropped`.
+**SSE catalog notifications:** When `aggregation.forward_tools_list_changed` / `AGGREGATION_FORWARD_TOOLS_LIST_CHANGED` is enabled, upstream `notifications/tools/list_changed` (and resource/prompt variants) are delivered on a **best-effort** broadcast queue (bounded workers + queue). Under heavy load some sessions may miss a hint; hosts should refresh via `tools/list` when needed. Metrics: `mcp.gateway.session.broadcast_tasks_dropped`, `mcp.gateway.session.notifications_dropped`.
 
 ---
 

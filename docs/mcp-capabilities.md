@@ -74,7 +74,7 @@ Details: [Adding backends — Aggregation](ADDING_BACKENDS.md#aggregation-and-fa
 | Notification | Gateway behavior |
 |--------------|------------------|
 | `notifications/tools/list_changed` | When `forward_tools_list_changed` is enabled: invalidate tools cache, reindex router, broadcast to SSE clients |
-| `resources/list_changed`, `prompts/list_changed` | Not forwarded for cache/router side-effects in the current release |
+| `resources/list_changed`, `prompts/list_changed` | When `forward_tools_list_changed` is enabled: **SSE relay only** (no tools-cache invalidation or router reindex). Default off: not delivered. |
 
 ---
 
