@@ -34,9 +34,9 @@ go run ./scripts/loadtest -url http://127.0.0.1:8080 -mode semantic -workers 10 
 
 Compare the printed **p95 / p99** lines across runs. Throughput is approximate (successful iterations / wall time).
 
-### JWT (profile C loadtest)
+### JWT loadtest (full lab session)
 
-Profile B uses repeated `smoke_e2e.sh` + Prometheus means instead of loadtest (see [integration-checklist.md](../../docs/evaluation/integration-checklist.md)). Profile C adds JWT loadtest below.
+The integrated lab run (2026-05-30) uses repeated `smoke_e2e.sh` + Prometheus means instead of loadtest (see [integration-checklist.md](../../docs/evaluation/integration-checklist.md)). The full lab session adds JWT loadtest below.
 
 Pass `-token` (or set `LOADTEST_JWT`) to send `Authorization: Bearer` on the SSE
 GET and every POST, and `-tool` / `-args` to target a real namespaced tool:

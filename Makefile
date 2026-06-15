@@ -24,7 +24,8 @@ RESET   := \033[0m
 .PHONY: help bootstrap demo demo-backends demo-backends-stop demo-full verify-e2e \
         sre-backends sre-backends-stop sre-up sre-down sre-smoke gen-router-eval-catalog \
         build run stop test test-cover test-integration ci smoke smoke-e2e fmt lint clean tidy \
-        docker-build docker-up docker-up-full docker-up-demo docker-up-sre docker-down docker-logs docker-clean calibration-up
+        docker-build docker-up docker-up-full docker-up-demo docker-up-sre docker-down docker-logs docker-clean calibration-up \
+        lab-jwt-keys lab-jwt-env lab-jwt-verify
 
 # Help: sectioned list of targets (descriptions are defined here only)
 help:
@@ -33,6 +34,9 @@ help:
 	@printf "$(BLUE)▶ General$(RESET)\n"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "help" "Show this help message"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "bootstrap" "Copy .env.example to .env if missing"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "lab-jwt-keys" "Ensure /tmp/mcp-lab-jwt.key + .pub.pem for JWT lab sessions"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "lab-jwt-env" "Print export JWT_PUBLIC_KEY_FILE + JWT_ADMIN (after lab-jwt-keys)"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "lab-jwt-verify" "Crypto-check lab keys against gateway JWT validator"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "demo" "Quick start: one mock upstream + gateway + MCP tools/call (no Docker)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "demo-backends" "Start alpha/beta mock MCP servers on ports 3101 and 3102"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "demo-backends-stop" "Stop alpha/beta mock servers"
@@ -82,6 +86,17 @@ build:
 bootstrap:
 	@if [ ! -f .env ]; then cp -n .env.example .env && printf "Created .env from .env.example\n"; else printf ".env already present\n"; fi
 	@printf "Requires Go (see go.mod). Docker is optional (make docker-up).\n"
+	@printf "JWT lab sessions: run 'make lab-jwt-keys' (keys in /tmp, no .env required).\n"
+
+lab-jwt-keys:
+	@chmod +x scripts/lab_jwt_keys.sh
+	@bash scripts/lab_jwt_keys.sh keys
+
+lab-jwt-env: lab-jwt-keys
+	@bash scripts/lab_jwt_keys.sh env
+
+lab-jwt-verify: lab-jwt-keys
+	@bash scripts/lab_jwt_keys.sh verify
 
 demo:
 	@echo "🎯 Plug-and-play demo (no Docker)..."

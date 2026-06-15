@@ -4,7 +4,7 @@ Guides for validating gateway behavior beyond unit tests: scripted scenarios, lo
 
 **Integrated lab (2026-05-30):** [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) + [calibration-results.md](calibration-results.md).
 
-**Full lab session (2026-06-08, profile C):** [integration-checklist.md](integration-checklist.md) profile C + calibration-results *Full lab session*.
+**Full lab session (2026-06-08):** [integration-checklist.md](integration-checklist.md#full-lab-session) + calibration-results *Full lab session*.
 
 ---
 
@@ -12,7 +12,7 @@ Guides for validating gateway behavior beyond unit tests: scripted scenarios, lo
 
 | Guide | What it exercises |
 |-------|-------------------|
-| [integration-checklist.md](integration-checklist.md) | **End-to-end validation** — profiles A (mocks), B (real+JWT), C (full lab) |
+| [integration-checklist.md](integration-checklist.md) | **End-to-end validation** — SRE mocks, integrated lab run (real+JWT), full lab session |
 | [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) | **Real stdio MCP** (everything, filesystem, memory) + JWT + OTLP + Prom |
 | [scenario-sre-multibackend.md](scenario-sre-multibackend.md) | Three HTTP mocks, namespaced tools, semantic router |
 | [scenario-jwt-allowlist.md](scenario-jwt-allowlist.md) | `AUTH_MODE=jwt`, `mcp_tools` filtering and deny on `tools/call` |
@@ -22,11 +22,11 @@ Quick automated checks (from repo root):
 
 ```bash
 make ci                    # unit + race tests (no Docker)
-make sre-smoke             # profile A: k8s/prom/gh mocks
+make sre-smoke             # SRE mock: k8s/prom/gh HTTP mocks
 make smoke
 GATEWAY_URL=http://127.0.0.1:8080 bash scripts/smoke_e2e.sh
 
-# Profile B (JWT + real backends): see scenario-real-backends-jwt.md
+# Integrated lab run (JWT + real stdio backends): see scenario-real-backends-jwt.md
 ```
 
 Host client: [`scripts/mcp_host_demo/README.md`](../../scripts/mcp_host_demo/README.md).

@@ -2,7 +2,7 @@
 
 Walkthrough for validating the gateway with **stdio MCP servers** (not HTTP mocks), **semantic router**, **JWT**, and **OTLP → Prometheus**. Recorded numbers: [calibration-results.md](calibration-results.md) (integrated lab run, 2026-05-30).
 
-For mocks-only validation, use [scenario-sre-multibackend.md](scenario-sre-multibackend.md) or [integration-checklist.md](integration-checklist.md) profile A.
+For mocks-only validation, use [scenario-sre-multibackend.md](scenario-sre-multibackend.md) or the **SRE mock** scenario in [integration-checklist.md](integration-checklist.md).
 
 ---
 
@@ -25,7 +25,17 @@ cd mcp-gateway
 make docker-up          # Qdrant, embed, OTel collector, Prometheus, Grafana — no make sre-up
 ```
 
-Generate JWT key pair (once):
+Generate JWT key pair (once; idempotent):
+
+```bash
+make lab-jwt-keys
+# or: bash scripts/lab_jwt_keys.sh keys
+```
+
+Creates `/tmp/mcp-lab-jwt.key` and `/tmp/mcp-lab-jwt.pub.pem` if missing (no `.env` required).
+Issue tokens: `make lab-jwt-env` or `bash scripts/lab_jwt_keys.sh admin`.
+
+Manual equivalent:
 
 ```bash
 openssl genrsa -out /tmp/mcp-lab-jwt.key 2048
@@ -128,7 +138,7 @@ Expect JSON-RPC **-32003** (`tool "prom__list_directory" not allowed for this pr
 
 ## Load for Prometheus (JWT)
 
-**Profile C only** — profile B substitutes 60× parallel + 20× sequential smoke (below) and Prometheus **mean** phase latency. Profile C adds JWT `loadtest` with `-token` ([calibration-results.md](calibration-results.md), [integration-checklist.md](integration-checklist.md) profile C).
+**Full lab session only** — the integrated lab run (2026-05-30) uses 60× parallel + 20× sequential smoke (below) and Prometheus **mean** phase latency. The full lab session adds JWT `loadtest` with `-token` ([calibration-results.md](calibration-results.md), [integration-checklist.md](integration-checklist.md#full-lab-session)).
 
 `scripts/loadtest` sends `Authorization: Bearer` when you pass `-token` or set `LOADTEST_JWT`. Use **one worker** under JWT because concurrent `tools/list` fan-out can collide on upstream JSON-RPC ids (see [known limitations](../errors.md#known-limitations-multiplexing)).
 
@@ -175,7 +185,7 @@ Expected: recall@1 = recall@3 = 1.000 (26/26).
 
 ## Record results
 
-Copy measured values into [calibration-results.md](calibration-results.md) → **Integrated lab run (2026-05-30)** or **Full lab session (profile C)**.
+Copy measured values into [calibration-results.md](calibration-results.md) → **Integrated lab run (2026-05-30)** or **Full lab session (2026-06-08)**.
 
 ---
 
@@ -183,5 +193,5 @@ Copy measured values into [calibration-results.md](calibration-results.md) → *
 
 - [scenario-jwt-allowlist.md](scenario-jwt-allowlist.md) — JWT mechanics
 - [calibration-run.md](calibration-run.md) — baseline calibration (mocks, `AUTH_MODE=none`)
-- [integration-checklist.md](integration-checklist.md) — profile A (mocks) vs profile B (this doc)
+- [integration-checklist.md](integration-checklist.md) — SRE mock (mocks) vs integrated lab run (this doc)
 - [scripts/loadtest/README.md](../../scripts/loadtest/README.md) — JWT loadtest flags

@@ -1,14 +1,16 @@
 # Calibration results
 
-Canonical recorded lab results. Procedure: [`calibration-run.md`](calibration-run.md) (baseline) and [`integration-checklist.md`](integration-checklist.md) profile B.
+Canonical recorded lab results. Procedure: [`calibration-run.md`](calibration-run.md) (baseline) and [`integration-checklist.md`](integration-checklist.md) (integrated lab run).
 
 **Rule:** do not invent numbers. If a metric was not measured or is not reliable, mark it **Not measured** or **Not used** with a reason — do not leave table cells blank.
+
+**Review snapshot (`main`, thesis closure):** `292ad6d70f7ebfb90b0ff593c004a72e6ec01299` — cite when locking the artefact for external review. Per-session commits below record the tree measured on each lab date; they may differ from current `main` after documentation-only commits or history maintenance.
 
 | Run | Date (UTC) | Scope |
 | ----- | ---------- | ----- |
 | Baseline calibration | 2026-05-18 | Router recall, unit benchmarks, client loadtest (`AUTH_MODE=none`, demo mocks) |
 | **Integrated lab run** | 2026-05-30 | Real MCP backends (stdio), JWT, OTLP→Prometheus, smoke load |
-| **Full lab session** | 2026-06-08 | Profile C — B plus MCP host demo + LangGraph agent + Tempo + JWT loadtest |
+| **Full lab session** | 2026-06-08 | Integrated run plus MCP host demo, LangGraph agent, Tempo, JWT loadtest |
 
 ---
 
@@ -27,7 +29,7 @@ Hyperparameters: `deployments/gateway.example.yaml` (`top_k=8`, `score_min=0.35`
 | Qdrant URL | `http://127.0.0.1:6333` |
 | Embed URL | `http://127.0.0.1:8001` (default compose host mapping; override via `HOST_PORT_EMBED` / `EMBED_URL`) |
 | `ROUTER_MODE` | `assist_list` (env override) |
-| Load profile | loadtest L2: `alpha__echo` direct, workers=10, duration=45s |
+| Load test parameters | loadtest L2: `alpha__echo` direct, workers=10, duration=45s |
 
 ### Vector recall (MiniLM + Qdrant)
 
@@ -95,7 +97,7 @@ Baseline supplies recall, unit benchmarks, and direct loadtest reference. Operat
 
 **Scope:** single session — real MCP backends (stdio), semantic router (`ROUTER_MODE=on`), JWT, OTLP→Prometheus. No SRE HTTP mocks (`make sre-up` not used).
 
-Config: `deployments/gateway.real.yaml`. Procedure: [`integration-checklist.md`](integration-checklist.md) profile B, [`scenario-real-backends-jwt.md`](scenario-real-backends-jwt.md).
+Config: `deployments/gateway.real.yaml`. Procedure: [`integration-checklist.md`](integration-checklist.md) (integrated lab run), [`scenario-real-backends-jwt.md`](scenario-real-backends-jwt.md).
 
 ### Run metadata
 
@@ -170,17 +172,17 @@ sum(rate(mcp_mcp_gateway_internal_duration_seconds_count{method="tools/call",pha
 
 | Artifact | Status | Reason |
 | -------- | ------ | ------ |
-| `scripts/loadtest` direct/semantic | **Not measured (profile B)** | Session used `AUTH_MODE=jwt` before loadtest supported Bearer. Substitute: JWT smoke traffic (80 calls) + Prom means above. JWT loadtest recorded in profile C below. |
+| `scripts/loadtest` direct/semantic | **Not measured (integrated lab run)** | Session used JWT smoke + Prom means; loadtest with Bearer was not in that protocol. JWT loadtest recorded in full lab session below. |
 | Tempo `T_total` / `T_upstream` / `T_internal` | **Not measured** | Tempo is not published on the host in `docker-compose.yaml` (in-cluster only). |
 | Histogram p95 per phase | **Not used** | Artefact ~4750 ms from bucket layout; `check_gateway_p95.sh` FAIL on this series is expected for sub-ms samples. |
 
 ---
 
-## Full lab session (profile C, 2026-06-08)
+## Full lab session (2026-06-08)
 
-**Scope:** single session extending profile B in the same gateway config — MCP host demo with JWT, a LangGraph agent host, Tempo trace capture, and a JWT-aware loadtest. **Profile C extends B; it does not replace the B numbers above**, which remain the primary gateway benchmark.
+**Scope:** single session extending the integrated lab run in the same gateway config — MCP host demo with JWT, a LangGraph agent host, Tempo trace capture, and a JWT-aware loadtest. **Does not replace the integrated lab run numbers above**, which remain the primary gateway benchmark.
 
-Procedure: [integration-checklist.md](integration-checklist.md) profile C and [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md).
+Procedure: [integration-checklist.md](integration-checklist.md) (full lab session) and [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md).
 
 ### Run metadata
 
@@ -206,7 +208,7 @@ Procedure: [integration-checklist.md](integration-checklist.md) profile C and [s
 | `X-MCP-Intent` call (optional) | **Not measured** | Header is supported on `tools/call`, but `gateway.real.yaml` has `allow_auto_rename:false`, so exact names take the deterministic path and the intent does not rewrite the tool. Semantic rename not exercised. |
 | Router recall regression | **Not re-measured** | Covered by baseline + integrated run (1.000, 26/26); optional sanity, not repeated this session. |
 
-Known multiplexing caveats (upstream JSON-RPC id forwarding, concurrent `tools/list` fan-out) are documented in [errors.md](../errors.md#known-limitations-multiplexing). Reference clients in this repo use small monotonic ids; profile B smoke evidence is unaffected.
+Known multiplexing caveats (upstream JSON-RPC id forwarding, concurrent `tools/list` fan-out) are documented in [errors.md](../errors.md#known-limitations-multiplexing). Reference clients in this repo use small monotonic ids; integrated lab smoke evidence is unaffected.
 
 ---
 
@@ -220,6 +222,6 @@ Known multiplexing caveats (upstream JSON-RPC id forwarding, concurrent `tools/l
 | JWT allow-list enforcement | Integrated lab | allow OK; deny -32003 |
 | Internal gateway work ≪ 50 ms | Integrated lab + full lab | Prom **mean** by phase (≪ 50 ms at low rate and under 353 rps) |
 | Client-observed throughput/latency (no JWT) | Baseline | loadtest direct p95 ≈ 1.24 ms (includes SSE client path) |
-| MCP host + agent (LangGraph) over JWT | Full lab (profile C) | host demo ×3 silos + LangGraph `StateGraph` `tools/call` OK |
-| Client-observed latency **under JWT** | Full lab (profile C) | loadtest direct p95 ≈ 0.944 ms, 0 errors (1 worker, 10.6k samples) |
-| Trace decomposition (internal vs backend) | Full lab (profile C) | one Tempo trace: internal spans sub-ms, backend.call ≈ 0.85 ms |
+| MCP host + agent (LangGraph) over JWT | Full lab session | host demo ×3 silos + LangGraph `StateGraph` `tools/call` OK |
+| Client-observed latency **under JWT** | Full lab session | loadtest direct p95 ≈ 0.944 ms, 0 errors (1 worker, 10.6k samples) |
+| Trace decomposition (internal vs backend) | Full lab session | one Tempo trace: internal spans sub-ms, backend.call ≈ 0.85 ms |

@@ -284,9 +284,9 @@ result = session.tools_call(
 
 Follow the **[integration checklist](evaluation/integration-checklist.md)** in one session (same gateway URL throughout):
 
-1. Confirm upstreams and `tools/call` — profile A: `make sre-smoke` or [scenario-sre-multibackend.md](evaluation/scenario-sre-multibackend.md); profile B (real stdio + JWT): [scenario-real-backends-jwt.md](evaluation/scenario-real-backends-jwt.md).
+1. Confirm upstreams and `tools/call` — SRE mock: `make sre-smoke` or [scenario-sre-multibackend.md](evaluation/scenario-sre-multibackend.md); integrated lab run (real stdio + JWT): [scenario-real-backends-jwt.md](evaluation/scenario-real-backends-jwt.md).
 2. Run `go run ./scripts/mcp_host_demo` with your `GATEWAY_URL` (and JWT when required).
-3. JWT allow-list: [scenario-jwt-allowlist.md](evaluation/scenario-jwt-allowlist.md) / profile B walkthrough.
+3. JWT allow-list: [scenario-jwt-allowlist.md](evaluation/scenario-jwt-allowlist.md) / integrated lab run walkthrough.
 4. Loadtest (`AUTH_MODE=none`) or JWT loadtest (`-token` / `LOADTEST_JWT`, one worker) or JWT smoke + Prometheus. See [calibration-results.md](evaluation/calibration-results.md) and [errors.md](errors.md#known-limitations-multiplexing).
 5. Wire your host to the same base URL, SSE session, and headers documented above.
 

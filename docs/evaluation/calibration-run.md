@@ -43,7 +43,7 @@ export PORT=${PORT:-8080}
 make run
 ```
 
-Recorded profiles B/C in [calibration-results.md](calibration-results.md) used **`PORT=18080`** on the host gateway (compose gateway may still bind **8080**).
+Recorded integrated / full lab sessions in [calibration-results.md](calibration-results.md) used **`PORT=18080`** on the host gateway (compose gateway may still bind **8080**).
 
 Gateway health/readiness check (works with current or stricter future readiness):
 
@@ -100,7 +100,7 @@ go test ./internal/router/eval/... -run TestGoldenCasesMRRAndNDCG -v
 
 Run from the `mcp-gateway/` module root in two terminals.
 
-Examples default to **`PORT=8080`**. To reproduce recorded profile B/C numbers, use **`PORT=18080`** (or `GATEWAY_URL=http://127.0.0.1:18080` in smoke scripts).
+Examples default to **`PORT=8080`**. To reproduce recorded integrated / full lab session numbers, use **`PORT=18080`** (or `GATEWAY_URL=http://127.0.0.1:18080` in smoke scripts).
 
 ### Go MCP loadtest (`scripts/loadtest/main.go`)
 
@@ -311,11 +311,11 @@ For **new** calibration runs (canonical numbers already in [calibration-results.
 
 Canonical numbers live in [calibration-results.md](calibration-results.md):
 
-| Run | Date | Profile |
-|-----|------|---------|
+| Run | Date | Scenario |
+|-----|------|----------|
 | Baseline calibration | 2026-05-18 | `gateway.example.yaml`, demo mocks, `AUTH_MODE=none`, recall + direct loadtest |
 | Integrated lab run | 2026-05-30 | `gateway.real.yaml`, stdio MCP, JWT, OTLP; see [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) |
-| Full lab session (profile C) | 2026-06-08 | Same as B + MCP host demo, LangGraph agent, Tempo trace, JWT loadtest; see [integration-checklist.md](integration-checklist.md) profile C |
+| Full lab session | 2026-06-08 | Integrated run + MCP host demo, LangGraph agent, Tempo trace, JWT loadtest; see [integration-checklist.md](integration-checklist.md#full-lab-session) |
 
 **Internal 50 ms budget (integrated run):** evidence uses Prometheus **mean** latency per phase (`tools/call`), all ≪ 50 ms. Histogram p95 is **not used** when sub-ms samples fall into the first 5 s bucket (artefact ~4750 ms).
 

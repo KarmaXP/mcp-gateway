@@ -722,7 +722,7 @@ Internal phase **mean** latency ≪ 50 ms budget under lab load — see [calibra
 - Logs for failed requests include `trace_id` (`internal/telemetry/slog.go`).
 - Integration tests verify trace context in backend goroutines (`internal/telemetry`).
 
-**Evidence:** Compose stack (`make docker-up`), profile B/C calibration, `make ci`.
+**Evidence:** Compose stack (`make docker-up`), integrated / full lab calibration, `make ci`.
 
 ---
 

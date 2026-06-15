@@ -7,8 +7,8 @@
 //	go run ./tools/gen-jwt -iss https://lab.local -aud mcp-gateway -key /tmp/jwt.key
 //
 // The short aliases -iss / -aud / -sub mirror the long flags so the
-// evaluation runbooks (scenario-real-backends-jwt.md, integration-checklist.md
-// profile B/C) are copy-paste reproducible. When both a long flag and its short
+// evaluation runbooks (scenario-real-backends-jwt.md, integration-checklist.md)
+// are copy-paste reproducible. When both a long flag and its short
 // alias are set, the short alias wins.
 package main
 

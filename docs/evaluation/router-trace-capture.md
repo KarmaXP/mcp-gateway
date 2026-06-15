@@ -1,6 +1,6 @@
 # Router trace capture (OTLP/Tempo)
 
-Optional procedure for **new** calibration runs when you want Tempo trace figures alongside Prometheus numbers. Canonical lab sessions are in [calibration-results.md](calibration-results.md): profile B (2026-05-30) marks Tempo host decomposition **Not measured**; profile C (2026-06-08) records one representative trace as **Measured** via Grafana datasource proxy.
+Optional procedure for **new** calibration runs when you want Tempo trace figures alongside Prometheus numbers. Canonical lab sessions are in [calibration-results.md](calibration-results.md): integrated lab run (2026-05-30) marks Tempo host decomposition **Not measured**; full lab session (2026-06-08) records one representative trace as **Measured** via Grafana datasource proxy.
 
 ## 1) Spans and attributes to capture
 
