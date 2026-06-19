@@ -4,7 +4,7 @@
 //
 // Semantic mode needs ROUTER_MODE=on and a healthy embed sidecar.
 //
-// Under AUTH_MODE=jwt (full lab session loadtest; integrated lab run uses smoke substitute) pass -token
+// Under AUTH_MODE=jwt (LangGraph agent assay loadtest; multibackend assay uses smoke substitute) pass -token
 // as Authorization: Bearer on the SSE GET and every POST. -tool / -args select the
 // direct tool and its JSON arguments so the call can target real backends, e.g.
 // -tool prom__read_text_file -args '{"path":"/private/tmp/mcp-gateway-lab/readme.txt"}'.

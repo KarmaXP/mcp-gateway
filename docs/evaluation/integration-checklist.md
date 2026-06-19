@@ -1,6 +1,6 @@
 # Integration checklist (gateway + backends + optional agent)
 
-Reproducibility runbook for the three documented lab scenarios. **Canonical recorded results** for the integrated and full lab sessions are already in [calibration-results.md](calibration-results.md) (*Integrated lab run* 2026-05-30; *Full lab session* 2026-06-08). Use this checklist to re-run or verify; you do not need to re-record unless you change stack or config.
+Reproducibility runbook for the three documented lab scenarios. **Canonical recorded results** for the multibackend and LangGraph agent assays are already in [calibration-results.md](calibration-results.md) (*Multibackend assay* 2026-05-30; *LangGraph agent assay* 2026-06-08). Use this checklist to re-run or verify; you do not need to re-record unless you change stack or config.
 
 Use a **single session** to validate the gateway (and optionally the full host stack) with one gateway process up; do not restart between steps unless noted.
 
@@ -11,18 +11,18 @@ Use a **single session** to validate the gateway (and optionally the full host s
 | Scenario | Config | Auth | Backends | Scope |
 |----------|--------|------|----------|--------|
 | **SRE mock multibackend** | `gateway.sre.example.yaml` | `AUTH_MODE=none` | HTTP mocks (`make sre-up`) | Gateway + loadtest without JWT |
-| **Integrated lab run** | `gateway.real.yaml` | `AUTH_MODE=jwt` | stdio MCP via `npx` | Gateway evidence (smoke, JWT, Prom means, recall) — [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) |
-| **Full lab session** | Same as integrated run | `AUTH_MODE=jwt` | Same as integrated run | Integrated run **plus** MCP host demo, agent (e.g. LangGraph), Tempo capture, JWT load — section [Full lab session](#full-lab-session) below |
+| **Multibackend assay** | `gateway.real.yaml` | `AUTH_MODE=jwt` | stdio MCP via `npx` | Gateway evidence (smoke, JWT, Prom means, recall) — [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) |
+| **LangGraph agent assay** | Same as multibackend assay | `AUTH_MODE=jwt` | Same as multibackend assay | Multibackend assay **plus** MCP host demo, agent (e.g. LangGraph), Tempo capture, JWT load — section [LangGraph agent assay](#langgraph-agent-assay) below |
 
-The integrated lab run **does not** use `make sre-up`. Its primary load evidence uses JWT smoke traffic + Prometheus internal means (documented in calibration-results). JWT-aware `scripts/loadtest` is supported via `-token` and was measured in the full lab session.
+The multibackend assay **does not** use `make sre-up`. Its primary load evidence uses JWT smoke traffic + Prometheus internal means (documented in calibration-results). JWT-aware `scripts/loadtest` is supported via `-token` and was measured in the LangGraph agent assay.
 
-The full lab session **extends** the integrated run in the same session (or immediately after, same gateway config). Record outcomes under *Full lab session* in [calibration-results.md](calibration-results.md).
+The LangGraph agent assay **extends** the multibackend assay in the same session (or immediately after, same gateway config). Record outcomes under *LangGraph agent assay* in [calibration-results.md](calibration-results.md).
 
 ---
 
 ## Prerequisites
 
-| Step | SRE mock | Integrated lab run |
+| Step | SRE mock | Multibackend assay |
 |------|----------|-------------------|
 | Dependencies | `make docker-up` | `make docker-up` (no `sre-up`) |
 | Mocks (optional) | `make sre-up` | — |
@@ -44,7 +44,7 @@ export PORT=18080
 make run
 ```
 
-### Integrated lab run — start gateway
+### Multibackend assay — start gateway
 
 See [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) (JWT keys, `PORT=18080`, macOS filesystem path).
 
@@ -54,7 +54,7 @@ Check: `curl -sf http://127.0.0.1:${PORT}/readyz` (or `/healthz`).
 
 ## 1. Upstreams and namespaced tools
 
-| Check | SRE mock | Integrated lab run |
+| Check | SRE mock | Multibackend assay |
 |-------|----------|-------------------|
 | `tools/list` returns `prefix__name` | ✓ | ✓ |
 | `tools/call` on three silos | `make sre-smoke` or manual | smoke_e2e ×3 (prom/k8s/gh) |
@@ -72,7 +72,7 @@ Proves SSE + `Mcp-Session-Id` + initialize handshake without an LLM.
 GATEWAY_URL=http://127.0.0.1:${PORT} go run ./scripts/mcp_host_demo
 ```
 
-With JWT (integrated lab run): set `GATEWAY_JWT` or use `scripts/smoke_e2e.sh` with `SMOKE_JWT`.
+With JWT (multibackend assay): set `GATEWAY_JWT` or use `scripts/smoke_e2e.sh` with `SMOKE_JWT`.
 
 | Check | Done |
 |-------|------|
@@ -88,9 +88,9 @@ Details: [scripts/mcp_host_demo/README.md](../../scripts/mcp_host_demo/README.md
 | Scenario | Action |
 |----------|--------|
 | SRE mock | Skip if `AUTH_MODE=none`; document skip |
-| Integrated lab run | **Required** — [scenario-jwt-allowlist.md](scenario-jwt-allowlist.md) + [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) |
+| Multibackend assay | **Required** — [scenario-jwt-allowlist.md](scenario-jwt-allowlist.md) + [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) |
 
-| Check | Expected (integrated lab run, recorded) |
+| Check | Expected (multibackend assay, recorded) |
 |-------|----------------------------------------|
 | Allowed `tools/call` | SMOKE OK |
 | Disallowed `tools/call` | JSON-RPC **-32003** |
@@ -106,15 +106,15 @@ go run ./scripts/loadtest -url http://127.0.0.1:${PORT} -mode direct -workers 10
 go run ./scripts/loadtest -url http://127.0.0.1:${PORT} -mode semantic -workers 10 -duration 45s
 ```
 
-Copy `latency_p95_ms` into [calibration-results.md](calibration-results.md) (baseline section). Semantic mode needs a catalog matching your intents.
+Copy `latency_p95_ms` into [calibration-results.md](calibration-results.md) (calibration section). Semantic mode needs a catalog matching your intents.
 
-### Integrated lab run — JWT smoke load
+### Multibackend assay — JWT smoke load
 
 Repeat `scripts/smoke_e2e.sh` (parallel + sequential) with `SMOKE_JWT`. Record Prometheus **mean** internal latency per phase — see [calibration-results.md](calibration-results.md). Do **not** rely on histogram p95 for sub-ms phases.
 
-| Mode | Integrated lab run status (2026-05-30) |
+| Mode | Multibackend assay status (2026-05-30) |
 |------|--------------------------------------|
-| loadtest direct/semantic under JWT | Not measured in that session (historical); measured in full lab session with `-token` |
+| loadtest direct/semantic under JWT | Not measured in that session (historical); measured in LangGraph agent assay with `-token` |
 | JWT smoke | 60× parallel + 20× sequential |
 
 More detail: [calibration-run.md](calibration-run.md), [scripts/loadtest/README.md](../../scripts/loadtest/README.md).
@@ -129,7 +129,7 @@ With `make docker-up` and OTLP exported from the gateway:
 2. Query internal phase latency — **mean** recommended when samples are sub-ms ([calibration-results.md](calibration-results.md)).
 3. Optional Tempo: [router-trace-capture.md](router-trace-capture.md) (Tempo is in-cluster only in default Compose; host capture via Grafana).
 
-During a re-run, if Prometheus/Tempo steps are skipped, mark **Not measured** with reason in [calibration-results.md](calibration-results.md). Integrated lab run (2026-05-30) means are already recorded there.
+During a re-run, if Prometheus/Tempo steps are skipped, mark **Not measured** with reason in [calibration-results.md](calibration-results.md). Multibackend assay (2026-05-30) means are already recorded there.
 
 ---
 
@@ -146,11 +146,11 @@ Host integration: [CONNECTING_AGENTS.md](../CONNECTING_AGENTS.md).
 
 ---
 
-## Full lab session
+## LangGraph agent assay
 
-Run **after** integrated lab run checks (or repeat integrated sanity first). Extends the integrated run with MCP host demo, conversational agent, optional Tempo, and JWT-aware load.
+Run **after** multibackend assay checks (or repeat multibackend sanity first). Extends the multibackend assay with MCP host demo, conversational agent, optional Tempo, and JWT-aware load.
 
-### Prerequisites (same as integrated lab run)
+### Prerequisites (same as multibackend assay)
 
 [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md): `make docker-up`, JWT keys, `gateway.real.yaml`, `ROUTER_MODE=on`, OTLP, three stdio backends. Keep `PORT=18080` stable.
 
@@ -170,7 +170,7 @@ See [scripts/mcp_host_demo/README.md](../../scripts/mcp_host_demo/README.md) for
 
 | Check | Expected |
 |-------|----------|
-| Same `GATEWAY_URL` as integrated run | No config drift |
+| Same `GATEWAY_URL` as multibackend assay | No config drift |
 | `Authorization: Bearer` | When `AUTH_MODE=jwt` |
 | `tools/call` via agent | ≥1 success; capture log or trace id for the evaluation record |
 
@@ -182,26 +182,26 @@ Details: [CONNECTING_AGENTS.md](../CONNECTING_AGENTS.md).
 
 1. Generate traffic (agent or smoke).
 2. Open Grafana (Compose stack), Prometheus + Tempo datasources.
-3. Follow [router-trace-capture.md](router-trace-capture.md) (optional; 2026-06-08 full lab session recorded one Tempo trace as **Measured** via Grafana proxy — see [calibration-results.md](calibration-results.md)).
+3. Follow [router-trace-capture.md](router-trace-capture.md) (optional; 2026-06-08 LangGraph agent assay recorded one Tempo trace as **Measured** via Grafana proxy — see [calibration-results.md](calibration-results.md)).
 4. On re-runs only: store one trace link or screenshot next to new results.
 
-If Tempo capture is skipped during a re-run, mark **Not measured** with reason in the *Full lab session* table (2026-06-08 already records one trace as **Measured** via Grafana proxy; see [calibration-results.md](calibration-results.md)).
+If Tempo capture is skipped during a re-run, mark **Not measured** with reason in the *LangGraph agent assay* table (2026-06-08 already records one trace as **Measured** via Grafana proxy; see [calibration-results.md](calibration-results.md)).
 
 ### Load under JWT
 
 | Option | Command / approach |
 |--------|-------------------|
 | **Preferred** | `scripts/loadtest` with `-token` / `LOADTEST_JWT`, `-tool`, `-args` (use `-workers 1` under JWT; see [errors.md](../errors.md#known-limitations-multiplexing)) |
-| **Alternative** | Repeat JWT `smoke_e2e` (parallel + sequential) as in the integrated run; record Prom **means** only |
+| **Alternative** | Repeat JWT `smoke_e2e` (parallel + sequential) as in the multibackend assay; record Prom **means** only |
 
 ### Record results (re-runs only)
 
-When re-running the full lab session after stack or config changes, copy measured values into [calibration-results.md](calibration-results.md) → **Full lab session**. Do not invent numbers. Mark **Not measured** with a one-line reason for every skipped row. The 2026-06-08 session is already recorded; reviewers can cite that table as-is.
+When re-running the LangGraph agent assay after stack or config changes, copy measured values into [calibration-results.md](calibration-results.md) → **LangGraph agent assay**. Do not invent numbers. Mark **Not measured** with a one-line reason for every skipped row. The 2026-06-08 session is already recorded; reviewers can cite that table as-is.
 
-### What the full lab session does not claim
+### What the LangGraph agent assay does not claim
 
 - Production Kubernetes / Prometheus / GitHub APIs (still reference MCP servers over stdio).
-- Replacing integrated lab run numbers. The integrated run remains the primary recorded gateway benchmark.
+- Replacing multibackend assay numbers. The multibackend assay remains the primary recorded gateway benchmark.
 - OTel histogram p95 artefacts for sub-ms internal phases (documented limitation; use **means** — see [calibration-results.md](calibration-results.md) and [errors.md](../errors.md#known-limitations-multiplexing)).
 
 ---
@@ -210,8 +210,8 @@ When re-running the full lab session after stack or config changes, copy measure
 
 | Goal | Doc / command |
 |------|----------------|
-| Real stdio + JWT (integrated lab) | [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) |
-| Full lab (host + agent + Tempo + JWT load) | [Full lab session](#full-lab-session) above |
+| Real stdio + JWT (multibackend assay) | [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) |
+| LangGraph agent assay (host + agent + Tempo + JWT load) | [LangGraph agent assay](#langgraph-agent-assay) above |
 | Add a real upstream | [ADDING_BACKENDS.md](../ADDING_BACKENDS.md) |
 | SRE three-backend mocks | [scenario-sre-multibackend.md](scenario-sre-multibackend.md) |
 | Record recall/latency | [calibration-results.md](calibration-results.md) |

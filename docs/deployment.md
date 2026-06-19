@@ -62,7 +62,7 @@ make run
 
 `/readyz` checks Qdrant and embed when the router is active. Upstream MCP servers are **not** probed at readiness (handled per request).
 
-### Integrated lab — real stdio backends + JWT
+### Multibackend assay — real stdio backends + JWT
 
 For end-to-end validation with official MCP servers over stdio (not HTTP mocks), JWT, and OTLP:
 

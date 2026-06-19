@@ -565,7 +565,7 @@ Common Go ecosystem libraries in use: `github.com/golang-jwt/jwt/v5`, `github.co
 | Mode | Behavior |
 | ----- | -------------------------------------------------------------------------------------------------------------------------------- |
 | Local dev | `AUTH_MODE=none` or JWT without RAR: minimal validation only — **not** safe for public exposure ([DEVELOPER.md](../DEVELOPER.md)). |
-| Production-style | `AUTH_MODE=jwt` + RAR merge + JSON Schema + audit — implemented; use in integrated lab ([scenario-real-backends-jwt.md](../evaluation/scenario-real-backends-jwt.md)). |
+| Production-style | `AUTH_MODE=jwt` + RAR merge + JSON Schema + audit — implemented; use in multibackend assay ([scenario-real-backends-jwt.md](../evaluation/scenario-real-backends-jwt.md)). |
 
 
 #### C.8 Security acceptance criteria — **met**
@@ -722,7 +722,7 @@ Internal phase **mean** latency ≪ 50 ms budget under lab load — see [calibra
 - Logs for failed requests include `trace_id` (`internal/telemetry/slog.go`).
 - Integration tests verify trace context in backend goroutines (`internal/telemetry`).
 
-**Evidence:** Compose stack (`make docker-up`), integrated / full lab calibration, `make ci`.
+**Evidence:** Compose stack (`make docker-up`), calibration, multibackend and LangGraph agent assays, `make ci`.
 
 ---
 

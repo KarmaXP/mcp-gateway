@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Idempotent lab JWT key pair for integrated sessions (gateway.real.yaml).
+# Idempotent lab JWT key pair for multibackend assay sessions (gateway.real.yaml).
 # Keys live under /tmp so they survive without .env; regenerate with: rm /tmp/mcp-lab-jwt.*
 set -euo pipefail
 

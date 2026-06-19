@@ -42,7 +42,7 @@ Start with the [repository README](../README.md), then use this map.
 |----------|----------|
 | Index of evaluation guides | [evaluation/README.md](evaluation/README.md) |
 | Pre-agent integration (one session) | [evaluation/integration-checklist.md](evaluation/integration-checklist.md) |
-| Real backends + JWT (integrated lab) | [evaluation/scenario-real-backends-jwt.md](evaluation/scenario-real-backends-jwt.md) |
+| Real backends + JWT (multibackend assay) | [evaluation/scenario-real-backends-jwt.md](evaluation/scenario-real-backends-jwt.md) |
 | Recorded calibration numbers | [evaluation/calibration-results.md](evaluation/calibration-results.md) |
 | Multi-backend SRE routing | [evaluation/scenario-sre-multibackend.md](evaluation/scenario-sre-multibackend.md) |
 | JWT tool allow-list | [evaluation/scenario-jwt-allowlist.md](evaluation/scenario-jwt-allowlist.md) |

@@ -77,7 +77,7 @@ make run
 | Architecture overview | **[Architecture](docs/architecture/README.md)** |
 | HTTP contract (OpenAPI) | **[openapi.yaml](docs/artifacts/openapi/openapi.yaml)** |
 | Measure router quality and latency | **[Calibration runbook](docs/evaluation/calibration-run.md)** · **[Recorded results](docs/evaluation/calibration-results.md)** |
-| Real MCP backends + JWT (integrated lab) | **[Real backends scenario](docs/evaluation/scenario-real-backends-jwt.md)** |
+| Real MCP backends + JWT (multibackend assay) | **[Real backends scenario](docs/evaluation/scenario-real-backends-jwt.md)** |
 | Multi-backend SRE walkthrough | **[SRE scenario](docs/evaluation/scenario-sre-multibackend.md)** |
 
 ---
@@ -90,7 +90,7 @@ make run
 | ✅ **Available** | Example configs: single-backend demo, alpha/beta, SRE three-backend layout |
 | 📖 **Documented pattern** | LangGraph (or any MCP host) calling the gateway, see [Connecting agents](docs/CONNECTING_AGENTS.md); you implement the agent in your own repo |
 | Operator-owned | Real MCP backends (Kubernetes, Prometheus, GitHub, …) and production deployment |
-| 📊 **Recorded** | Lab results in [calibration-results.md](docs/evaluation/calibration-results.md) (baseline 2026-05-18, integrated run 2026-05-30, full lab 2026-06-08) |
+| 📊 **Recorded** | Lab results in [calibration-results.md](docs/evaluation/calibration-results.md) (calibration 2026-05-18, multibackend assay 2026-05-30, LangGraph agent assay 2026-06-08) |
 | Optional re-calibration | Re-run when tuning router or stack; see [calibration runbook](docs/evaluation/calibration-run.md). Canonical results: [calibration-results.md](docs/evaluation/calibration-results.md) |
 
 ---
