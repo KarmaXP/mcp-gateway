@@ -15,6 +15,8 @@ vendor/
 .vscode/
 .idea/
 .cursor/
+.claude/
+**/.claude/
 *.swp
 
 # Logs and temporary files

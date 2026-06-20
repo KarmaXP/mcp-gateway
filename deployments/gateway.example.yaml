@@ -60,9 +60,8 @@
 # Requests without Origin header are still allowed.
 # gateway:
 #   allowed_origins:
-#     - https://chat.openai.com
-#     - https://cursor.sh
-# Env: GATEWAY_ALLOWED_ORIGINS=https://chat.openai.com,https://cursor.sh
+#     - https://app.example.com
+# Env: GATEWAY_ALLOWED_ORIGINS=https://app.example.com
 
 backends:
   - id: backend-alpha

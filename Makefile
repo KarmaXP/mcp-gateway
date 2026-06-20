@@ -79,7 +79,7 @@ help:
 # Targets Implementation
 
 build:
-	@echo "🛠️  Building $(BINARY_NAME)..."
+	@echo "Building $(BINARY_NAME)..."
 	@mkdir -p bin
 	@go build -o bin/$(BINARY_NAME) $(MAIN_PATH)
 
@@ -99,7 +99,7 @@ lab-jwt-verify: lab-jwt-keys
 	@bash scripts/lab_jwt_keys.sh verify
 
 demo:
-	@echo "🎯 Plug-and-play demo (no Docker)..."
+	@echo "Plug-and-play demo (no Docker)..."
 	@chmod +x scripts/smoke_test.sh
 	@MCP_GATEWAY_CONFIG=$(DEMO_CONFIG) SMOKE_AUTO_START_GATEWAY=1 DEMO_PRINT_HELP=1 bash scripts/smoke_test.sh
 
@@ -112,7 +112,7 @@ demo-backends-stop:
 	@bash scripts/demo_backends.sh stop
 
 demo-full: bootstrap demo-backends
-	@echo "🎯 Multi-backend demo (gateway.example.yaml + alpha__echo)..."
+	@echo "Multi-backend demo (gateway.example.yaml + alpha__echo)..."
 	@chmod +x scripts/demo_multibackend_smoke.sh
 	@MCP_GATEWAY_CONFIG=$(EXAMPLE_CONFIG) bash scripts/demo_multibackend_smoke.sh
 	@$(MAKE) demo-backends-stop
@@ -138,7 +138,7 @@ sre-backends-stop:
 	@bash scripts/sre_backends.sh stop
 
 sre-up: bootstrap sre-backends
-	@echo "🐳 Starting compose dependencies (Qdrant, embed, OTel)..."
+	@echo "Starting compose dependencies (Qdrant, embed, OTel)..."
 	@$(COMPOSE) up -d || printf "WARN: docker-up failed — start Docker for router=on; mocks on 3201–3203 are up\n"
 	@echo "SRE mocks ready. Run: make sre-smoke (router=on when Qdrant+embed healthy)"
 
@@ -154,7 +154,7 @@ gen-router-eval-catalog:
 	@echo "Wrote docs/evaluation/router-eval-catalog.json"
 
 run:
-	@echo "🚀 Starting $(BINARY_NAME)..."
+	@echo "Starting $(BINARY_NAME)..."
 	@bash -c 'set -a && ([ -f .env ] && . ./.env || true) && set +a && \
 		: "$${MCP_GATEWAY_CONFIG:=$(DEMO_CONFIG)}" && export MCP_GATEWAY_CONFIG && \
 		exec go run $(MAIN_PATH)'
@@ -162,7 +162,7 @@ run:
 SMOKE_JWT_GATEWAY_PORT ?= 18082
 
 stop:
-	@echo "🛑 Stopping $(BINARY_NAME)..."
+	@echo "Stopping $(BINARY_NAME)..."
 	@bash -c 'set -a && ([ -f .env ] && . ./.env || true) && set +a; \
 		seen=""; \
 		kill_port() { \
@@ -176,19 +176,19 @@ stop:
 		echo "Stopped gateway listeners (PORT/GATEWAY_PORT from .env when set). Use make sre-down / demo-backends-stop for mocks."'
 
 test:
-	@echo "🧪 Running vet + tests..."
+	@echo "Running vet + tests..."
 	@go vet ./...
 	@go test -v -race ./...
 
 test-cover:
-	@echo "🧪 Coverage (internal packages)..."
+	@echo "Coverage (internal packages)..."
 	@mkdir -p bin
 	@go vet ./...
 	@go test -race -coverprofile=bin/coverage.out -covermode=atomic ./internal/...
 	@go tool cover -func=bin/coverage.out | tail -n 25
 
 test-integration:
-	@echo "🧪 Integration tests (JWT/RPC always; Qdrant+embed+OTLP when reachable — see docs/DEVELOPER.md)..."
+	@echo "Integration tests (JWT/RPC always; Qdrant+embed+OTLP when reachable — see docs/DEVELOPER.md)..."
 	@go vet ./...
 	@QDRANT_URL=$${QDRANT_URL:-http://127.0.0.1:6333} \
 	 EMBED_URL=$${EMBED_URL:-http://127.0.0.1:8001} \
@@ -199,65 +199,65 @@ test-integration:
 		./internal/telemetry/...
 
 ci:
-	@echo "🤖 CI parity (.github/workflows/ci.yml — lint-and-unit)..."
+	@echo "CI parity (.github/workflows/ci.yml — lint-and-unit)..."
 	@$(MAKE) lint
 	@go vet ./...
 	@go test -race -count=1 ./...
 
 smoke:
-	@echo "🔥 Smoke test (smoke_upstream + gateway MCP over curl)..."
+	@echo "Smoke test (smoke_upstream + gateway MCP over curl)..."
 	@chmod +x scripts/smoke_test.sh
 	@SMOKE_AUTO_START_GATEWAY=1 bash scripts/smoke_test.sh
 
 smoke-e2e:
-	@echo "🔥 Smoke E2E (expects already-running gateway/upstream)..."
+	@echo "Smoke E2E (expects already-running gateway/upstream)..."
 	@chmod +x scripts/smoke_e2e.sh
 	@bash scripts/smoke_e2e.sh
 
 fmt:
-	@echo "📝 gofmt + normalize '=' spacing in const/var blocks..."
+	@echo "gofmt + normalize '=' spacing in const/var blocks..."
 	@gofmt -w .
 	@chmod +x scripts/normalize-go-eq-spacing.sh
 	@./scripts/normalize-go-eq-spacing.sh
 
 lint:
-	@echo "🔍 golangci-lint..."
+	@echo "golangci-lint..."
 	@go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8 run ./...
 	@chmod +x scripts/check-go-eq-spacing.sh
 	@./scripts/check-go-eq-spacing.sh
 
 tidy:
-	@echo "📦 Tidying Go modules..."
+	@echo "Tidying Go modules..."
 	@go mod tidy
 	@go mod verify
 
 clean:
-	@echo "🧹 Cleaning..."
+	@echo "Cleaning..."
 	@rm -rf bin/
 	@rm -rf tmp/
 
 docker-build:
-	@echo "🐳 Building gateway image..."
+	@echo "Building gateway image..."
 	@docker build -t mcp-gateway:dev .
 
 docker-up:
-	@echo "🐳 Starting mcp-gateway compose stack (dependencies)..."
+	@echo "Starting mcp-gateway compose stack (dependencies)..."
 	@$(COMPOSE) up -d
 
 docker-up-full: docker-build
-	@echo "🐳 Starting mcp-gateway compose stack (dependencies + gateway app)..."
+	@echo "Starting mcp-gateway compose stack (dependencies + gateway app)..."
 	@$(COMPOSE) --profile gateway up -d
 
 docker-up-demo:
-	@echo "🐳 Starting compose profile demo (mock alpha/beta on 3101/3102)..."
+	@echo "Starting compose profile demo (mock alpha/beta on 3101/3102)..."
 	@$(COMPOSE) --profile demo up -d
 
 docker-up-sre:
-	@echo "🐳 Starting compose profile sre (mock k8s/prom/gh on 3201–3203)..."
+	@echo "Starting compose profile sre (mock k8s/prom/gh on 3201–3203)..."
 	@$(COMPOSE) --profile sre up -d
 
 docker-down:
-	@echo "🛑 Stopping mcp-gateway compose stack..."
+	@echo "Stopping mcp-gateway compose stack..."
 	@$(COMPOSE) --profile gateway --profile demo --profile sre down --remove-orphans
 	@-$(COMPOSE_LEGACY) --profile gateway --profile demo --profile sre down --remove-orphans
 
@@ -265,11 +265,11 @@ docker-logs:
 	@$(COMPOSE) --profile gateway logs -f
 
 docker-clean:
-	@echo "🧹 Removing containers, volumes and images..."
+	@echo "Removing containers, volumes and images..."
 	@$(COMPOSE) --profile gateway --profile demo --profile sre down -v --remove-orphans
 	@-$(COMPOSE_LEGACY) --profile gateway --profile demo --profile sre down -v --remove-orphans
 	@docker rmi mcp-gateway:dev mcp-gateway-embed:dev mcp-gateway-mock:dev 2>/dev/null || true
 
 calibration-up: docker-up-full
-	@echo "🧪 Calibration stack status (wait for healthy)..."
+	@echo "Calibration stack status (wait for healthy)..."
 	@$(COMPOSE) --profile gateway ps
