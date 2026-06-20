@@ -34,7 +34,7 @@ Stop everything: `make docker-down`.
 
 ## Published ports (defaults)
 
-Override with `HOST_PORT_*` in `.env` (see [`.env.example`](../.env.example) — Infra / Docker Compose section).
+Override with `HOST_PORT_*` in `.env` (see [`.env.example`](../.env.example) — Docker Compose host ports).
 
 | Port | Service |
 |------|---------|
@@ -62,7 +62,7 @@ make run
 
 `/readyz` checks Qdrant and embed when the router is active. Upstream MCP servers are **not** probed at readiness (handled per request).
 
-### Multibackend assay — real stdio backends + JWT
+### Multibackend benchmark — real stdio backends + JWT
 
 For end-to-end validation with official MCP servers over stdio (not HTTP mocks), JWT, and OTLP:
 

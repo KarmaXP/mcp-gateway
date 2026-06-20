@@ -174,7 +174,7 @@ TOOL_NAME=billing__your_tool GATEWAY_URL=http://127.0.0.1:8080 go run ./scripts/
 | Single smoke upstream | (started by `make demo`) | `gateway.demo.yaml` |
 | Alpha + beta | `make demo-backends` | `gateway.example.yaml` |
 | k8s + prom + gh | `make sre-backends` | `gateway.sre.example.yaml` |
-| Real stdio MCP (multibackend assay) | `npx` servers via YAML `command` | [`gateway.real.yaml`](../deployments/gateway.real.yaml) |
+| Real stdio MCP (multibackend benchmark) | `npx` servers via YAML `command` | [`gateway.real.yaml`](../deployments/gateway.real.yaml) |
 
 Real-backend walkthrough: [scenario-real-backends-jwt.md](evaluation/scenario-real-backends-jwt.md).
 

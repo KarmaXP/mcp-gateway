@@ -6,19 +6,19 @@ New to MCP? It is the shared wire format between an assistant (or agent) and the
 
 ---
 
-## ✨ What it does
+## What it does
 
-- **Multiplexes** several MCP servers behind one host-facing URL (SSE + JSON-RPC).
-- **Namespaces** tools as `prefix__tool_name` so catalogs stay unambiguous.
-- **Routes** natural-language intent to the right tool when the router is enabled (vector search + rules).
-- **Secures** ingress with JWT, allow-lists, JSON Schema checks, and audit hooks.
-- **Observes** traffic via OpenTelemetry, Prometheus, Grafana, and Tempo (Docker stack).
+- 🔀 **Multiplexes** several MCP servers behind one host-facing URL (SSE + JSON-RPC).
+- 🏷️ **Namespaces** tools as `prefix__tool_name` so catalogs stay unambiguous.
+- 🧭 **Routes** natural-language intent to the right tool when the router is enabled (vector search + rules).
+- 🔒 **Secures** ingress with JWT, allow-lists, JSON Schema checks, and audit hooks.
+- 📊 **Observes** traffic via OpenTelemetry, Prometheus, Grafana, and Tempo (Docker stack).
 
 Built for platform, SRE, and security-minded teams standardizing on MCP.
 
 ---
 
-## 🚀 Quick start
+## Quick start 🚀
 
 **Requirements:** Go 1.26+ ([`go.mod`](go.mod)). Docker is optional.
 
@@ -38,7 +38,7 @@ make bootstrap   # copies .env.example → .env if missing
 
 ---
 
-## 🧪 Try more locally
+## Try more locally 🧪
 
 | Command | What you get |
 |---------|----------------|
@@ -61,9 +61,9 @@ make run
 
 ---
 
-## 📚 Documentation
+## Documentation 📖
 
-**Full index:** **[docs/README.md](docs/README.md)**
+**Full index:** 📚 **[docs/README.md](docs/README.md)**
 
 | I want to… | Read |
 |------------|------|
@@ -77,25 +77,25 @@ make run
 | Architecture overview | **[Architecture](docs/architecture/README.md)** |
 | HTTP contract (OpenAPI) | **[openapi.yaml](docs/artifacts/openapi/openapi.yaml)** |
 | Measure router quality and latency | **[Calibration runbook](docs/evaluation/calibration-run.md)** · **[Recorded results](docs/evaluation/calibration-results.md)** |
-| Real MCP backends + JWT (multibackend assay) | **[Real backends scenario](docs/evaluation/scenario-real-backends-jwt.md)** |
+| Real MCP backends + JWT (multibackend benchmark) | **[Real backends scenario](docs/evaluation/scenario-real-backends-jwt.md)** |
 | Multi-backend SRE walkthrough | **[SRE scenario](docs/evaluation/scenario-sre-multibackend.md)** |
 
 ---
 
-## 🗺️ Roadmap
+## Roadmap
 
 | Status | Item |
 |--------|------|
-| ✅ **Available** | Host transport (SSE + JSON-RPC), multi-backend merge, JWT + policy, semantic router, compose observability stack, local mocks and smoke targets |
-| ✅ **Available** | Example configs: single-backend demo, alpha/beta, SRE three-backend layout |
-| 📖 **Documented pattern** | LangGraph (or any MCP host) calling the gateway, see [Connecting agents](docs/CONNECTING_AGENTS.md); you implement the agent in your own repo |
+| Available | Host transport (SSE + JSON-RPC), multi-backend merge, JWT + policy, semantic router, compose observability stack, local mocks and smoke targets |
+| Available | Example configs: single-backend demo, alpha/beta, SRE three-backend layout |
+| **Documented pattern** | LangGraph (or any MCP host) calling the gateway, see [Connecting agents](docs/CONNECTING_AGENTS.md); you implement the agent in your own repo |
 | Operator-owned | Real MCP backends (Kubernetes, Prometheus, GitHub, …) and production deployment |
-| 📊 **Recorded** | Lab results in [calibration-results.md](docs/evaluation/calibration-results.md) (calibration 2026-05-18, multibackend assay 2026-05-30, LangGraph agent assay 2026-06-08) |
+| **Recorded** | Lab results in [calibration-results.md](docs/evaluation/calibration-results.md) (calibration 2026-05-18, multibackend benchmark 2026-05-30, LangGraph agent integration run 2026-06-08) |
 | Optional re-calibration | Re-run when tuning router or stack; see [calibration runbook](docs/evaluation/calibration-run.md). Canonical results: [calibration-results.md](docs/evaluation/calibration-results.md) |
 
 ---
 
-## 🛠️ Development
+## Development 🛠️
 
 Contributors and maintainers:
 
@@ -108,6 +108,6 @@ See **[docs/DEVELOPER.md](docs/DEVELOPER.md)** for auth setup, OpenAPI, and inte
 
 ---
 
-## 📄 License
+## License
 
 See [LICENSE](LICENSE).
