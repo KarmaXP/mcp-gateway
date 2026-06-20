@@ -79,10 +79,6 @@ func TestDispatchResponseDeliversToPending(t *testing.T) {
 	}
 }
 
-// TestDispatchResponseAbortsPendingWhenChannelFull asserts dispatch records pendingErr when the
-// pending channel is full. Call() checks pendingErr after <-ch (parity with mcphttp/client.go).
-// mcphttp has TestCallReturnsErrorWhenPendingChannelFull (blocked POST holds Call before select);
-// stdio has no stable equivalent—write returns before select, so a mirror E2E races and is omitted.
 func TestDispatchResponseAbortsPendingWhenChannelFull(t *testing.T) {
 	t.Parallel()
 	c, cleanup, err := NewStdioMCPUpstream(context.Background(), "u1", "alpha", []string{"true"}, nil, 1)
@@ -116,8 +112,6 @@ func TestDispatchResponseAbortsPendingWhenChannelFull(t *testing.T) {
 	require.False(t, ok)
 }
 
-// TestCallClearsPendingErrOnContextCancel ensures pendingErr does not leak when Call
-// returns on ctx.Done() (parity with mcphttp/client.go defer cleanup).
 func TestCallClearsPendingErrOnContextCancel(t *testing.T) {
 	t.Parallel()
 	c, cleanup, err := NewStdioMCPUpstream(context.Background(), "u1", "alpha", []string{"sleep", "3600"}, nil, 1)

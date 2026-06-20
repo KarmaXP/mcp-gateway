@@ -14,7 +14,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/router/index"
 )
 
-func TestM37ProbeRestrictedDisallowedWithRouter(t *testing.T) {
+func TestToolsCallDeniedWhenNotInRouterAllowlist(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo", "list"})
 	base := &mapEmbed{dim: 4, vecs: make(map[string][]float32)}
 	tRowList := index.FormatDocument(index.ToolRow{Name: "alpha__list", Description: "list tool"})

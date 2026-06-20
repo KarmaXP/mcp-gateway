@@ -52,16 +52,15 @@ func signTokenClaims(t *testing.T, priv *rsa.PrivateKey, claims *auth.TokenClaim
 	return s
 }
 
-// TestIntegrationJWTPermissionDeniedSkipsBackend verifies a signed JWT with a narrow mcp_tools allow list:
-// tools/call for a disallowed namespaced tool returns JSON-RPC -32003 on SSE and does not forward to the mock upstream.
+// Denied tools/call returns -32003 on SSE without forwarding upstream.
 func TestIntegrationJWTPermissionDeniedSkipsBackend(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in -short mode")
 	}
 
 	priv, pubPEM := testRSAKeyPair(t)
-	const iss = "https://p1.integration.test"
-	const aud = "mcp-gateway-p1"
+	const iss = "https://integration.test"
+	const aud = "mcp-gateway"
 
 	claims := &auth.TokenClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -86,7 +85,7 @@ func TestIntegrationJWTPermissionDeniedSkipsBackend(t *testing.T) {
 	v, err := auth.NewValidator(authCfg)
 	require.NoError(t, err)
 
-	opts := orchestrator.HTTPServerOptions("mcp-gateway-p1-it", authCfg, v, policy.NewHolder(policy.NewEngine(config.PolicySettings{})), ratelimit.Config{})
+	opts := orchestrator.HTTPServerOptions("mcp-gateway-it", authCfg, v, policy.NewHolder(policy.NewEngine(config.PolicySettings{})), ratelimit.Config{})
 	srv := httpserver.New(agg, "", opts...)
 	ts := httptest.NewServer(srv.AsHandler())
 	defer ts.Close()
@@ -166,16 +165,15 @@ func TestIntegrationJWTPermissionDeniedSkipsBackend(t *testing.T) {
 	wg.Wait()
 }
 
-// TestIntegrationJWTEmptyIntersectionDenyAll verifies disjoint JWT mcp_tools and RAR tool_name
-// yields deny-all: tools/list is empty on SSE and tools/call is -32003 without forwarding to upstream.
+// Disjoint JWT and RAR allow lists yield deny-all on list and call.
 func TestIntegrationJWTEmptyIntersectionDenyAll(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in -short mode")
 	}
 
 	priv, pubPEM := testRSAKeyPair(t)
-	const iss = "https://p1.integration.denyall.test"
-	const aud = "mcp-gateway-p1-denyall"
+	const iss = "https://integration.denyall.test"
+	const aud = "mcp-gateway-denyall"
 
 	ad, err := json.Marshal([]map[string]any{
 		{"type": "mcp_tool", "tool_name": "beta__other"},
@@ -207,7 +205,7 @@ func TestIntegrationJWTEmptyIntersectionDenyAll(t *testing.T) {
 	v, err := auth.NewValidator(authCfg)
 	require.NoError(t, err)
 
-	opts := orchestrator.HTTPServerOptions("mcp-gateway-p1-denyall-it", authCfg, v, policy.NewHolder(policy.NewEngine(config.PolicySettings{})), ratelimit.Config{})
+	opts := orchestrator.HTTPServerOptions("mcp-gateway-denyall-it", authCfg, v, policy.NewHolder(policy.NewEngine(config.PolicySettings{})), ratelimit.Config{})
 	srv := httpserver.New(agg, "", opts...)
 	ts := httptest.NewServer(srv.AsHandler())
 	defer ts.Close()

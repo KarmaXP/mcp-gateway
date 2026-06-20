@@ -40,9 +40,9 @@ func TestSemanticVectorRoutingWithQdrantAndMiniLM(t *testing.T) {
 	}
 
 	skipUnlessIntegrationDeps(t, probeURL(ctx, qURL+"/collections"),
-		"Qdrant not reachable at %s — start compose (qdrant service)", qURL)
+		"Qdrant not reachable at %s; start compose qdrant service", qURL)
 	skipUnlessIntegrationDeps(t, probeEmbedService(ctx, embURL),
-		"embed service not reachable at %s — need POST /embed (healthz alone is insufficient; start compose embed on port 8001)", embURL)
+		"embed service not reachable at %s; start compose embed service", embURL)
 
 	coll := integrationQdrantCollectionPrefix + strings.ReplaceAll(uuid.NewString(), "-", "_")
 	st, err := store.NewQdrantVectorStore(qURL, coll, defaults.VectorDimension)
