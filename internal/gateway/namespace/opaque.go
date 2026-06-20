@@ -10,8 +10,7 @@ import (
 // JoinOpaque encodes the native segment when needed so SplitOpaque recovers the original string.
 const opaqueMarker = "gw0:"
 
-// JoinOpaque builds prefix__native for multiplexed resources, prompts metadata, etc.
-// Unlike Join, the native segment may contain "__"; it is wrapped in an opaque encoding when required.
+// JoinOpaque encodes the native segment when it contains the namespace separator.
 func JoinOpaque(prefix, native string) (string, error) {
 	if native == "" {
 		return "", fmt.Errorf("%w: empty native value", ErrInvalidToolName)
@@ -23,7 +22,6 @@ func JoinOpaque(prefix, native string) (string, error) {
 	return Join(prefix, enc)
 }
 
-// SplitOpaque reverses JoinOpaque (and plain Join for values without "__" inside the native part).
 func SplitOpaque(namespaced string) (prefix, native string, err error) {
 	prefix, mid, err := Split(namespaced)
 	if err != nil {

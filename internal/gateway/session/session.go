@@ -143,7 +143,6 @@ func (sm *SessionManager) enqueueBroadcastTask(s *Session, req *rpc.Request) boo
 	}
 }
 
-// BroadcastTasksDropped returns tasks dropped because broadcastTasks was full (best-effort fan-out).
 func (sm *SessionManager) BroadcastTasksDropped() uint64 {
 	if sm == nil {
 		return 0
@@ -166,7 +165,7 @@ type Session struct {
 	ready                bool
 	upstreamInitNotified bool
 
-	// toolHist stores successful tools/call names (namespaced), oldest first, capped for router context.
+	// toolHist: successful tools/call names (namespaced), capped for router context.
 	toolHist []string
 
 	out chan []byte
@@ -189,7 +188,6 @@ func NewSession(parent context.Context, id string, mpx *multiplex.Multiplexer, m
 
 func (s *Session) ID() string { return s.id }
 
-// SubjectMatches reports whether requestSub may use this session (AUTH_MODE=none: both empty).
 func (s *Session) SubjectMatches(requestSub string) bool {
 	if s.ownerSub == "" && requestSub == "" {
 		return true
@@ -197,7 +195,6 @@ func (s *Session) SubjectMatches(requestSub string) bool {
 	return s.ownerSub != "" && s.ownerSub == requestSub
 }
 
-// RecordSuccessfulToolCall implements hostctx.SuccessfulToolCallRecorder.
 func (s *Session) RecordSuccessfulToolCall(namespaced string) {
 	namespaced = strings.TrimSpace(namespaced)
 	if namespaced == "" {
@@ -256,8 +253,6 @@ func (s *Session) EnqueueResponse(resp *rpc.Response) error {
 	return s.enqueueOutbound(b)
 }
 
-// enqueueDispatchResponse delivers resp on the SSE stream. When the outbound buffer is
-// full it emits a JSON-RPC error on SSE and returns nil so POST stays 202 Accepted.
 func (s *Session) enqueueDispatchResponse(resp *rpc.Response) error {
 	if resp == nil {
 		return fmt.Errorf("session: nil rpc response")
@@ -300,7 +295,6 @@ func (s *Session) enqueueBackpressureError(id json.RawMessage) error {
 	return nil
 }
 
-// forceEnqueueOutbound drops the oldest queued frame when needed so a critical frame can be sent.
 func (s *Session) forceEnqueueOutbound(payload []byte) bool {
 	select {
 	case <-s.ctx.Done():

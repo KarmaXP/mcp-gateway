@@ -1,4 +1,4 @@
-// Package mcpupstreammock implements a minimal MCP HTTP+SSE upstream for local demos and smoke tests.
+// Package mcpupstreammock is a minimal MCP HTTP+SSE upstream for tests.
 package mcpupstreammock
 
 import (

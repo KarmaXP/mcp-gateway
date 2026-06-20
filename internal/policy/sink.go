@@ -9,7 +9,6 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
 )
 
-// No tokens or argument payloads in audit records.
 type AuditRecord struct {
 	Outcome       string
 	Reason        string
@@ -19,7 +18,6 @@ type AuditRecord struct {
 	At            time.Time
 }
 
-// Emit must not write tokens or argument bodies.
 type AuditSink interface {
 	Emit(ctx context.Context, rec AuditRecord) error
 }

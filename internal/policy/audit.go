@@ -10,7 +10,6 @@ import (
 // Log attribute key for policy audit records (no secrets in attrs).
 const AuditMessageKey = "mcp_security_audit"
 
-// Emits via AuditSink; toolName/reason must not carry secrets.
 func LogAudit(ctx context.Context, outcome, reason, toolName, subjectID, policyVersion string) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -26,7 +25,6 @@ func LogAudit(ctx context.Context, outcome, reason, toolName, subjectID, policyV
 	_ = currentAuditSink().Emit(ctx, rec)
 }
 
-// Truncated SHA-256 for logs (O5).
 func HashSubject(subjectID string) string {
 	if subjectID == "" {
 		return ""

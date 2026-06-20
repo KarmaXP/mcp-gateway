@@ -7,7 +7,6 @@ import (
 
 type mcpSessionIDKey struct{}
 
-// WithMCPSessionID attaches the host SSE session id for routing telemetry.
 func WithMCPSessionID(parent context.Context, id string) context.Context {
 	if parent == nil {
 		parent = context.Background()
@@ -27,14 +26,12 @@ func MCPSessionIDFromContext(ctx context.Context) string {
 	return s
 }
 
-// SuccessfulToolCallRecorder is invoked by the multiplexer after a successful tools/call upstream result.
 type SuccessfulToolCallRecorder interface {
 	RecordSuccessfulToolCall(namespaced string)
 }
 
 type toolCallRecorderKey struct{}
 
-// WithToolCallRecorder attaches a per-session recorder (typically *session.Session).
 func WithToolCallRecorder(parent context.Context, r SuccessfulToolCallRecorder) context.Context {
 	if parent == nil {
 		parent = context.Background()
@@ -57,7 +54,6 @@ func RecordSuccessfulToolCall(ctx context.Context, namespaced string) {
 
 type recentToolNamesKey struct{}
 
-// WithRecentToolNames passes the last N successful tools/call names for semantic routing (newest last).
 func WithRecentToolNames(parent context.Context, names []string) context.Context {
 	if parent == nil {
 		parent = context.Background()

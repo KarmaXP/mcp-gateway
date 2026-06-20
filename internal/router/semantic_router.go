@@ -201,7 +201,6 @@ func BuildIndexedTools(listJSON []byte, upstreamIDForPrefix func(prefix string) 
 	return buildIndexedToolsFromRows(rows, upstreamIDForPrefix)
 }
 
-// Prefer when tools/list maps are already decoded (avoids a second full JSON parse).
 func BuildIndexedToolsFromMerged(merged []map[string]any, upstreamIDForPrefix func(prefix string) (string, error)) ([]IndexedTool, error) {
 	return buildIndexedToolsFromRows(index.ToolRowsFromListMaps(merged), upstreamIDForPrefix)
 }

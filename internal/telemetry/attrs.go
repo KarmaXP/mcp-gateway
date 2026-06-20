@@ -9,7 +9,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 )
 
-// Low-cardinality span attributes (plan Section 3.D). Do not put unbounded user text here.
+// Low-cardinality span attributes. Do not put unbounded user text here.
 const (
 	AttrMCPMethod = "mcp.method"
 	AttrMCPJSONRPCID = "mcp.jsonrpc.id"
@@ -27,7 +27,7 @@ func AttrJSONRPCID(raw json.RawMessage) attribute.KeyValue {
 	}
 	max := defaults.MaxOTelSpanAttributeBytes
 	if len(s) > max {
-		s = s[:max] + "…"
+		s = s[:max] + "..."
 	}
 	return attribute.String(AttrMCPJSONRPCID, s)
 }

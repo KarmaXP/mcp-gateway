@@ -74,7 +74,7 @@ func (e *Engine) RequiresStrictSchema(namespacedTool string) bool {
 	return ok
 }
 
-// Merged JWT ∪ RAR allow list; empty ⇒ no restriction (full catalog for that principal).
+// Merged JWT and RAR allow list; empty -> no restriction (full catalog for that principal).
 func (e *Engine) EffectiveAllowList(c ClaimsInput) ([]string, error) {
 	if c == nil {
 		return nil, nil

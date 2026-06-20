@@ -14,6 +14,6 @@ const (
 	RequestRejected = -32002
 	PermissionDenied = -32003
 	ToolRoutingAmbiguous = -32004
-	// StrictAggregationFailed means strict backend aggregation rejected the call because one or more upstreams failed.
+	// StrictAggregationFailed when strict aggregation rejects a call with upstream failures.
 	StrictAggregationFailed = -32005
 )

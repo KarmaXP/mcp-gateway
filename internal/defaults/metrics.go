@@ -1,6 +1,6 @@
 package defaults
 
-// OTel metric label values (bounded cardinality; O5).
+// OTel metric label values (bounded cardinality).
 
 const (
 	MetricPolicyOutcomeAllow = "allow"
@@ -33,7 +33,7 @@ const (
 	MetricSessionDropReasonBroadcastQueue = "broadcast_queue_full"
 	MetricSessionDropReasonNotificationOutbound = "notification_outbound_full"
 
-	// Internal hop histogram (Section 3.D): phases and pre-parse method label.
+	// Internal hop histogram phases and pre-parse method label.
 	MetricInternalMethodUnknown = "unknown"
 	MetricInternalPhaseParse = "parse"
 	MetricInternalPhaseSecurity = "security"

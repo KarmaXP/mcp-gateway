@@ -72,7 +72,7 @@ func registerInstruments() error {
 	}
 
 	internalDuration, err = m.Float64Histogram("mcp.gateway.internal.duration_seconds",
-		metric.WithDescription("Time inside the gateway process per phase (excludes upstream MCP backend I/O); basis for Section 6 p95 budget"),
+		metric.WithDescription("Internal hop latency histogram by gateway phase (excludes upstream MCP backend I/O)"),
 		metric.WithUnit("s"),
 	)
 	if err != nil {

@@ -26,7 +26,6 @@ func DefaultLimits() Limits {
 	}
 }
 
-// Does not log argument bodies.
 func CheckArgumentJSON(raw json.RawMessage, lim Limits) error {
 	if lim.MaxBytes <= 0 {
 		lim = DefaultLimits()

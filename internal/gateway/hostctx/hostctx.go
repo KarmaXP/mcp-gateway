@@ -1,3 +1,5 @@
+// Package hostctx stores per-request values on context (intent, subject, allow list).
+// Allow list: nil -> unrestricted; empty slice -> deny-all; non-empty -> restricted names.
 package hostctx
 
 import (
@@ -8,7 +10,7 @@ import (
 // Optional natural-language hint for semantic routing (HTTP header name).
 const HeaderMCPIntent = "X-MCP-Intent"
 
-// Optional host-provided LLM token usage metadata for this RPC ingress request.
+// Optional host-provided token usage metadata for this RPC ingress request.
 const HeaderAgentTokensUsed = "X-Agent-Tokens-Used"
 
 type clientIntentKey struct{}
@@ -30,15 +32,12 @@ func ClientIntentFromContext(ctx context.Context) string {
 
 type allowedToolNamesKey struct{}
 
-// AllowListMode describes JWT/RAR merged allow-list propagation (ADR 0003).
+// AllowListMode is how JWT/RAR allow-list state is stored in context.
 type AllowListMode int
 
 const (
-	// AllowListUnrestricted: no allow-list in context (full catalog for principal).
 	AllowListUnrestricted AllowListMode = iota
-	// AllowListDenyAll: explicit empty intersection or empty policy list (deny every tool).
 	AllowListDenyAll
-	// AllowListRestricted: non-empty allow-list.
 	AllowListRestricted
 )
 
@@ -47,8 +46,6 @@ type allowListState struct {
 	names []string
 }
 
-// AttachPolicyAllowList records the effective JWT/RAR allow list for this authenticated HTTP request.
-// toolNames nil ⇒ explicit unrestricted (overwrites a restricted parent on merge). Non-nil empty ⇒ deny-all.
 func AttachPolicyAllowList(parent context.Context, toolNames []string) context.Context {
 	if parent == nil {
 		parent = context.Background()
@@ -59,8 +56,6 @@ func AttachPolicyAllowList(parent context.Context, toolNames []string) context.C
 	return WithAllowedToolNames(parent, toolNames)
 }
 
-// WithAllowedToolNames attaches the merged JWT/RAR allow list.
-// toolNames nil ⇒ unrestricted (no value stored). Non-nil empty slice ⇒ deny-all.
 func WithAllowedToolNames(parent context.Context, toolNames []string) context.Context {
 	if parent == nil {
 		parent = context.Background()
@@ -81,7 +76,6 @@ func WithAllowedToolNames(parent context.Context, toolNames []string) context.Co
 	})
 }
 
-// AllowListModeFromContext returns how tools/list and tools/call should apply AuthZ.
 func AllowListModeFromContext(ctx context.Context) (AllowListMode, []string) {
 	if ctx == nil {
 		return AllowListUnrestricted, nil
@@ -100,8 +94,6 @@ func AllowListModeFromContext(ctx context.Context) (AllowListMode, []string) {
 	}
 }
 
-// AllowedToolNamesFromContext returns the allow-list slice for policy checks and router signals.
-// nil ⇒ unrestricted; non-nil empty ⇒ deny-all; otherwise a copy of restricted names.
 func AllowedToolNamesFromContext(ctx context.Context) []string {
 	_, names := AllowListModeFromContext(ctx)
 	return names
@@ -109,7 +101,7 @@ func AllowedToolNamesFromContext(ctx context.Context) []string {
 
 type subjectIDKey struct{}
 
-// JWT sub for audit paths: hash before logging (no secrets in audit attrs).
+// WithSubjectID attaches JWT sub for audit (hash before logging).
 func WithSubjectID(parent context.Context, subject string) context.Context {
 	if parent == nil {
 		parent = context.Background()
@@ -150,7 +142,7 @@ func PolicyVersionFromContext(ctx context.Context) string {
 	return s
 }
 
-// MergeRequestValues copies host-scoped values from req onto parent. Parent cancellation and deadlines are unchanged.
+// MergeRequestValues copies host-scoped values from req onto parent.
 func MergeRequestValues(parent, req context.Context) context.Context {
 	if parent == nil {
 		parent = context.Background()

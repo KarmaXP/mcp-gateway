@@ -30,16 +30,15 @@ const (
 	minilmRecall3Threshold = 0.85
 )
 
-// go test -tags=integration -race ./internal/router/eval -run TestRouterEvalVectorRecallMiniLM -v
 func TestRouterEvalVectorRecallMiniLM(t *testing.T) {
 	ctx := context.Background()
 	qURL := defaultFromEnv("QDRANT_URL", defaults.DefaultQdrantHTTPURL)
 	embURL := defaultFromEnv("EMBED_URL", defaults.DefaultEmbedServiceURL)
 
 	skipUnlessIntegrationDeps(t, probeURL(ctx, qURL+"/collections"),
-		"Qdrant not reachable at %s — start compose (qdrant service)", qURL)
+		"Qdrant not reachable at %s; start compose qdrant service", qURL)
 	skipUnlessIntegrationDeps(t, probeEmbedService(ctx, embURL),
-		"embed service not reachable at %s — need POST /embed (healthz alone is insufficient; start compose embed on port 8001)", embURL)
+		"embed service not reachable at %s; start compose embed service", embURL)
 
 	catalog, source := routerEvalCatalogForIntegration(t)
 	require.GreaterOrEqual(t, len(catalog), 20, "router eval harness expects >=20 tools")
