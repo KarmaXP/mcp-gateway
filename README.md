@@ -1,4 +1,11 @@
+[![CI checks](https://img.shields.io/badge/CI-pre--push%20checks%20passed-brightgreen)](.github/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Go](https://img.shields.io/badge/Go-1.26%2B-00ADD8?logo=go&logoColor=white)](go.mod)
+[![OpenAPI 3.1](https://img.shields.io/badge/OpenAPI-3.1-6BA539?logo=openapiinitiative&logoColor=white)](docs/artifacts/openapi/openapi.yaml)
+[![OTel](https://img.shields.io/badge/Observability-OTel-000000?logo=opentelemetry&logoColor=white)](docs/deployment.md)
+
 # MCP Gateway
+
 
 An open-source **[Model Context Protocol (MCP)](https://modelcontextprotocol.io/)** gateway in **Go**: one HTTP endpoint for your AI host, many MCP backends behind it, with optional semantic routing, auth, and observability.
 
@@ -110,4 +117,4 @@ See **[docs/DEVELOPER.md](docs/DEVELOPER.md)** for auth setup, OpenAPI, and inte
 
 ## License
 
-See [LICENSE](LICENSE).
+Licensed under the [MIT License](LICENSE).
