@@ -1,6 +1,6 @@
-# Real MCP backends + JWT (multibackend assay)
+# Real MCP backends + JWT (multibackend benchmark)
 
-Walkthrough for validating the gateway with **stdio MCP servers** (not HTTP mocks), **semantic router**, **JWT**, and **OTLP → Prometheus**. Recorded numbers: [calibration-results.md](calibration-results.md) (multibackend assay, 2026-05-30).
+Walkthrough for validating the gateway with **stdio MCP servers** (not HTTP mocks), **semantic router**, **JWT**, and **OTLP → Prometheus**. Recorded numbers: [calibration-results.md](calibration-results.md) (multibackend benchmark, 2026-05-30).
 
 For mocks-only validation, use [scenario-sre-multibackend.md](scenario-sre-multibackend.md) or the **SRE mock** scenario in [integration-checklist.md](integration-checklist.md).
 
@@ -46,7 +46,7 @@ Filesystem backend root (macOS): create allowed directory and a sample file:
 
 ```bash
 mkdir -p /private/tmp/mcp-gateway-lab
-echo 'lab smoke' > /private/tmp/mcp-gateway-lab/readme.txt
+echo 'fixture-ok' > /private/tmp/mcp-gateway-lab/readme.txt
 ```
 
 On macOS, `/tmp/...` is **not** the same path as `/private/tmp/...` for the filesystem MCP server. Use `/private/tmp/mcp-gateway-lab/...` in tool arguments and in YAML.
@@ -138,7 +138,7 @@ Expect JSON-RPC **-32003** (`tool "prom__list_directory" not allowed for this pr
 
 ## Load for Prometheus (JWT)
 
-**LangGraph agent assay only** — the multibackend assay (2026-05-30) uses 60× parallel + 20× sequential smoke (below) and Prometheus **mean** phase latency. The LangGraph agent assay adds JWT `loadtest` with `-token` ([calibration-results.md](calibration-results.md), [integration-checklist.md](integration-checklist.md#langgraph-agent-assay)).
+**LangGraph agent integration run only** — the multibackend benchmark (2026-05-30) uses 60× parallel + 20× sequential smoke (below) and Prometheus **mean** phase latency. The LangGraph agent integration run adds JWT `loadtest` with `-token` ([calibration-results.md](calibration-results.md), [integration-checklist.md](integration-checklist.md#langgraph-agent-integration-run)).
 
 `scripts/loadtest` sends `Authorization: Bearer` when you pass `-token` or set `LOADTEST_JWT`. Use **one worker** under JWT because concurrent `tools/list` fan-out can collide on upstream JSON-RPC ids (see [known limitations](../errors.md#known-limitations-multiplexing)).
 
@@ -185,7 +185,7 @@ Expected: recall@1 = recall@3 = 1.000 (26/26).
 
 ## Record results
 
-Copy measured values into [calibration-results.md](calibration-results.md) → **Multibackend assay (2026-05-30)** or **LangGraph agent assay (2026-06-08)**.
+Copy measured values into [calibration-results.md](calibration-results.md) → **Multibackend benchmark (2026-05-30)** or **LangGraph agent integration run (2026-06-08)**.
 
 ---
 
@@ -193,5 +193,5 @@ Copy measured values into [calibration-results.md](calibration-results.md) → *
 
 - [scenario-jwt-allowlist.md](scenario-jwt-allowlist.md) — JWT mechanics
 - [calibration-run.md](calibration-run.md) — calibration (mocks, `AUTH_MODE=none`)
-- [integration-checklist.md](integration-checklist.md) — SRE mock (mocks) vs multibackend assay (this doc)
+- [integration-checklist.md](integration-checklist.md) — SRE mock (mocks) vs multibackend benchmark (this doc)
 - [scripts/loadtest/README.md](../../scripts/loadtest/README.md) — JWT loadtest flags

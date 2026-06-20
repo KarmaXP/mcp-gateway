@@ -43,7 +43,7 @@ export PORT=${PORT:-8080}
 make run
 ```
 
-Recorded multibackend and LangGraph agent assays in [calibration-results.md](calibration-results.md) used **`PORT=18080`** on the host gateway (compose gateway may still bind **8080**).
+Recorded multibackend benchmark and LangGraph agent integration runs in [calibration-results.md](calibration-results.md) used **`PORT=18080`** on the host gateway (compose gateway may still bind **8080**).
 
 Gateway health/readiness check (works with current or stricter future readiness):
 
@@ -100,7 +100,7 @@ go test ./internal/router/eval/... -run TestGoldenCasesMRRAndNDCG -v
 
 Run from the `mcp-gateway/` module root in two terminals.
 
-Examples default to **`PORT=8080`**. To reproduce recorded multibackend and LangGraph agent assay numbers, use **`PORT=18080`** (or `GATEWAY_URL=http://127.0.0.1:18080` in smoke scripts).
+Examples default to **`PORT=8080`**. To reproduce recorded multibackend and LangGraph agent integration run numbers, use **`PORT=18080`** (or `GATEWAY_URL=http://127.0.0.1:18080` in smoke scripts).
 
 ### Go MCP loadtest (`scripts/loadtest/main.go`)
 
@@ -170,7 +170,7 @@ For reproducible runs, record both the catalog identifier and template version t
 
 ## Record (template for new runs)
 
-Use when capturing a **new** calibration session. Canonical numbers for calibration (2026-05-18), multibackend assay (2026-05-30), and LangGraph agent assay (2026-06-08) are already in [calibration-results.md](calibration-results.md). Do not invent numbers; prefer explicit **Not measured** / **Not used** with reason.
+Use when capturing a **new** calibration session. Canonical numbers for calibration (2026-05-18), multibackend benchmark (2026-05-30), and LangGraph agent integration run (2026-06-08) are already in [calibration-results.md](calibration-results.md). Record measured values only; mark **Not measured** / **Not used** with reason when skipped.
 
 | Metric / artifact | Command or source | Value | Notes |
 | ----------------- | ----------------- | ----- | ----- |
@@ -314,14 +314,14 @@ Canonical numbers live in [calibration-results.md](calibration-results.md):
 | Run | Date | Scenario |
 |-----|------|----------|
 | Calibration | 2026-05-18 | `gateway.example.yaml`, demo mocks, `AUTH_MODE=none`, recall + direct loadtest |
-| Multibackend assay | 2026-05-30 | `gateway.real.yaml`, stdio MCP, JWT, OTLP; see [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) |
-| LangGraph agent assay | 2026-06-08 | Multibackend assay + MCP host demo, LangGraph agent, Tempo trace, JWT loadtest; see [integration-checklist.md](integration-checklist.md#langgraph-agent-assay) |
+| Multibackend benchmark | 2026-05-30 | `gateway.real.yaml`, stdio MCP, JWT, OTLP; see [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) |
+| LangGraph agent integration run | 2026-06-08 | Multibackend benchmark + MCP host demo, LangGraph agent, Tempo trace, JWT loadtest; see [integration-checklist.md](integration-checklist.md#langgraph-agent-integration-run) |
 
-**Internal 50 ms budget (multibackend assay):** evidence uses Prometheus **mean** latency per phase (`tools/call`), all ≪ 50 ms. Histogram p95 is **not used** when sub-ms samples fall into the first 5 s bucket (artefact ~4750 ms).
+**Internal 50 ms budget (multibackend benchmark):** evidence uses Prometheus **mean** latency per phase (`tools/call`), all ≪ 50 ms. Histogram p95 is **not used** when sub-ms samples fall into the first 5 s bucket (artefact ~4750 ms).
 
 ## Post-calibration (operator tuning, optional)
 
-These are not required for the reference repository; calibration and multibackend assay numbers are already recorded in [calibration-results.md](calibration-results.md).
+These are not required for the reference repository; calibration and multibackend benchmark numbers are already recorded in [calibration-results.md](calibration-results.md).
 
 - **Hybrid reranking:** RRF vs `hybrid_alpha` ablation when retuning router weights.
 - **Vector index tuning:** Qdrant HNSW tuning when recall/latency goals change.
