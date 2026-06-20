@@ -1,13 +1,4 @@
-// Command loadtest benchmarks tools/call latency until the matching JSON-RPC result appears on SSE.
-//
-// Examples: go run ./scripts/loadtest -url http://127.0.0.1:8080 -mode direct -workers 8 -duration 30s
-//
-// Semantic mode needs ROUTER_MODE=on and a healthy embed sidecar.
-//
-// Under AUTH_MODE=jwt (LangGraph agent assay loadtest; multibackend assay uses smoke substitute) pass -token
-// as Authorization: Bearer on the SSE GET and every POST. -tool / -args select the
-// direct tool and its JSON arguments so the call can target real backends, e.g.
-// -tool prom__read_text_file -args '{"path":"/private/tmp/mcp-gateway-lab/readme.txt"}'.
+// Command loadtest benchmarks tools/call latency until the JSON-RPC result appears on SSE.
 package main
 
 import (
@@ -226,11 +217,7 @@ func oneIteration(client *http.Client, base, mode string, cfg callConfig) (callL
 
 var idSeq atomic.Uint64
 
-// nextID returns a small monotonic JSON-RPC id. The gateway forwards the host id
-// verbatim to the upstream, and Node-based MCP servers parse JSON numbers as
-// float64, so ids above 2^53 lose precision and the upstream echoes back a
-// rounded id the gateway cannot match. A plain counter stays in the safe range
-// for the lifetime of any realistic run.
+// nextID stays below 2^53 so Node MCP servers do not round JSON-RPC ids as float64.
 func nextID() int64 {
 	return int64(idSeq.Add(1))
 }

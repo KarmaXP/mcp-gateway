@@ -136,12 +136,7 @@ func run() error {
 	return nil
 }
 
-// nextID returns a small monotonic JSON-RPC id starting at 1. The gateway
-// forwards the host id verbatim to the upstream (tools_call.go), and Node-based
-// MCP servers parse JSON numbers as float64, so ids above 2^53 lose precision
-// and the upstream echoes back a rounded id the gateway cannot match
-// ("backend call failed"). A small counter keeps every id within the safe
-// integer range.
+// nextID stays below 2^53 so Node MCP servers do not round JSON-RPC ids as float64.
 func nextID() int64 {
 	return idSeq.Add(1)
 }

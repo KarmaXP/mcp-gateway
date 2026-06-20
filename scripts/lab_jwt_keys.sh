@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Idempotent lab JWT key pair for multibackend assay sessions (gateway.real.yaml).
+# Idempotent lab JWT key pair for multibackend lab sessions (gateway.real.yaml).
 # Keys live under /tmp so they survive without .env; regenerate with: rm /tmp/mcp-lab-jwt.*
 set -euo pipefail
 
@@ -70,7 +70,7 @@ case "$cmd" in
   verify)
     ensure_keys
     LAB_JWT_PRIVATE_KEY="$KEY" LAB_JWT_PUBLIC_KEY="$PUB" \
-      go test -count=1 -run TestLabJWTPairOnDisk ./tools/gen-jwt/
+      go test -count=1 -run TestDevJWTPairOnDisk ./tools/gen-jwt/
     echo "verify OK: lab JWT pair matches gateway validator (iss=$ISS aud=$AUD)"
     ;;
   -h|--help|help)

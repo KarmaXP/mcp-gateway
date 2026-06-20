@@ -28,7 +28,7 @@ TOOL_NAME=alpha__echo GATEWAY_URL=http://127.0.0.1:8080 go run ./scripts/mcp_hos
 
 Or one shot: `make demo-full`.
 
-### Multibackend assay / LangGraph agent assay (real backends + JWT)
+### Multibackend benchmark / LangGraph agent integration run (real backends + JWT)
 
 When the gateway runs with `AUTH_MODE=jwt` (see
 [scenario-real-backends-jwt.md](../../docs/evaluation/scenario-real-backends-jwt.md)),

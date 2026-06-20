@@ -1,15 +1,5 @@
 // Command gen-jwt prints a short-lived RS256 JWT for local smoke tests.
-// Usage:
-//
-//	openssl genrsa -out /tmp/jwt.key 2048
-//	openssl rsa -in /tmp/jwt.key -pubout -out /tmp/jwt.pub.pem
-//	export JWT_PUBLIC_KEY_PEM="$(cat /tmp/jwt.pub.pem)"
-//	go run ./tools/gen-jwt -iss https://lab.local -aud mcp-gateway -key /tmp/jwt.key
-//
-// The short aliases -iss / -aud / -sub mirror the long flags so the
-// evaluation runbooks (scenario-real-backends-jwt.md, integration-checklist.md)
-// are copy-paste reproducible. When both a long flag and its short
-// alias are set, the short alias wins.
+// Key setup and gateway env: docs/configuration.md. Short flags (-iss, -aud, -sub) override the long ones.
 package main
 
 import (

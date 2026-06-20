@@ -34,8 +34,7 @@ func TestResolveAlias(t *testing.T) {
 	}
 }
 
-// TestLabJWTPairOnDisk checks /tmp lab keys used by make lab-jwt-keys against the gateway JWT validator.
-func TestLabJWTPairOnDisk(t *testing.T) {
+func TestDevJWTPairOnDisk(t *testing.T) {
 	keyPath := os.Getenv("LAB_JWT_PRIVATE_KEY")
 	if keyPath == "" {
 		keyPath = "/tmp/mcp-lab-jwt.key"
