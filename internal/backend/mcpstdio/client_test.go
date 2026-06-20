@@ -158,9 +158,10 @@ func TestCallClearsPendingErrOnContextCancel(t *testing.T) {
 
 func TestCallRejectsDuplicateJSONRPCID(t *testing.T) {
 	t.Parallel()
-	c, cleanup, err := NewStdioMCPUpstream(context.Background(), "u1", "alpha", []string{"true"}, nil, 1)
+	c, cleanup, err := NewStdioMCPUpstream(context.Background(), "u1", "alpha", []string{"sleep", "3600"}, nil, 1)
 	require.NoError(t, err)
 	defer cleanup()
+	require.NoError(t, c.ensure(context.Background()))
 
 	ch := make(chan *rpc.Response, pendingJSONRPCChannelCap)
 	c.pendMu.Lock()
