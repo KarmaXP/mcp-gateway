@@ -571,46 +571,33 @@ func TestEnsureSessionRespectsCallContextDeadline(t *testing.T) {
 
 func TestCallRejectsDuplicateJSONRPCID(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == mcpwire.PathMCPSSE:
+		if r.Method == http.MethodGet && r.URL.Path == mcpwire.PathMCPSSE {
 			w.Header().Set(mcpwire.HeaderMCPSessionID, "dup-sess")
 			w.Header().Set("Content-Type", "text/event-stream")
 			w.WriteHeader(http.StatusOK)
 			w.(http.Flusher).Flush()
 			<-r.Context().Done()
-		case r.Method == http.MethodPost && r.URL.Path == mcpwire.PathMCPRPC:
-			w.WriteHeader(http.StatusAccepted)
-		default:
-			http.NotFound(w, r)
+			return
 		}
+		http.NotFound(w, r)
 	}))
 	t.Cleanup(srv.Close)
 
-	c, cleanup, err := NewHTTPMCPUpstream(context.Background(), "u1", "alpha", srv.URL, 2, "")
+	c, cleanup, err := NewHTTPMCPUpstream(context.Background(), "u1", "alpha", srv.URL, 1, "")
 	require.NoError(t, err)
 	t.Cleanup(cleanup)
-
 	require.NoError(t, c.ensureSession(context.Background()))
 
-	req := &rpc.Request{
+	ch := make(chan *rpc.Response, pendingJSONRPCChannelCap)
+	c.pendMu.Lock()
+	c.pending["99"] = ch
+	c.pendMu.Unlock()
+
+	_, err = c.Call(context.Background(), &rpc.Request{
 		JSONRPC: rpc.JSONRPCVersion,
 		ID:      json.RawMessage(`99`),
 		Method:  "tools/list",
-	}
-	callCtx, callCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer callCancel()
-	go func() {
-		_, _ = c.Call(callCtx, req)
-	}()
-
-	require.Eventually(t, func() bool {
-		c.pendMu.Lock()
-		defer c.pendMu.Unlock()
-		_, ok := c.pending["99"]
-		return ok
-	}, 2*time.Second, 10*time.Millisecond)
-
-	_, err = c.Call(context.Background(), req)
+	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "duplicate jsonrpc id")
 }
