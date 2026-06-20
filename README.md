@@ -1,5 +1,5 @@
 [![CI](https://github.com/KarmaXP/mcp-gateway/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/KarmaXP/mcp-gateway/actions/workflows/ci.yml?query=branch%3Amain)
-[![License](https://img.shields.io/github/license/KarmaXP/mcp-gateway)](https://github.com/KarmaXP/mcp-gateway/blob/main/LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/KarmaXP/mcp-gateway/blob/main/LICENSE)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/KarmaXP/mcp-gateway)](https://github.com/KarmaXP/mcp-gateway/blob/main/go.mod)
 [![OpenAPI 3.1](https://img.shields.io/badge/OpenAPI-3.1-6BA539?logo=openapiinitiative&logoColor=white)](docs/artifacts/openapi/openapi.yaml)
 [![OTel](https://img.shields.io/badge/Observability-OTel-000000?logo=opentelemetry&logoColor=white)](docs/deployment.md)
