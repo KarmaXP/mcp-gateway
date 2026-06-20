@@ -424,15 +424,22 @@ func TestParallelEnsureSessionUsesSingleConnect(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	const workers = 12
+	begin := make(chan struct{})
 	errs := make([]error, workers)
 	var wg sync.WaitGroup
+	var ready sync.WaitGroup
+	ready.Add(workers)
 	for i := range workers {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
+			ready.Done()
+			<-begin
 			errs[i] = c.ensureSession(context.Background())
 		}(i)
 	}
+	ready.Wait()
+	close(begin)
 
 	select {
 	case <-firstConnect:
@@ -441,12 +448,12 @@ func TestParallelEnsureSessionUsesSingleConnect(t *testing.T) {
 	}
 	require.Equal(t, int32(1), sseCount.Load())
 
-	close(release)
 	wg.Wait()
 	for i, err := range errs {
 		require.NoError(t, err, "worker %d", i)
 	}
 	require.Equal(t, int32(1), sseCount.Load())
+	close(release)
 }
 
 func TestCallFailsFastOnSSEDisconnect(t *testing.T) {
