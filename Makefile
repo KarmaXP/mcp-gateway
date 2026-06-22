@@ -14,6 +14,22 @@ DEMO_CONFIG        := deployments/gateway.demo.yaml
 EXAMPLE_CONFIG     := deployments/gateway.example.yaml
 SRE_CONFIG         := deployments/gateway.sre.example.yaml
 
+ifneq (,$(wildcard .env))
+include .env
+export PORT GATEWAY_PORT MCP_GATEWAY_CONFIG ROUTER_MODE QDRANT_URL EMBED_URL HOST_PORT_EMBED
+export AUTH_MODE JWT_PUBLIC_KEY_FILE JWT_ISS JWT_AUD
+export OTEL_EXPORTER_OTLP_ENDPOINT OTEL_SERVICE_NAME
+endif
+
+ifndef EMBED_URL
+ifneq ($(HOST_PORT_EMBED),)
+ifneq ($(HOST_PORT_EMBED),8001)
+EMBED_URL := http://127.0.0.1:$(HOST_PORT_EMBED)
+export EMBED_URL
+endif
+endif
+endif
+
 # Colors
 BLUE 	:= \033[1;34m
 YELLOW  := \033[1;33m
@@ -23,9 +39,9 @@ RESET   := \033[0m
 .DEFAULT_GOAL := help
 .PHONY: help bootstrap demo demo-backends demo-backends-stop demo-full verify-e2e \
         sre-backends sre-backends-stop sre-up sre-down sre-smoke gen-router-eval-catalog \
-        build run stop test test-cover test-integration ci smoke smoke-e2e fmt lint clean tidy \
+        build run run-filter-list stop test test-cover test-integration ci smoke smoke-e2e fmt lint clean tidy \
         docker-build docker-up docker-up-full docker-up-demo docker-up-sre docker-down docker-logs docker-clean calibration-up \
-        lab-jwt-keys lab-jwt-env lab-jwt-verify
+        lab-jwt-keys lab-jwt-env lab-jwt-verify demo-lab-preflight demo-lab-verify
 
 # Help: sectioned list of targets (descriptions are defined here only)
 help:
@@ -37,6 +53,8 @@ help:
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "lab-jwt-keys" "Ensure /tmp/mcp-lab-jwt.key + .pub.pem for JWT lab sessions"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "lab-jwt-env" "Print export JWT_PUBLIC_KEY_FILE + JWT_ADMIN (after lab-jwt-keys)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "lab-jwt-verify" "Crypto-check lab keys against gateway JWT validator"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "demo-lab-preflight" "Pre-demo checks (docker-up + fixture + JWT; no gateway)"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "demo-lab-verify" "Full demo rehearsal (preflight + gateway + catalog + JWT + LangGraph)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "demo" "Quick start: one mock upstream + gateway + MCP tools/call (no Docker)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "demo-backends" "Start alpha/beta mock MCP servers on ports 3101 and 3102"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "demo-backends-stop" "Stop alpha/beta mock servers"
@@ -154,10 +172,25 @@ gen-router-eval-catalog:
 	@echo "Wrote docs/evaluation/router-eval-catalog.json"
 
 run:
-	@echo "Starting $(BINARY_NAME)..."
-	@bash -c 'set -a && ([ -f .env ] && . ./.env || true) && set +a && \
-		: "$${MCP_GATEWAY_CONFIG:=$(DEMO_CONFIG)}" && export MCP_GATEWAY_CONFIG && \
-		exec go run $(MAIN_PATH)'
+	@bash -c 'set -a && ([ -f .env ] && . ./.env || true) && set +a; \
+		export ROUTER_MODE="$(ROUTER_MODE)"; \
+		hp="$${HOST_PORT_EMBED:-}"; \
+		if [ -n "$$hp" ]; then export EMBED_URL="http://127.0.0.1:$$hp"; \
+		elif [ -z "$$EMBED_URL" ]; then export EMBED_URL="http://127.0.0.1:8001"; fi; \
+		echo "Starting $(BINARY_NAME)..."; \
+		echo "PORT=$$PORT ROUTER_MODE=$$ROUTER_MODE EMBED_URL=$$EMBED_URL MCP_GATEWAY_CONFIG=$${MCP_GATEWAY_CONFIG:-$(DEMO_CONFIG)}"; \
+		exec env MCP_GATEWAY_CONFIG="$${MCP_GATEWAY_CONFIG:-$(DEMO_CONFIG)}" go run $(MAIN_PATH)'
+
+run-filter-list:
+	@$(MAKE) run ROUTER_MODE=filter_list
+
+demo-lab-preflight:
+	@chmod +x scripts/demo_lab_preflight.sh
+	@bash scripts/demo_lab_preflight.sh
+
+demo-lab-verify:
+	@chmod +x scripts/demo_lab_preflight.sh
+	@bash scripts/demo_lab_preflight.sh --full
 
 SMOKE_JWT_GATEWAY_PORT ?= 18082
 

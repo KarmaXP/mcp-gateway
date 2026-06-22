@@ -35,6 +35,3 @@ policy:
 
 qdrant:
   collection: mcp_tool_catalog
-
-embed:
-  url: http://127.0.0.1:8001

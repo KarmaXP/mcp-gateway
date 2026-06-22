@@ -12,12 +12,13 @@ ADMIN_TOOLS="${LAB_JWT_ADMIN_TOOLS:-prom__read_text_file,k8s__echo,gh__create_en
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [keys|admin|restricted|env|verify]
+Usage: $(basename "$0") [keys|admin|full|restricted|env|verify]
 
   keys       Ensure RSA key pair at $KEY and $PUB (default).
-  admin      Print a signed admin JWT (requires keys).
+  admin      Print a signed admin JWT (smoke allow-list: 3 tools).
+  full       Print a JWT with no mcp_tools claim (full merged catalog).
   restricted Print a restricted JWT (prom__read_text_file only).
-  env        Print export lines for JWT_PUBLIC_KEY_FILE and JWT_ADMIN.
+  env        Print export lines for JWT_PUBLIC_KEY_FILE, JWT_ADMIN, JWT_ADMIN_FULL, JWT_RESTRICTED.
   verify     Run crypto check: sign with private key, validate with gateway auth.
 
 Override paths: LAB_JWT_PRIVATE_KEY, LAB_JWT_PUBLIC_KEY.
@@ -38,9 +39,12 @@ ensure_keys() {
 }
 
 gen_jwt() {
-  local sub=$1 tools=$2
-  (cd "$ROOT" && go run ./tools/gen-jwt \
-    -key "$KEY" -iss "$ISS" -aud "$AUD" -sub "$sub" -mcp-tools "$tools")
+  local sub=$1 tools="${2-}"
+  local -a args=(-key "$KEY" -iss "$ISS" -aud "$AUD" -sub "$sub")
+  if [[ -n "$tools" ]]; then
+    args+=(-mcp-tools "$tools")
+  fi
+  (cd "$ROOT" && go run ./tools/gen-jwt "${args[@]}")
 }
 
 cmd="${1:-keys}"
@@ -56,6 +60,10 @@ case "$cmd" in
     ensure_keys
     gen_jwt lab-admin "$ADMIN_TOOLS"
     ;;
+  full)
+    ensure_keys
+    gen_jwt lab-admin-full ""
+    ;;
   restricted)
     ensure_keys
     gen_jwt lab-restricted "prom__read_text_file"
@@ -66,6 +74,8 @@ case "$cmd" in
     printf 'export JWT_ISS=%q\n' "$ISS"
     printf 'export JWT_AUD=%q\n' "$AUD"
     printf 'export JWT_ADMIN=%q\n' "$(gen_jwt lab-admin "$ADMIN_TOOLS")"
+    printf 'export JWT_ADMIN_FULL=%q\n' "$(gen_jwt lab-admin-full "")"
+    printf 'export JWT_RESTRICTED=%q\n' "$(gen_jwt lab-restricted "prom__read_text_file")"
     ;;
   verify)
     ensure_keys

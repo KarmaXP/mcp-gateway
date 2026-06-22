@@ -4,6 +4,7 @@
 #   bash scripts/smoke_e2e.sh
 #   GATEWAY_URL=http://127.0.0.1:8080 SMOKE_EXPECT_TOOL=alpha__echo SMOKE_EXPECT_TEXT=ok bash scripts/smoke_e2e.sh
 #   SMOKE_JWT="$(go run ./tools/gen-jwt ...)" bash scripts/smoke_e2e.sh
+#   SMOKE_EXPECT_RPC_ERROR=-32003 ...  # JWT deny
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -12,6 +13,7 @@ cd "$ROOT"
 GATEWAY_URL="${GATEWAY_URL:-http://127.0.0.1:8080}"
 SMOKE_EXPECT_TOOL="${SMOKE_EXPECT_TOOL:-smoke__echo}"
 SMOKE_EXPECT_TEXT="${SMOKE_EXPECT_TEXT:-smoke-ok}"
+SMOKE_EXPECT_RPC_ERROR="${SMOKE_EXPECT_RPC_ERROR:-}"
 SMOKE_TOOL_ARGS="${SMOKE_TOOL_ARGS:-\{\}}"
 
 SSE_HDR=""
@@ -30,7 +32,7 @@ curl_auth() {
 cleanup() {
   if [[ -n "${SSE_PID:-}" ]]; then
     kill "${SSE_PID}" 2>/dev/null || true
-    wait "${SSE_PID}" 2>/dev/null || true
+    SSE_PID=""
   fi
   [[ -n "${SSE_HDR}" && -f "${SSE_HDR}" ]] && rm -f "${SSE_HDR}"
   [[ -n "${SSE_OUT}" && -f "${SSE_OUT}" ]] && rm -f "${SSE_OUT}"
@@ -119,13 +121,20 @@ post_rpc '{"jsonrpc":"2.0","method":"notifications/initialized"}' "notifications
 echo "==> tools/list"
 post_rpc '{"jsonrpc":"2.0","id":3,"method":"tools/list"}' "tools/list"
 wait_sse_contains '"id":3' 'tools/list response id'
-wait_sse_contains "${SMOKE_EXPECT_TOOL}" "namespaced tool ${SMOKE_EXPECT_TOOL}"
+if [[ -z "${SMOKE_EXPECT_RPC_ERROR}" ]]; then
+  wait_sse_contains "${SMOKE_EXPECT_TOOL}" "namespaced tool ${SMOKE_EXPECT_TOOL}"
+fi
 
 echo "==> tools/call ${SMOKE_EXPECT_TOOL}"
 TOOLS_CALL_BODY="$(printf '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"%s","arguments":%s}}' "${SMOKE_EXPECT_TOOL}" "${SMOKE_TOOL_ARGS}")"
 post_rpc "${TOOLS_CALL_BODY}" "tools/call"
 wait_sse_contains '"id":4' 'tools/call response id'
-wait_sse_contains "${SMOKE_EXPECT_TEXT}" "tools/call payload containing ${SMOKE_EXPECT_TEXT}"
-
-echo
-echo "SMOKE OK — full MCP handshake + tools/list + tools/call validated against running gateway."
+if [[ -n "${SMOKE_EXPECT_RPC_ERROR}" ]]; then
+  wait_sse_contains "${SMOKE_EXPECT_RPC_ERROR}" "tools/call JSON-RPC error ${SMOKE_EXPECT_RPC_ERROR}"
+  echo
+  echo "SMOKE OK — tools/call denied as expected (JSON-RPC ${SMOKE_EXPECT_RPC_ERROR})."
+else
+  wait_sse_contains "${SMOKE_EXPECT_TEXT}" "tools/call payload containing ${SMOKE_EXPECT_TEXT}"
+  echo
+  echo "SMOKE OK — full MCP handshake + tools/list + tools/call validated against running gateway."
+fi

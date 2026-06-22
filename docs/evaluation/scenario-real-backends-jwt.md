@@ -55,6 +55,14 @@ On macOS, `/tmp/...` is **not** the same path as `/private/tmp/...` for the file
 
 ## Start gateway (host, JWT, OTLP)
 
+**Prefer `make run`** — it loads `.env` and aligns `EMBED_URL` with `HOST_PORT_EMBED` (e.g. `:18001`), avoiding `/readyz` 503 when embed listens on a non-default port.
+
+```bash
+make run
+```
+
+Manual equivalent (only if you do not use `.env`):
+
 ```bash
 export PORT=18080
 export MCP_GATEWAY_CONFIG=deployments/gateway.real.yaml
@@ -64,10 +72,19 @@ export JWT_ISS=https://lab.local
 export JWT_AUD=mcp-gateway
 export ROUTER_MODE=on
 export QDRANT_URL=http://127.0.0.1:6333
-export EMBED_URL=http://127.0.0.1:8001
+export EMBED_URL=http://127.0.0.1:18001   # must match HOST_PORT_EMBED in .env / docker-compose
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
 
 make run
+```
+
+Before recording, run the rehearsal gate:
+
+```bash
+make docker-up
+make demo-lab-preflight    # deps + fixture + JWT (gateway stopped)
+make run                   # other terminal
+make demo-lab-verify       # catalog + JWT + LangGraph
 ```
 
 Verify:
@@ -75,7 +92,7 @@ Verify:
 ```bash
 curl -sf http://127.0.0.1:18080/readyz
 curl -sf http://127.0.0.1:6333/healthz
-curl -sf http://127.0.0.1:8001/healthz
+curl -sf http://127.0.0.1:18001/healthz   # or :8001 when HOST_PORT_EMBED=8001
 curl -sf http://127.0.0.1:4318/
 ```
 
@@ -86,14 +103,16 @@ Confirm log line shows `"addr":":18080"`.
 ## Issue JWT for smoke
 
 ```bash
+eval "$(bash scripts/lab_jwt_keys.sh env)"
+# JWT_ADMIN (3 tools), JWT_ADMIN_FULL (full catalog), JWT_RESTRICTED (deny demo)
+```
+
+Manual equivalent:
+
+```bash
 export JWT_ADMIN="$(go run ./tools/gen-jwt \
   -key /tmp/mcp-lab-jwt.key -iss https://lab.local -aud mcp-gateway \
   -sub lab-admin -mcp-tools 'prom__read_text_file,k8s__echo,gh__create_entities')"
-```
-
-Restricted token (allow-list demo):
-
-```bash
 export JWT_RESTRICTED="$(go run ./tools/gen-jwt \
   -key /tmp/mcp-lab-jwt.key -iss https://lab.local -aud mcp-gateway \
   -sub lab-restricted -mcp-tools prom__read_text_file)"
@@ -106,6 +125,7 @@ export JWT_RESTRICTED="$(go run ./tools/gen-jwt \
 ```bash
 GATEWAY_URL=http://127.0.0.1:18080 SMOKE_JWT="$JWT_ADMIN" \
   SMOKE_EXPECT_TOOL=prom__read_text_file \
+  SMOKE_EXPECT_TEXT=fixture-ok \
   SMOKE_TOOL_ARGS='{"path":"/private/tmp/mcp-gateway-lab/readme.txt"}' \
   bash scripts/smoke_e2e.sh
 
@@ -128,8 +148,9 @@ Each run should print `SMOKE OK`.
 ```bash
 GATEWAY_URL=http://127.0.0.1:18080 SMOKE_JWT="$JWT_RESTRICTED" \
   SMOKE_EXPECT_TOOL=prom__list_directory \
+  SMOKE_EXPECT_RPC_ERROR=-32003 \
   SMOKE_TOOL_ARGS='{"path":"/private/tmp/mcp-gateway-lab"}' \
-  bash scripts/smoke_e2e.sh || true
+  bash scripts/smoke_e2e.sh
 ```
 
 Expect JSON-RPC **-32003** (`tool "prom__list_directory" not allowed for this principal`).
@@ -155,6 +176,7 @@ Alternative (smoke loop, any worker count per process):
 for i in $(seq 1 60); do
   GATEWAY_URL=http://127.0.0.1:18080 SMOKE_JWT="$JWT_ADMIN" \
     SMOKE_EXPECT_TOOL=prom__read_text_file \
+    SMOKE_EXPECT_TEXT=fixture-ok \
     SMOKE_TOOL_ARGS='{"path":"/private/tmp/mcp-gateway-lab/readme.txt"}' \
     bash scripts/smoke_e2e.sh &
 done
@@ -162,6 +184,7 @@ wait
 for i in $(seq 1 20); do
   GATEWAY_URL=http://127.0.0.1:18080 SMOKE_JWT="$JWT_ADMIN" \
     SMOKE_EXPECT_TOOL=prom__read_text_file \
+    SMOKE_EXPECT_TEXT=fixture-ok \
     SMOKE_TOOL_ARGS='{"path":"/private/tmp/mcp-gateway-lab/readme.txt"}' \
     bash scripts/smoke_e2e.sh
 done
