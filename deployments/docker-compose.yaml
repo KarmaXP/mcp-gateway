@@ -147,7 +147,10 @@ services:
       - "${HOST_PORT_GRAFANA:-3000}:3000"
     volumes:
       - grafana-data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      # Mount provisioning subpaths separately so the dashboard JSON bind does not
+      # nest inside the directory mount (Docker fails with read-only mountpoint errors).
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
       - ../docs/artifacts/grafana/mcp-gateway-observability.json:/etc/grafana/provisioning/dashboards/mcp-gateway-observability.json:ro
     networks:
       - mcp-gateway-net

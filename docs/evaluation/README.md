@@ -27,6 +27,9 @@ make smoke
 GATEWAY_URL=http://127.0.0.1:8080 bash scripts/smoke_e2e.sh
 
 # Multibackend benchmark (JWT + real stdio backends): see scenario-real-backends-jwt.md
+make demo-lab-preflight    # deps + fixture + JWT (no gateway)
+make demo-lab-verify        # full demo rehearsal (gateway up; optional ../langgraph-demo)
+bash scripts/demo_show_catalog.sh   # tools/list for demo (needs JWT + gateway)
 ```
 
 Host client: [`scripts/mcp_host_demo/README.md`](../../scripts/mcp_host_demo/README.md).
