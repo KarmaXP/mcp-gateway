@@ -166,7 +166,7 @@ Direct Go dependencies (`go.mod`) at a glance:
 
 | Module | Purpose | Version |
 |--------|---------|---------|
-| `github.com/golang-jwt/jwt/v5` | JWT parsing/validation in auth middleware | `v5.2.1` |
+| `github.com/golang-jwt/jwt/v5` | JWT parsing/validation in auth middleware | `v5.2.2` |
 | `github.com/google/uuid` | Session UUID generation and IDs | `v1.6.0` |
 | `github.com/lestrrat-go/jwx/v2` | JWKS/JWK handling for JWT verification | `v2.1.3` |
 | `github.com/santhosh-tekuri/jsonschema/v6` | JSON Schema validation for `tools/call` arguments | `v6.0.2` |
