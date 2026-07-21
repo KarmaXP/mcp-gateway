@@ -15,11 +15,11 @@
 
 <br/>
 
-[![CI](https://img.shields.io/github/actions/workflow/status/KarmaXP/mcp-gateway/ci.yml?style=for-the-badge&logo=githubactions&logoColor=white&label=CI)](https://github.com/KarmaXP/mcp-gateway/actions/workflows/ci.yml?query=branch%3Amain)
-[![Go](https://img.shields.io/github/go-mod/go-version/KarmaXP/mcp-gateway?style=for-the-badge&logo=go&logoColor=white)](go.mod)
-[![MCP](https://img.shields.io/badge/MCP-Protocol-7C3AED?style=for-the-badge)](https://modelcontextprotocol.io/)
-[![OpenAPI](https://img.shields.io/badge/OpenAPI-3.1-6BA539?style=for-the-badge&logo=openapiinitiative&logoColor=white)](docs/artifacts/openapi/openapi.yaml)
-[![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
+[![CI](https://github.com/KarmaXP/mcp-gateway/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/KarmaXP/mcp-gateway/actions/workflows/ci.yml?query=branch%3Amain)
+[![License](https://img.shields.io/github/license/KarmaXP/mcp-gateway)](LICENSE)
+[![Go](https://img.shields.io/github/go-mod/go-version/KarmaXP/mcp-gateway)](go.mod)
+[![MCP](https://img.shields.io/badge/MCP-Protocol-7C3AED)](https://modelcontextprotocol.io/)
+[![OpenAPI](https://img.shields.io/badge/OpenAPI-3.1-6BA539?logo=openapiinitiative&logoColor=white)](docs/artifacts/openapi/openapi.yaml)
 
 <br/>
 
@@ -209,10 +209,10 @@ Measured runs with commits and replay commands in the linked docs.
 
 <br/>
 
-<a href="docs/evaluation/calibration-results.md"><img src="https://img.shields.io/badge/Recall@1-1.000_(26%2F26)-22c55e?style=flat-square" alt="Recall@1"></a>
-<a href="docs/evaluation/calibration-results.md"><img src="https://img.shields.io/badge/Recall@3-1.000_(26%2F26)-22c55e?style=flat-square" alt="Recall@3"></a>
-<a href="docs/evaluation/calibration-results.md"><img src="https://img.shields.io/badge/nDCG@5-0.907-0ea5e9?style=flat-square" alt="nDCG"></a>
-<a href="docs/evaluation/calibration-results.md"><img src="https://img.shields.io/badge/JWT_deny_-32003-f97316?style=flat-square" alt="JWT deny"></a>
+[![Recall@1](https://img.shields.io/badge/Recall@1-1.000_(26%2F26)-22c55e)](docs/evaluation/calibration-results.md)
+[![Recall@3](https://img.shields.io/badge/Recall@3-1.000_(26%2F26)-22c55e)](docs/evaluation/calibration-results.md)
+[![nDCG@5](https://img.shields.io/badge/nDCG@5-0.907-0ea5e9)](docs/evaluation/calibration-results.md)
+[![JWT deny](https://img.shields.io/badge/JWT_deny_-32003-f97316)](docs/evaluation/calibration-results.md)
 
 </div>
 
