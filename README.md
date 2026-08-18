@@ -108,9 +108,7 @@ flowchart TB
 
 </div>
 
-<center>
-
-<table cellpadding="8">
+<table align="center" cellpadding="8">
 <tr>
 <td align="center" width="128">🔀<br/><b>Multiplex</b><br/><sub>HTTP · stdio</sub></td>
 <td align="center" width="128">🏷️<br/><b>Namespace</b><br/><sub><code>prefix__tool</code></sub></td>
@@ -119,8 +117,6 @@ flowchart TB
 <td align="center" width="128">📊<br/><b>Observe</b><br/><sub>traces · metrics</sub></td>
 </tr>
 </table>
-
-</center>
 
 <div align="center">
 
@@ -164,9 +160,7 @@ make docker-up          # Qdrant, embed, OTel, Grafana
 make run                # gateway on :8080 (or PORT in .env)
 ```
 
-<center>
-
-<table cellpadding="6">
+<table align="center" cellpadding="6">
 <tr>
 <th align="center">Target</th>
 <th align="center">What happens</th>
@@ -188,8 +182,6 @@ make run                # gateway on :8080 (or PORT in .env)
 <td align="center">What GitHub Actions runs (lint, vet, <code>-race</code>)</td>
 </tr>
 </table>
-
-</center>
 
 <div align="center">
 
@@ -216,9 +208,7 @@ Measured runs with commits and replay commands in the linked docs.
 
 </div>
 
-<center>
-
-<table cellpadding="6">
+<table align="center" cellpadding="6">
 <tr>
 <th align="center">What</th>
 <th align="center">Where</th>
@@ -253,8 +243,6 @@ Measured runs with commits and replay commands in the linked docs.
 </tr>
 </table>
 
-</center>
-
 ---
 
 <div align="center">
@@ -263,9 +251,7 @@ Measured runs with commits and replay commands in the linked docs.
 
 </div>
 
-<center>
-
-<table cellpadding="6">
+<table align="center" cellpadding="6">
 <tr>
 <th align="center">You are…</th>
 <th align="center">Start here</th>
@@ -294,9 +280,15 @@ Measured runs with commits and replay commands in the linked docs.
 <td align="center"><b>Deep dive</b> · full doc map</td>
 <td align="center"><a href="docs/README.md"><b>docs/README.md</b></a></td>
 </tr>
+<tr>
+<td align="center"><b>Contributing</b> · conventions & definition of done</td>
+<td align="center"><a href="CONTRIBUTING.md">CONTRIBUTING</a></td>
+</tr>
+<tr>
+<td align="center"><b>Reporting a vulnerability</b> · privately, never a public issue</td>
+<td align="center"><a href="SECURITY.md">SECURITY</a></td>
+</tr>
 </table>
-
-</center>
 
 <div align="center">
 

@@ -1,0 +1,23 @@
+name: Feature request
+description: Propose a capability or a change in behaviour
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The gateway is a **broker, not an LLM**: it does not inspect, summarise or rewrite tool
+        results — see [ADR 0004](https://github.com/KarmaXP/mcp-gateway/blob/main/docs/adr/0004-gateway-scope.md).
+        Proposals that need it are likely out of scope.
+  - type: textarea
+    attributes:
+      label: The problem
+      description: What you are trying to do that the gateway makes hard or impossible today.
+    validations: {required: true}
+  - type: textarea
+    attributes:
+      label: What you already tried
+      description: Existing config, router modes, or a workaround outside the gateway.
+  - type: textarea
+    attributes:
+      label: Proposal
+      description: Optional. If it changes a documented decision, name the ADR in `docs/adr/`.

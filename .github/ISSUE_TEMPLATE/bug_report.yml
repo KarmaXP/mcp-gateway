@@ -1,0 +1,44 @@
+name: Bug report
+description: Something behaves differently from what the docs say
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security problem? **Stop** — report it privately, see
+        [SECURITY.md](https://github.com/KarmaXP/mcp-gateway/blob/main/SECURITY.md).
+  - type: textarea
+    attributes:
+      label: What happens, and what you expected
+      description: Include the JSON-RPC error code if there is one.
+    validations: {required: true}
+  - type: textarea
+    attributes:
+      label: Reproduction
+      description: How the gateway was started, the requests sent in order, and what came back.
+    validations: {required: true}
+  - type: input
+    attributes:
+      label: Commit or branch
+    validations: {required: true}
+  - type: dropdown
+    attributes:
+      label: AUTH_MODE
+      options: ["none", "jwt"]
+    validations: {required: true}
+  - type: dropdown
+    attributes:
+      label: Router mode
+      options: ["off", "on", "assist_list", "filter_list"]
+    validations: {required: true}
+  - type: textarea
+    attributes:
+      label: Environment
+      description: OS, `go version`, how many upstreams and whether HTTP or stdio.
+  - type: textarea
+    attributes:
+      label: Logs
+      description: >
+        Relevant JSON log lines. The gateway must never log tokens, JWT payloads or tool
+        arguments — if yours does, that is itself a security bug: report it privately instead.
+      render: shell

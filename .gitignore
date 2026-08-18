@@ -19,6 +19,10 @@ vendor/
 **/.claude/
 *.swp
 
+# Maintainer's local working notes and agent rules. Never published.
+.personal/
+CLAUDE.md
+
 # Logs and temporary files
 *.log
 tmp/
