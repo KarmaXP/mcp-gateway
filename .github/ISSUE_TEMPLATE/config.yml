@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/KarmaXP/mcp-gateway/security/advisories/new
+    about: Do not open a public issue. Report privately — see SECURITY.md.
+  - name: Documentation, configuration and troubleshooting
+    url: https://github.com/KarmaXP/mcp-gateway/blob/main/docs/README.md
+    about: Ports, config reference, error codes and connection walkthroughs.

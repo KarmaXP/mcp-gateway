@@ -70,6 +70,7 @@ help:
 	@printf "$(BLUE)▶ Development$(RESET)\n"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "build" "Compile the Go binary"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "run" "Start the Gateway in development mode"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "run-filter-list" "make run with ROUTER_MODE=filter_list (see docs/adr/0002)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "stop" "Stop gateway on PORT/GATEWAY_PORT (.env); not demo/SRE mocks"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test" "Run all unit tests with race detection"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test-cover" "go test -race with coverage report (internal/*)"
