@@ -27,7 +27,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 
 # ---- Stage 2: Runtime ----
 # Static binary has no libc dependency; any recent Alpine works.
-FROM alpine:3.22 AS runtime
+FROM alpine:3.24 AS runtime
 
 # ca-certificates: needed for outbound TLS (JWKS, OIDC, embedding APIs)
 # tzdata: for correct time zone handling in logs
