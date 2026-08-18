@@ -2,7 +2,7 @@
 # Stages: model-builder bakes /model-cache; runtime copies cache and runs uvicorn.
 
 # ---- Stage 1: download + export model to ONNX ----
-FROM python:3.12-slim AS model-builder
+FROM python:3.14-slim AS model-builder
 
 ENV HF_HOME=/model-cache \
     TRANSFORMERS_OFFLINE=0 \
@@ -33,7 +33,7 @@ print(f'[embed-builder] OK  model=all-MiniLM-L6-v2  dim={v.shape[1]}'); \
 "
 
 # ---- Stage 2: runtime ----
-FROM python:3.12-slim AS runtime
+FROM python:3.14-slim AS runtime
 
 ENV HF_HOME=/model-cache \
     TRANSFORMERS_OFFLINE=1 \
