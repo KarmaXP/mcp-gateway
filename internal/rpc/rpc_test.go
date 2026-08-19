@@ -130,3 +130,110 @@ func BenchmarkParseRequest(b *testing.B) {
 		}
 	}
 }
+
+func TestParseRequestRejectsStructuredID(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+	}{
+		{"object", `{"jsonrpc":"2.0","method":"x","id":{"evil":1}}`},
+		{"array", `{"jsonrpc":"2.0","method":"x","id":[1,2]}`},
+		{"bool", `{"jsonrpc":"2.0","method":"x","id":true}`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseRequest([]byte(tc.raw))
+			require.Error(t, err)
+			require.ErrorIs(t, err, ErrInvalidRequest)
+		})
+	}
+}
+
+func TestParseRequestAcceptsStringAndNumberID(t *testing.T) {
+	for _, raw := range []string{
+		`{"jsonrpc":"2.0","method":"x","id":1}`,
+		`{"jsonrpc":"2.0","method":"x","id":"a"}`,
+		`{"jsonrpc":"2.0","method":"x","id":-7}`,
+	} {
+		t.Run(raw, func(t *testing.T) {
+			_, err := ParseRequest([]byte(raw))
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestParseResponseRejectsResultAndErrorTogether(t *testing.T) {
+	raw := []byte(`{"jsonrpc":"2.0","id":1,"result":{"ok":true},"error":{"code":-1,"message":"boom"}}`)
+	_, err := ParseResponse(raw)
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrInvalidRequest)
+}
+
+func TestNewErrorWithoutIDEmitsNullID(t *testing.T) {
+	b, err := NewError(nil, -32700, "parse error", nil).Marshal()
+	require.NoError(t, err)
+	var out map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(b, &out))
+	id, present := out["id"]
+	require.True(t, present, "JSON-RPC 2.0 requires an id member on every response")
+	require.JSONEq(t, "null", string(id))
+}
+
+func TestMarshalRequestNilRequest(t *testing.T) {
+	_, err := MarshalRequest(nil)
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrInvalidRequest)
+}
+
+func TestMarshalRequestDefaultsVersionAndOmitsIDForNotifications(t *testing.T) {
+	b, err := MarshalRequest(&Request{Method: "notifications/initialized"})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"jsonrpc":"2.0","method":"notifications/initialized"}`, string(b))
+}
+
+func TestCanonicalIDKey(t *testing.T) {
+	tests := []struct {
+		name string
+		id   string
+		want string
+	}{
+		{"integer", `1`, "n:1"},
+		{"integer with trailing zero fraction", `1.0`, "n:1"},
+		{"integer in exponent form", `1e0`, "n:1"},
+		{"trailing zeros", `1.000`, "n:1"},
+		{"surrounding whitespace", ` 1 `, "n:1"},
+		{"negative", `-7`, "n:-7"},
+		{"beyond float64 precision stays exact", `9007199254740993`, "n:9007199254740993"},
+		{"fraction", `1.5`, "n:1.5"},
+		{"string", `"abc"`, "s:abc"},
+		{"string digits do not collide with the number", `"1"`, "s:1"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := CanonicalIDKey(json.RawMessage(tc.id))
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestCanonicalIDKeyRejectsUncorrelatable(t *testing.T) {
+	tests := []struct {
+		name string
+		id   string
+	}{
+		{"absent", ``},
+		{"null", `null`},
+		{"object", `{"a":1}`},
+		{"array", `[1]`},
+		{"bool", `true`},
+		{"malformed", `{`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := CanonicalIDKey(json.RawMessage(tc.id))
+			require.Error(t, err)
+			require.ErrorIs(t, err, ErrUncorrelatableID)
+		})
+	}
+}

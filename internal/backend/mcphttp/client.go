@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -353,8 +352,8 @@ func (c *HTTPMCPUpstream) readSSE(body io.Reader, ctx context.Context) {
 func (c *HTTPMCPUpstream) dispatch(raw []byte) {
 	resp, err := rpc.ParseResponse(raw)
 	if err == nil {
-		key := idKey(resp.ID)
-		if key == "" {
+		key, idErr := rpc.CanonicalIDKey(resp.ID)
+		if idErr != nil {
 			return
 		}
 		c.pendMu.Lock()
@@ -386,13 +385,6 @@ func (c *HTTPMCPUpstream) dispatch(raw []byte) {
 	if fn != nil {
 		fn(req)
 	}
-}
-
-func idKey(id json.RawMessage) string {
-	if len(id) == 0 {
-		return ""
-	}
-	return string(id)
 }
 
 func (c *HTTPMCPUpstream) postRPC(ctx context.Context, req *rpc.Request) error {
@@ -467,9 +459,9 @@ func (c *HTTPMCPUpstream) callWithSession(ctx context.Context, req *rpc.Request)
 		return nil, nil
 	}
 
-	key := idKey(req.ID)
-	if key == "" {
-		return nil, fmt.Errorf("mcphttp %s: missing jsonrpc id", c.id)
+	key, err := rpc.CanonicalIDKey(req.ID)
+	if err != nil {
+		return nil, fmt.Errorf("mcphttp %s: jsonrpc id: %w", c.id, err)
 	}
 	ch := make(chan *rpc.Response, pendingJSONRPCChannelCap)
 	c.pendMu.Lock()
