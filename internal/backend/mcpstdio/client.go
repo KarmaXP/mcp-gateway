@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -194,8 +193,8 @@ func (c *StdioMCPUpstream) onReaderExit() {
 func (c *StdioMCPUpstream) dispatch(raw []byte) {
 	resp, err := rpc.ParseResponse(raw)
 	if err == nil {
-		key := idKey(resp.ID)
-		if key == "" {
+		key, idErr := rpc.CanonicalIDKey(resp.ID)
+		if idErr != nil {
 			return
 		}
 		c.pendMu.Lock()
@@ -227,13 +226,6 @@ func (c *StdioMCPUpstream) dispatch(raw []byte) {
 	if fn != nil {
 		fn(req)
 	}
-}
-
-func idKey(id json.RawMessage) string {
-	if len(id) == 0 {
-		return ""
-	}
-	return string(id)
 }
 
 func (c *StdioMCPUpstream) writeLineLocked(payload []byte) error {
@@ -272,9 +264,9 @@ func (c *StdioMCPUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Res
 		return nil, nil
 	}
 
-	key := idKey(req.ID)
-	if key == "" {
-		return nil, fmt.Errorf("mcpstdio %s: missing jsonrpc id", c.id)
+	key, err := rpc.CanonicalIDKey(req.ID)
+	if err != nil {
+		return nil, fmt.Errorf("mcpstdio %s: jsonrpc id: %w", c.id, err)
 	}
 	ch := make(chan *rpc.Response, pendingJSONRPCChannelCap)
 	c.pendMu.Lock()

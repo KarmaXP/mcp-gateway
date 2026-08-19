@@ -59,7 +59,7 @@ func TestDispatchResponseDeliversToPending(t *testing.T) {
 
 	ch := make(chan *rpc.Response, 1)
 	c.pendMu.Lock()
-	c.pending["1"] = ch
+	c.pending["n:1"] = ch
 	c.pendMu.Unlock()
 
 	raw, err := json.Marshal(map[string]any{
@@ -87,7 +87,7 @@ func TestDispatchResponseAbortsPendingWhenChannelFull(t *testing.T) {
 
 	ch := make(chan *rpc.Response, pendingJSONRPCChannelCap)
 	c.pendMu.Lock()
-	c.pending["9"] = ch
+	c.pending["n:9"] = ch
 	c.pendMu.Unlock()
 	ch <- &rpc.Response{JSONRPC: rpc.JSONRPCVersion, ID: json.RawMessage(`9`), Result: json.RawMessage(`{}`)}
 
@@ -101,7 +101,7 @@ func TestDispatchResponseAbortsPendingWhenChannelFull(t *testing.T) {
 	require.Equal(t, uint64(1), c.DroppedResponses())
 
 	c.pendMu.Lock()
-	deliverErr := c.pendingErr["9"]
+	deliverErr := c.pendingErr["n:9"]
 	c.pendMu.Unlock()
 	require.Error(t, deliverErr)
 	require.Contains(t, deliverErr.Error(), "pending channel full")
@@ -120,7 +120,7 @@ func TestCallClearsPendingErrOnContextCancel(t *testing.T) {
 
 	require.NoError(t, c.ensure(context.Background()))
 
-	const key = "3"
+	const key = "n:3"
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var callErr error
@@ -165,7 +165,7 @@ func TestCallRejectsDuplicateJSONRPCID(t *testing.T) {
 
 	ch := make(chan *rpc.Response, pendingJSONRPCChannelCap)
 	c.pendMu.Lock()
-	c.pending["1"] = ch
+	c.pending["n:1"] = ch
 	c.pendMu.Unlock()
 
 	_, err = c.Call(context.Background(), &rpc.Request{
@@ -190,12 +190,6 @@ func TestDispatchResponseIgnoresUnknownID(t *testing.T) {
 	})
 	require.NoError(t, err)
 	c.dispatch(raw)
-}
-
-func TestIDKey(t *testing.T) {
-	t.Parallel()
-	require.Empty(t, idKey(nil))
-	require.Equal(t, "42", idKey(json.RawMessage(`42`)))
 }
 
 func TestCloseReapsChildProcess(t *testing.T) {
@@ -259,4 +253,25 @@ func TestEnsureFailsAfterProcessExit(t *testing.T) {
 	err = c.ensure(ctx)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "process exited")
+}
+
+func TestDispatchResponseCorrelatesRespelledID(t *testing.T) {
+	t.Parallel()
+	c, cleanup, err := NewStdioMCPUpstream(context.Background(), "u1", "alpha", []string{"true"}, nil, 1)
+	require.NoError(t, err)
+	defer cleanup()
+
+	ch := make(chan *rpc.Response, 1)
+	c.pendMu.Lock()
+	c.pending["n:1"] = ch
+	c.pendMu.Unlock()
+
+	c.dispatch([]byte(`{"jsonrpc":"2.0","id":1.0,"result":{"ok":true}}`))
+
+	select {
+	case resp := <-ch:
+		require.NotNil(t, resp)
+	default:
+		t.Fatal("id 1 echoed as 1.0 must still reach the pending caller")
+	}
 }

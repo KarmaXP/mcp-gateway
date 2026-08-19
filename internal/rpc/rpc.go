@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 )
 
 const (
@@ -12,11 +13,15 @@ const (
 
 	jsonObjectStartByte = '{'
 	jsonRawNull = "null"
+
+	idKeyNumberPrefix = "n:"
+	idKeyStringPrefix = "s:"
 )
 
 var (
 	ErrInvalidRequest = errors.New("rpc: invalid JSON-RPC request")
 	ErrNotObject = errors.New("rpc: body must be a JSON object")
+	ErrUncorrelatableID = errors.New("id must be a string or a number")
 )
 
 type Request struct {
@@ -51,6 +56,11 @@ func ParseRequest(raw []byte) (*Request, error) {
 	if len(req.ID) > 0 && string(req.ID) == jsonRawNull {
 		return nil, fmt.Errorf("%w: id must be omitted for notifications, not null", ErrInvalidRequest)
 	}
+	if len(req.ID) > 0 {
+		if _, err := CanonicalIDKey(req.ID); err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrInvalidRequest, err)
+		}
+	}
 	return &req, nil
 }
 
@@ -62,7 +72,7 @@ type ErrorObject struct {
 
 type Response struct {
 	JSONRPC string          `json:"jsonrpc"`
-	ID      json.RawMessage `json:"id,omitempty"`
+	ID      json.RawMessage `json:"id"`
 	Result  json.RawMessage `json:"result,omitempty"`
 	Error   *ErrorObject    `json:"error,omitempty"`
 }
@@ -88,7 +98,12 @@ func NewError(id json.RawMessage, code int, message string, data json.RawMessage
 }
 
 func (r *Response) Marshal() ([]byte, error) {
-	return json.Marshal(r)
+	if len(r.ID) > 0 {
+		return json.Marshal(r)
+	}
+	out := *r
+	out.ID = json.RawMessage(jsonRawNull)
+	return json.Marshal(&out)
 }
 
 func ParseResponse(raw []byte) (*Response, error) {
@@ -109,24 +124,51 @@ func ParseResponse(raw []byte) (*Response, error) {
 	if resp.Error == nil && resp.Result == nil {
 		return nil, fmt.Errorf("%w: response must include result or error", ErrInvalidRequest)
 	}
+	if resp.Error != nil && resp.Result != nil {
+		return nil, fmt.Errorf("%w: response must not include both result and error", ErrInvalidRequest)
+	}
 	return &resp, nil
 }
 
 func MarshalRequest(req *Request) ([]byte, error) {
-	ver := req.JSONRPC
-	if ver == "" {
-		ver = JSONRPCVersion
+	if req == nil {
+		return nil, fmt.Errorf("%w: nil request", ErrInvalidRequest)
 	}
-	type wire struct {
-		JSONRPC string          `json:"jsonrpc"`
-		Method  string          `json:"method"`
-		Params  json.RawMessage `json:"params,omitempty"`
-		ID      json.RawMessage `json:"id,omitempty"`
+	out := *req
+	if out.JSONRPC == "" {
+		out.JSONRPC = JSONRPCVersion
 	}
-	return json.Marshal(wire{
-		JSONRPC: ver,
-		Method:  req.Method,
-		Params:  req.Params,
-		ID:      req.ID,
-	})
+	return json.Marshal(&out)
+}
+
+func CanonicalIDKey(id json.RawMessage) (string, error) {
+	trimmed := bytes.TrimSpace(id)
+	if len(trimmed) == 0 || string(trimmed) == jsonRawNull {
+		return "", ErrUncorrelatableID
+	}
+	dec := json.NewDecoder(bytes.NewReader(trimmed))
+	dec.UseNumber()
+	var decoded any
+	if err := dec.Decode(&decoded); err != nil {
+		return "", fmt.Errorf("%w: %w", ErrUncorrelatableID, err)
+	}
+	switch v := decoded.(type) {
+	case string:
+		return idKeyStringPrefix + v, nil
+	case json.Number:
+		return canonicalNumberIDKey(v)
+	default:
+		return "", ErrUncorrelatableID
+	}
+}
+
+func canonicalNumberIDKey(n json.Number) (string, error) {
+	if i, err := strconv.ParseInt(n.String(), 10, 64); err == nil {
+		return idKeyNumberPrefix + strconv.FormatInt(i, 10), nil
+	}
+	f, err := strconv.ParseFloat(n.String(), 64)
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", ErrUncorrelatableID, err)
+	}
+	return idKeyNumberPrefix + strconv.FormatFloat(f, 'g', -1, 64), nil
 }

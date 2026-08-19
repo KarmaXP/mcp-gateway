@@ -234,7 +234,7 @@ func TestCallSurvivesReconnectWhenPOSTInFlight(t *testing.T) {
 	require.Eventually(t, func() bool {
 		c.pendMu.Lock()
 		defer c.pendMu.Unlock()
-		_, ok := c.pending["55"]
+		_, ok := c.pending["n:55"]
 		return ok
 	}, 2*time.Second, 10*time.Millisecond)
 
@@ -371,7 +371,7 @@ func TestDispatchResponseAbortsPendingWhenChannelFull(t *testing.T) {
 
 	ch := make(chan *rpc.Response, pendingJSONRPCChannelCap)
 	c.pendMu.Lock()
-	c.pending["9"] = ch
+	c.pending["n:9"] = ch
 	c.pendMu.Unlock()
 	ch <- &rpc.Response{JSONRPC: rpc.JSONRPCVersion, ID: json.RawMessage(`9`), Result: json.RawMessage(`{}`)}
 
@@ -385,7 +385,7 @@ func TestDispatchResponseAbortsPendingWhenChannelFull(t *testing.T) {
 	require.Equal(t, uint64(1), c.DroppedResponses())
 
 	c.pendMu.Lock()
-	deliverErr := c.pendingErr["9"]
+	deliverErr := c.pendingErr["n:9"]
 	c.pendMu.Unlock()
 	require.Error(t, deliverErr)
 	require.Contains(t, deliverErr.Error(), "pending channel full")
@@ -504,7 +504,7 @@ func TestCallFailsFastOnSSEDisconnect(t *testing.T) {
 	require.Eventually(t, func() bool {
 		c.pendMu.Lock()
 		defer c.pendMu.Unlock()
-		_, ok := c.pending["7"]
+		_, ok := c.pending["n:7"]
 		return ok
 	}, 2*time.Second, 10*time.Millisecond)
 
@@ -590,7 +590,7 @@ func TestCallRejectsDuplicateJSONRPCID(t *testing.T) {
 
 	ch := make(chan *rpc.Response, pendingJSONRPCChannelCap)
 	c.pendMu.Lock()
-	c.pending["99"] = ch
+	c.pending["n:99"] = ch
 	c.pendMu.Unlock()
 
 	_, err = c.Call(context.Background(), &rpc.Request{
@@ -644,12 +644,12 @@ func TestCallReturnsErrorWhenPendingChannelFull(t *testing.T) {
 	require.Eventually(t, func() bool {
 		c.pendMu.Lock()
 		defer c.pendMu.Unlock()
-		_, ok := c.pending["11"]
+		_, ok := c.pending["n:11"]
 		return ok
 	}, 2*time.Second, 10*time.Millisecond)
 
 	c.pendMu.Lock()
-	ch := c.pending["11"]
+	ch := c.pending["n:11"]
 	c.pendMu.Unlock()
 	require.NotNil(t, ch)
 	ch <- &rpc.Response{JSONRPC: rpc.JSONRPCVersion, ID: json.RawMessage(`11`), Result: json.RawMessage(`{}`)}
@@ -710,4 +710,91 @@ func TestEnsureSessionUsesBearerToken(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Bearer "+token, gotAuth)
 	require.True(t, strings.HasPrefix(gotAuth, "Bearer "))
+}
+
+func TestCallCorrelatesWhenUpstreamRespellsID(t *testing.T) {
+	var (
+		mu     sync.Mutex
+		sessID string
+		events chan string
+	)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /mcp/sse", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		sessID = "respell-sess"
+		events = make(chan string, 4)
+		ch := events
+		mu.Unlock()
+
+		w.Header().Set(mcpwire.HeaderMCPSessionID, "respell-sess")
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		fl, ok := w.(http.Flusher)
+		require.True(t, ok)
+		fl.Flush()
+
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case msg, ok := <-ch:
+				if !ok {
+					return
+				}
+				_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", mcpwire.SSEJSONRPCEvent, msg)
+				fl.Flush()
+			}
+		}
+	})
+	mux.HandleFunc("POST /mcp/rpc", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		want := sessID
+		mu.Unlock()
+		if r.Header.Get(mcpwire.HeaderMCPSessionID) != want || want == "" {
+			http.Error(w, "bad session", http.StatusUnauthorized)
+			return
+		}
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		req, err := rpc.ParseRequest(body)
+		require.NoError(t, err)
+		w.WriteHeader(http.StatusAccepted)
+		if req.IsNotification() {
+			return
+		}
+
+		var sent int64
+		require.NoError(t, json.Unmarshal(req.ID, &sent))
+		respelled := fmt.Sprintf("%d.0", sent)
+
+		go func() {
+			mu.Lock()
+			ch := events
+			mu.Unlock()
+			if ch != nil {
+				ch <- fmt.Sprintf(`{"jsonrpc":%q,"id":%s,"result":{"ok":true}}`, rpc.JSONRPCVersion, respelled)
+			}
+		}()
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, cleanup, err := NewHTTPMCPUpstream(context.Background(), "u1", "alpha", srv.URL, 1, "")
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	require.NoError(t, c.ensureSession(context.Background()))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	resp, err := c.Call(ctx, &rpc.Request{
+		JSONRPC: rpc.JSONRPCVersion,
+		ID:      json.RawMessage(`1`),
+		Method:  "tools/list",
+	})
+	require.NoError(t, err, "upstream echoed id 1 as 1.0: Call must correlate it, not block until its deadline")
+	require.NotNil(t, resp)
+	require.Nil(t, resp.Error)
 }
