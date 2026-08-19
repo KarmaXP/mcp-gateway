@@ -1,0 +1,25 @@
+# Also applies to deployments/mock-mcp/Dockerfile, built with context: ..
+
+.env*
+!.env.example
+
+.git
+.gitignore
+.github
+.ci-bin/
+bin/
+*.log
+
+.idea
+.vscode
+.claude
+.personal
+CLAUDE.md
+.DS_Store
+
+docs/
+deployments/
+LICENSE
+README.md
+CONTRIBUTING.md
+SECURITY.md
