@@ -22,6 +22,11 @@ import (
 
 var ActiveSessions atomic.Int64
 
+const (
+	otlpTracesPath = "/v1/traces"
+	otlpMetricsPath = "/v1/metrics"
+)
+
 func Init(ctx context.Context, serviceName string) (shutdown func(context.Context) error, err error) {
 	if serviceName == "" {
 		serviceName = defaults.DefaultTelemetryServiceName
@@ -45,7 +50,7 @@ func Init(ctx context.Context, serviceName string) (shutdown func(context.Contex
 	var mp *sdkmetric.MeterProvider
 
 	if ep != "" {
-		texp, err := otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(normalizeOTLP(ep)))
+		texp, err := otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(otlpSignalURL(ep, otlpTracesPath)))
 		if err != nil {
 			return nil, fmt.Errorf("telemetry: trace exporter: %w", err)
 		}
@@ -54,7 +59,7 @@ func Init(ctx context.Context, serviceName string) (shutdown func(context.Contex
 			sdktrace.WithResource(res),
 		)
 
-		mexp, err := otlpmetrichttp.New(ctx, otlpmetrichttp.WithEndpointURL(normalizeOTLP(ep)))
+		mexp, err := otlpmetrichttp.New(ctx, otlpmetrichttp.WithEndpointURL(otlpSignalURL(ep, otlpMetricsPath)))
 		if err != nil {
 			return nil, fmt.Errorf("telemetry: metric exporter: %w", err)
 		}
@@ -89,6 +94,11 @@ func Init(ctx context.Context, serviceName string) (shutdown func(context.Contex
 		}
 		return errors.Join(errs...)
 	}, nil
+}
+
+// otel >= 1.44 takes the WithEndpointURL path as-is instead of appending the signal path.
+func otlpSignalURL(ep, signalPath string) string {
+	return strings.TrimSuffix(normalizeOTLP(ep), "/") + signalPath
 }
 
 func normalizeOTLP(ep string) string {
