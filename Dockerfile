@@ -11,9 +11,7 @@ FROM golang:1.26-alpine AS builder
 WORKDIR /src
 
 # Download dependencies first for layer caching.
-# go.sum may not exist yet in early development (no deps); handled below.
-COPY go.mod .
-RUN test -f go.sum && cp go.sum . || true
+COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .

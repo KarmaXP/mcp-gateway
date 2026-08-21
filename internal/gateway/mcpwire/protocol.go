@@ -10,6 +10,14 @@ const (
 	SSEDataLinePrefix = "data:"
 	SSEJSONRPCEvent = "jsonrpc"
 
+	MethodInitialize = "initialize"
+	MethodToolsList = "tools/list"
+	MethodToolsCall = "tools/call"
+	MethodResourcesList = "resources/list"
+	MethodResourcesRead = "resources/read"
+	MethodPromptsList = "prompts/list"
+	MethodPromptsGet = "prompts/get"
+
 	NotificationToolsListChanged = "notifications/tools/list_changed"
 	LegacyToolsListChanged = "tools/list_changed"
 	NotificationResourcesListChanged = "notifications/resources/list_changed"
@@ -34,4 +42,18 @@ func IsCatalogListChangedNotification(method string) bool {
 	return IsToolsListChangedNotification(method) ||
 		IsResourcesListChangedNotification(method) ||
 		IsPromptsListChangedNotification(method)
+}
+
+func IsReplayableMethod(method string) bool {
+	switch method {
+	case MethodInitialize,
+		MethodToolsList,
+		MethodResourcesList,
+		MethodResourcesRead,
+		MethodPromptsList,
+		MethodPromptsGet:
+		return true
+	default:
+		return false
+	}
 }

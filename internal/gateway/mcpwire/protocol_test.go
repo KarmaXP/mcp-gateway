@@ -41,3 +41,28 @@ func TestIsToolsListChangedNotificationSubsetOfCatalogMatcher(t *testing.T) {
 	require.False(t, IsToolsListChangedNotification(NotificationResourcesListChanged))
 	require.False(t, IsToolsListChangedNotification(NotificationPromptsListChanged))
 }
+
+func TestIsReplayableMethod(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		method string
+		want   bool
+	}{
+		{MethodInitialize, true},
+		{MethodToolsList, true},
+		{MethodResourcesList, true},
+		{MethodResourcesRead, true},
+		{MethodPromptsList, true},
+		{MethodPromptsGet, true},
+		{MethodToolsCall, false},
+		{NotificationToolsListChanged, false},
+		{"notifications/initialized", false},
+		{"tools/somethingNew", false},
+		{"", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.method, func(t *testing.T) {
+			require.Equal(t, tc.want, IsReplayableMethod(tc.method))
+		})
+	}
+}

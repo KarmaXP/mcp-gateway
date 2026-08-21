@@ -234,7 +234,7 @@ func TestCallSurvivesReconnectWhenPOSTInFlight(t *testing.T) {
 	require.Eventually(t, func() bool {
 		c.pendMu.Lock()
 		defer c.pendMu.Unlock()
-		_, ok := c.pending["55"]
+		_, ok := c.pending["n:55"]
 		return ok
 	}, 2*time.Second, 10*time.Millisecond)
 
@@ -371,7 +371,7 @@ func TestDispatchResponseAbortsPendingWhenChannelFull(t *testing.T) {
 
 	ch := make(chan *rpc.Response, pendingJSONRPCChannelCap)
 	c.pendMu.Lock()
-	c.pending["9"] = ch
+	c.pending["n:9"] = ch
 	c.pendMu.Unlock()
 	ch <- &rpc.Response{JSONRPC: rpc.JSONRPCVersion, ID: json.RawMessage(`9`), Result: json.RawMessage(`{}`)}
 
@@ -385,7 +385,7 @@ func TestDispatchResponseAbortsPendingWhenChannelFull(t *testing.T) {
 	require.Equal(t, uint64(1), c.DroppedResponses())
 
 	c.pendMu.Lock()
-	deliverErr := c.pendingErr["9"]
+	deliverErr := c.pendingErr["n:9"]
 	c.pendMu.Unlock()
 	require.Error(t, deliverErr)
 	require.Contains(t, deliverErr.Error(), "pending channel full")
@@ -504,7 +504,7 @@ func TestCallFailsFastOnSSEDisconnect(t *testing.T) {
 	require.Eventually(t, func() bool {
 		c.pendMu.Lock()
 		defer c.pendMu.Unlock()
-		_, ok := c.pending["7"]
+		_, ok := c.pending["n:7"]
 		return ok
 	}, 2*time.Second, 10*time.Millisecond)
 
@@ -522,28 +522,6 @@ func TestCallFailsFastOnSSEDisconnect(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("Call did not fail fast after SSE disconnect")
 	}
-}
-
-func TestConnectRequestContextCancelsWhenEitherParentDone(t *testing.T) {
-	t.Parallel()
-	lifecycle, stopLifecycle := context.WithCancel(context.Background())
-	defer stopLifecycle()
-	callCtx, stopCall := context.WithCancel(context.Background())
-	defer stopCall()
-
-	merged := connectRequestContext(lifecycle, callCtx)
-	require.NoError(t, merged.Err())
-
-	stopCall()
-	require.Eventually(t, func() bool {
-		return merged.Err() != nil
-	}, time.Second, 5*time.Millisecond)
-
-	merged2 := connectRequestContext(lifecycle, callCtx)
-	stopLifecycle()
-	require.Eventually(t, func() bool {
-		return merged2.Err() != nil
-	}, time.Second, 5*time.Millisecond)
 }
 
 func TestEnsureSessionRespectsCallContextDeadline(t *testing.T) {
@@ -590,7 +568,7 @@ func TestCallRejectsDuplicateJSONRPCID(t *testing.T) {
 
 	ch := make(chan *rpc.Response, pendingJSONRPCChannelCap)
 	c.pendMu.Lock()
-	c.pending["99"] = ch
+	c.pending["n:99"] = ch
 	c.pendMu.Unlock()
 
 	_, err = c.Call(context.Background(), &rpc.Request{
@@ -644,12 +622,12 @@ func TestCallReturnsErrorWhenPendingChannelFull(t *testing.T) {
 	require.Eventually(t, func() bool {
 		c.pendMu.Lock()
 		defer c.pendMu.Unlock()
-		_, ok := c.pending["11"]
+		_, ok := c.pending["n:11"]
 		return ok
 	}, 2*time.Second, 10*time.Millisecond)
 
 	c.pendMu.Lock()
-	ch := c.pending["11"]
+	ch := c.pending["n:11"]
 	c.pendMu.Unlock()
 	require.NotNil(t, ch)
 	ch <- &rpc.Response{JSONRPC: rpc.JSONRPCVersion, ID: json.RawMessage(`11`), Result: json.RawMessage(`{}`)}
@@ -710,4 +688,329 @@ func TestEnsureSessionUsesBearerToken(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Bearer "+token, gotAuth)
 	require.True(t, strings.HasPrefix(gotAuth, "Bearer "))
+}
+
+func TestCallCorrelatesWhenUpstreamRespellsID(t *testing.T) {
+	var (
+		mu     sync.Mutex
+		sessID string
+		events chan string
+	)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /mcp/sse", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		sessID = "respell-sess"
+		events = make(chan string, 4)
+		ch := events
+		mu.Unlock()
+
+		w.Header().Set(mcpwire.HeaderMCPSessionID, "respell-sess")
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		fl, ok := w.(http.Flusher)
+		require.True(t, ok)
+		fl.Flush()
+
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case msg, ok := <-ch:
+				if !ok {
+					return
+				}
+				_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", mcpwire.SSEJSONRPCEvent, msg)
+				fl.Flush()
+			}
+		}
+	})
+	mux.HandleFunc("POST /mcp/rpc", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		want := sessID
+		mu.Unlock()
+		if r.Header.Get(mcpwire.HeaderMCPSessionID) != want || want == "" {
+			http.Error(w, "bad session", http.StatusUnauthorized)
+			return
+		}
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		req, err := rpc.ParseRequest(body)
+		require.NoError(t, err)
+		w.WriteHeader(http.StatusAccepted)
+		if req.IsNotification() {
+			return
+		}
+
+		var sent int64
+		require.NoError(t, json.Unmarshal(req.ID, &sent))
+		respelled := fmt.Sprintf("%d.0", sent)
+
+		go func() {
+			mu.Lock()
+			ch := events
+			mu.Unlock()
+			if ch != nil {
+				ch <- fmt.Sprintf(`{"jsonrpc":%q,"id":%s,"result":{"ok":true}}`, rpc.JSONRPCVersion, respelled)
+			}
+		}()
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, cleanup, err := NewHTTPMCPUpstream(context.Background(), "u1", "alpha", srv.URL, 1, "")
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	require.NoError(t, c.ensureSession(context.Background()))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	resp, err := c.Call(ctx, &rpc.Request{
+		JSONRPC: rpc.JSONRPCVersion,
+		ID:      json.RawMessage(`1`),
+		Method:  "tools/list",
+	})
+	require.NoError(t, err, "upstream echoed id 1 as 1.0: Call must correlate it, not block until its deadline")
+	require.NotNil(t, resp)
+	require.Nil(t, resp.Error)
+}
+
+func TestSSEStreamOutlivesThePerCallContext(t *testing.T) {
+	var (
+		mu       sync.Mutex
+		events   chan string
+		sseOpens atomic.Int32
+	)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /mcp/sse", func(w http.ResponseWriter, r *http.Request) {
+		sseOpens.Add(1)
+		mu.Lock()
+		events = make(chan string, 8)
+		ch := events
+		mu.Unlock()
+
+		w.Header().Set(mcpwire.HeaderMCPSessionID, "outlive-sess")
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		fl, ok := w.(http.Flusher)
+		require.True(t, ok)
+		fl.Flush()
+
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case msg, ok := <-ch:
+				if !ok {
+					return
+				}
+				_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", mcpwire.SSEJSONRPCEvent, msg)
+				fl.Flush()
+			}
+		}
+	})
+	mux.HandleFunc("POST /mcp/rpc", func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		req, err := rpc.ParseRequest(body)
+		require.NoError(t, err)
+		w.WriteHeader(http.StatusAccepted)
+		if req.IsNotification() {
+			return
+		}
+		go func() {
+			result, err := json.Marshal(map[string]any{"ok": true})
+			require.NoError(t, err)
+			raw, err := json.Marshal(rpc.NewResult(req.ID, result))
+			require.NoError(t, err)
+			mu.Lock()
+			ch := events
+			mu.Unlock()
+			if ch != nil {
+				ch <- string(raw)
+			}
+		}()
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, cleanup, err := NewHTTPMCPUpstream(context.Background(), "u1", "alpha", srv.URL, 4, "")
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+
+	var notifMu sync.Mutex
+	var notified []string
+	c.SetOnNotification(func(req *rpc.Request) {
+		notifMu.Lock()
+		notified = append(notified, req.Method)
+		notifMu.Unlock()
+	})
+
+	// Each call gets its own short-lived context and cancels it on return, exactly how
+	// multiplex.Initialize and the list paths call in.
+	call := func(id string) {
+		callCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		resp, err := c.Call(callCtx, &rpc.Request{
+			JSONRPC: rpc.JSONRPCVersion,
+			Method:  mcpwire.MethodToolsList,
+			ID:      json.RawMessage(id),
+		})
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+	}
+	call(`1`)
+
+	// An upstream notification arriving between two calls is the thing a dead stream loses.
+	notif, err := json.Marshal(map[string]any{
+		"jsonrpc": rpc.JSONRPCVersion,
+		"method":  mcpwire.NotificationToolsListChanged,
+	})
+	require.NoError(t, err)
+	mu.Lock()
+	ch := events
+	mu.Unlock()
+	require.NotNil(t, ch)
+	ch <- string(notif)
+
+	require.Eventually(t, func() bool {
+		notifMu.Lock()
+		defer notifMu.Unlock()
+		return len(notified) == 1
+	}, 3*time.Second, 10*time.Millisecond, "notification sent between calls must reach the gateway")
+
+	call(`2`)
+
+	require.Equal(t, int32(1), sseOpens.Load(),
+		"the SSE stream must outlive the individual RPC that opened it")
+}
+
+func newSessionLossUpstream(t *testing.T, posted *[]string, postedMu *sync.Mutex) *httptest.Server {
+	t.Helper()
+	var (
+		mu      sync.Mutex
+		events  chan string
+		dropSSE chan struct{}
+		opens   int
+	)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /mcp/sse", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		opens++
+		events = make(chan string, 4)
+		dropSSE = make(chan struct{})
+		ch, drop := events, dropSSE
+		mu.Unlock()
+
+		w.Header().Set(mcpwire.HeaderMCPSessionID, fmt.Sprintf("loss-sess-%d", opens))
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		fl, ok := w.(http.Flusher)
+		require.True(t, ok)
+		fl.Flush()
+
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-drop:
+				return
+			case msg, ok := <-ch:
+				if !ok {
+					return
+				}
+				_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", mcpwire.SSEJSONRPCEvent, msg)
+				fl.Flush()
+			}
+		}
+	})
+	mux.HandleFunc("POST /mcp/rpc", func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		req, err := rpc.ParseRequest(body)
+		require.NoError(t, err)
+		w.WriteHeader(http.StatusAccepted)
+
+		postedMu.Lock()
+		*posted = append(*posted, req.Method)
+		attempt := len(*posted)
+		postedMu.Unlock()
+
+		mu.Lock()
+		ch, drop := events, dropSSE
+		mu.Unlock()
+
+		if attempt == 1 {
+			// Accepted, so the upstream may already have run it, then the stream dies
+			// before the result can come back.
+			close(drop)
+			return
+		}
+		go func() {
+			result, err := json.Marshal(map[string]any{"ok": true})
+			require.NoError(t, err)
+			raw, err := json.Marshal(rpc.NewResult(req.ID, result))
+			require.NoError(t, err)
+			if ch != nil {
+				ch <- string(raw)
+			}
+		}()
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestCallDoesNotReplayToolsCallAfterDelivery(t *testing.T) {
+	var postedMu sync.Mutex
+	var posted []string
+	srv := newSessionLossUpstream(t, &posted, &postedMu)
+
+	c, cleanup, err := NewHTTPMCPUpstream(context.Background(), "u1", "alpha", srv.URL, 1, "")
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err = c.Call(ctx, &rpc.Request{
+		JSONRPC: rpc.JSONRPCVersion,
+		Method:  mcpwire.MethodToolsCall,
+		ID:      json.RawMessage(`1`),
+	})
+	require.Error(t, err, "the lost response must surface, not be retried")
+
+	postedMu.Lock()
+	defer postedMu.Unlock()
+	require.Equal(t, []string{mcpwire.MethodToolsCall}, posted,
+		"a tools/call the upstream already accepted must never be sent twice")
+}
+
+func TestCallReplaysToolsListAfterDelivery(t *testing.T) {
+	var postedMu sync.Mutex
+	var posted []string
+	srv := newSessionLossUpstream(t, &posted, &postedMu)
+
+	c, cleanup, err := NewHTTPMCPUpstream(context.Background(), "u1", "alpha", srv.URL, 1, "")
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	resp, err := c.Call(ctx, &rpc.Request{
+		JSONRPC: rpc.JSONRPCVersion,
+		Method:  mcpwire.MethodToolsList,
+		ID:      json.RawMessage(`1`),
+	})
+	require.NoError(t, err, "a read is replayable, so the session loss must be ridden out")
+	require.NotNil(t, resp)
+
+	postedMu.Lock()
+	defer postedMu.Unlock()
+	require.Equal(t, []string{mcpwire.MethodToolsList, mcpwire.MethodToolsList}, posted)
 }

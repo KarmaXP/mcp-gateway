@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -25,6 +24,17 @@ const (
 	pendingJSONRPCChannelCap int = 1
 )
 
+type proc struct {
+	cmd   *exec.Cmd
+	stdin io.WriteCloser
+	br    *bufio.Reader
+}
+
+type writeRequest struct {
+	payload []byte
+	done    chan error
+}
+
 type StdioMCPUpstream struct {
 	id      string
 	prefix  string
@@ -43,10 +53,11 @@ type StdioMCPUpstream struct {
 	closeOnce sync.Once
 	waitOnce  sync.Once
 
-	writeMu sync.Mutex
-	cmd     *exec.Cmd
-	stdin   io.WriteCloser
-	br      *bufio.Reader
+	procMu  sync.Mutex
+	proc    atomic.Pointer[proc]
+	writes  chan writeRequest
+	writeWG sync.WaitGroup
+	stopped chan struct{}
 
 	droppedResponses atomic.Uint64
 
@@ -76,6 +87,8 @@ func NewStdioMCPUpstream(lifecycle context.Context, id, prefix string, command, 
 		env:        slices.Clone(extraEnv),
 		lifecycle:  lifecycle,
 		sem:        semaphore.NewWeighted(maxConcurrency),
+		writes:     make(chan writeRequest, maxConcurrency),
+		stopped:    make(chan struct{}),
 		pending:    make(map[string]chan *rpc.Response),
 		pendingErr: make(map[string]error),
 	}
@@ -99,7 +112,7 @@ func (c *StdioMCPUpstream) ensure(ctx context.Context) error {
 	if err := c.deadError(); err != nil {
 		return err
 	}
-	c.startOnce.Do(func() { c.startErr = c.startLocked() })
+	c.startOnce.Do(func() { c.startErr = c.start() })
 	if c.startErr != nil {
 		return c.startErr
 	}
@@ -136,16 +149,15 @@ func (c *StdioMCPUpstream) failPending() {
 
 func (c *StdioMCPUpstream) reapProcess() {
 	c.waitOnce.Do(func() {
-		if c.cmd != nil {
-			_ = c.cmd.Wait()
+		if p := c.proc.Load(); p != nil {
+			_ = p.cmd.Wait()
 		}
 	})
 }
 
-func (c *StdioMCPUpstream) startLocked() error {
+func (c *StdioMCPUpstream) start() error {
 	cmd := exec.CommandContext(c.lifecycle, c.command[0], c.command[1:]...)
-	base := slices.Clone(os.Environ())
-	cmd.Env = append(base, c.env...)
+	cmd.Env = c.childEnv()
 	cmd.Stderr = os.Stderr
 
 	stdin, err := cmd.StdinPipe()
@@ -159,22 +171,50 @@ func (c *StdioMCPUpstream) startLocked() error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("mcpstdio %s: start: %w", c.id, err)
 	}
-	c.cmd = cmd
-	c.stdin = stdin
-	c.br = bufio.NewReader(stdout)
+	p := &proc{cmd: cmd, stdin: stdin, br: bufio.NewReader(stdout)}
 
+	c.procMu.Lock()
+	select {
+	case <-c.stopped:
+		c.procMu.Unlock()
+		_ = stdin.Close()
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+		_ = cmd.Wait()
+		return fmt.Errorf("mcpstdio %s: closed", c.id)
+	default:
+	}
+	c.proc.Store(p)
 	c.readWG.Add(1)
+	c.writeWG.Add(1)
+	c.procMu.Unlock()
+
 	go func() {
 		defer c.readWG.Done()
-		c.readLoop()
+		c.readLoop(p)
+	}()
+	go func() {
+		defer c.writeWG.Done()
+		c.writeLoop(p)
 	}()
 	return nil
 }
 
-func (c *StdioMCPUpstream) readLoop() {
+func (c *StdioMCPUpstream) childEnv() []string {
+	env := make([]string, 0, len(defaults.UpstreamStdioInheritedEnv)+len(c.env))
+	for _, key := range defaults.UpstreamStdioInheritedEnv {
+		if value, ok := os.LookupEnv(key); ok {
+			env = append(env, key+"="+value)
+		}
+	}
+	return append(env, c.env...)
+}
+
+func (c *StdioMCPUpstream) readLoop(p *proc) {
 	defer c.onReaderExit()
 	for {
-		line, err := c.br.ReadBytes('\n')
+		line, err := p.br.ReadBytes('\n')
 		if err != nil {
 			return
 		}
@@ -194,8 +234,8 @@ func (c *StdioMCPUpstream) onReaderExit() {
 func (c *StdioMCPUpstream) dispatch(raw []byte) {
 	resp, err := rpc.ParseResponse(raw)
 	if err == nil {
-		key := idKey(resp.ID)
-		if key == "" {
+		key, idErr := rpc.CanonicalIDKey(resp.ID)
+		if idErr != nil {
 			return
 		}
 		c.pendMu.Lock()
@@ -229,22 +269,45 @@ func (c *StdioMCPUpstream) dispatch(raw []byte) {
 	}
 }
 
-func idKey(id json.RawMessage) string {
-	if len(id) == 0 {
-		return ""
+func (c *StdioMCPUpstream) writeLoop(p *proc) {
+	for {
+		select {
+		case <-c.stopped:
+			return
+		case <-c.lifecycle.Done():
+			return
+		case req := <-c.writes:
+			req.done <- writeFrame(p.stdin, req.payload)
+		}
 	}
-	return string(id)
 }
 
-func (c *StdioMCPUpstream) writeLineLocked(payload []byte) error {
+func writeFrame(w io.Writer, payload []byte) error {
+	if _, err := w.Write(payload); err != nil {
+		return err
+	}
+	_, err := w.Write([]byte{'\n'})
+	return err
+}
+
+func (c *StdioMCPUpstream) writeLine(ctx context.Context, payload []byte) error {
 	if err := c.deadError(); err != nil {
 		return err
 	}
-	if _, err := c.stdin.Write(payload); err != nil {
-		return err
+	req := writeRequest{payload: payload, done: make(chan error, 1)}
+	select {
+	case c.writes <- req:
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-c.stopped:
+		return c.deadError()
 	}
-	_, err := c.stdin.Write([]byte{'\n'})
-	return err
+	select {
+	case err := <-req.done:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (c *StdioMCPUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
@@ -263,18 +326,15 @@ func (c *StdioMCPUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Res
 	}
 
 	if req.IsNotification() {
-		c.writeMu.Lock()
-		err := c.writeLineLocked(body)
-		c.writeMu.Unlock()
-		if err != nil {
+		if err := c.writeLine(ctx, body); err != nil {
 			return nil, err
 		}
 		return nil, nil
 	}
 
-	key := idKey(req.ID)
-	if key == "" {
-		return nil, fmt.Errorf("mcpstdio %s: missing jsonrpc id", c.id)
+	key, err := rpc.CanonicalIDKey(req.ID)
+	if err != nil {
+		return nil, fmt.Errorf("mcpstdio %s: jsonrpc id: %w", c.id, err)
 	}
 	ch := make(chan *rpc.Response, pendingJSONRPCChannelCap)
 	c.pendMu.Lock()
@@ -293,10 +353,7 @@ func (c *StdioMCPUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Res
 		c.pendMu.Unlock()
 	}()
 
-	c.writeMu.Lock()
-	err = c.writeLineLocked(body)
-	c.writeMu.Unlock()
-	if err != nil {
+	if err := c.writeLine(ctx, body); err != nil {
 		return nil, err
 	}
 
@@ -321,13 +378,18 @@ func (c *StdioMCPUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Res
 func (c *StdioMCPUpstream) close() {
 	c.closeOnce.Do(func() {
 		c.markDead(fmt.Errorf("mcpstdio %s: closed", c.id))
-		if c.stdin != nil {
-			_ = c.stdin.Close()
-		}
-		if c.cmd != nil && c.cmd.Process != nil {
-			_ = c.cmd.Process.Kill()
+		c.procMu.Lock()
+		close(c.stopped)
+		p := c.proc.Load()
+		c.procMu.Unlock()
+		if p != nil {
+			_ = p.stdin.Close()
+			if p.cmd.Process != nil {
+				_ = p.cmd.Process.Kill()
+			}
 		}
 		c.readWG.Wait()
+		c.writeWG.Wait()
 		c.reapProcess()
 	})
 }

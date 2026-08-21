@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -59,7 +60,7 @@ func TestDispatchResponseDeliversToPending(t *testing.T) {
 
 	ch := make(chan *rpc.Response, 1)
 	c.pendMu.Lock()
-	c.pending["1"] = ch
+	c.pending["n:1"] = ch
 	c.pendMu.Unlock()
 
 	raw, err := json.Marshal(map[string]any{
@@ -87,7 +88,7 @@ func TestDispatchResponseAbortsPendingWhenChannelFull(t *testing.T) {
 
 	ch := make(chan *rpc.Response, pendingJSONRPCChannelCap)
 	c.pendMu.Lock()
-	c.pending["9"] = ch
+	c.pending["n:9"] = ch
 	c.pendMu.Unlock()
 	ch <- &rpc.Response{JSONRPC: rpc.JSONRPCVersion, ID: json.RawMessage(`9`), Result: json.RawMessage(`{}`)}
 
@@ -101,7 +102,7 @@ func TestDispatchResponseAbortsPendingWhenChannelFull(t *testing.T) {
 	require.Equal(t, uint64(1), c.DroppedResponses())
 
 	c.pendMu.Lock()
-	deliverErr := c.pendingErr["9"]
+	deliverErr := c.pendingErr["n:9"]
 	c.pendMu.Unlock()
 	require.Error(t, deliverErr)
 	require.Contains(t, deliverErr.Error(), "pending channel full")
@@ -120,7 +121,7 @@ func TestCallClearsPendingErrOnContextCancel(t *testing.T) {
 
 	require.NoError(t, c.ensure(context.Background()))
 
-	const key = "3"
+	const key = "n:3"
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var callErr error
@@ -165,7 +166,7 @@ func TestCallRejectsDuplicateJSONRPCID(t *testing.T) {
 
 	ch := make(chan *rpc.Response, pendingJSONRPCChannelCap)
 	c.pendMu.Lock()
-	c.pending["1"] = ch
+	c.pending["n:1"] = ch
 	c.pendMu.Unlock()
 
 	_, err = c.Call(context.Background(), &rpc.Request{
@@ -192,12 +193,6 @@ func TestDispatchResponseIgnoresUnknownID(t *testing.T) {
 	c.dispatch(raw)
 }
 
-func TestIDKey(t *testing.T) {
-	t.Parallel()
-	require.Empty(t, idKey(nil))
-	require.Equal(t, "42", idKey(json.RawMessage(`42`)))
-}
-
 func TestCloseReapsChildProcess(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("child reaping check is unix-specific")
@@ -208,7 +203,7 @@ func TestCloseReapsChildProcess(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, c.ensure(ctx))
 
-	pid := c.cmd.Process.Pid
+	pid := c.proc.Load().cmd.Process.Pid
 	cleanup()
 
 	var status syscall.WaitStatus
@@ -224,7 +219,7 @@ func TestCallReturnsAfterProcessExit(t *testing.T) {
 	defer cleanup()
 
 	require.NoError(t, c.ensure(ctx))
-	require.NoError(t, c.cmd.Process.Kill())
+	require.NoError(t, c.proc.Load().cmd.Process.Kill())
 
 	require.Eventually(t, func() bool {
 		return c.deadError() != nil
@@ -250,7 +245,7 @@ func TestEnsureFailsAfterProcessExit(t *testing.T) {
 	defer cleanup()
 
 	require.NoError(t, c.ensure(ctx))
-	require.NoError(t, c.cmd.Process.Kill())
+	require.NoError(t, c.proc.Load().cmd.Process.Kill())
 
 	require.Eventually(t, func() bool {
 		return c.deadError() != nil
@@ -259,4 +254,105 @@ func TestEnsureFailsAfterProcessExit(t *testing.T) {
 	err = c.ensure(ctx)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "process exited")
+}
+
+func TestDispatchResponseCorrelatesRespelledID(t *testing.T) {
+	t.Parallel()
+	c, cleanup, err := NewStdioMCPUpstream(context.Background(), "u1", "alpha", []string{"true"}, nil, 1)
+	require.NoError(t, err)
+	defer cleanup()
+
+	ch := make(chan *rpc.Response, 1)
+	c.pendMu.Lock()
+	c.pending["n:1"] = ch
+	c.pendMu.Unlock()
+
+	c.dispatch([]byte(`{"jsonrpc":"2.0","id":1.0,"result":{"ok":true}}`))
+
+	select {
+	case resp := <-ch:
+		require.NotNil(t, resp)
+	default:
+		t.Fatal("id 1 echoed as 1.0 must still reach the pending caller")
+	}
+}
+
+func TestChildDoesNotInheritTheGatewayEnvironment(t *testing.T) {
+	t.Setenv("MCP_GATEWAY_BACKENDS", "id=other,auth_token=super-secret")
+	t.Setenv("JWT_PUBLIC_KEY_PEM", "BEGIN-PUBLIC-KEY-material")
+
+	script := `read line; printf '{"jsonrpc":"2.0","id":1,"result":{"backends":"%s","jwt":"%s","own":"%s","path":"%s"}}\n' ` +
+		`"$MCP_GATEWAY_BACKENDS" "$JWT_PUBLIC_KEY_PEM" "$UPSTREAM_OWN" "${PATH:+set}"`
+
+	c, cleanup, err := NewStdioMCPUpstream(context.Background(), "u1", "alpha",
+		[]string{"sh", "-c", script}, []string{"UPSTREAM_OWN=from-config"}, 1)
+	require.NoError(t, err)
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	resp, err := c.Call(ctx, &rpc.Request{
+		JSONRPC: rpc.JSONRPCVersion, Method: "tools/list", ID: json.RawMessage(`1`),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	var seen struct {
+		Backends string `json:"backends"`
+		JWT      string `json:"jwt"`
+		Own      string `json:"own"`
+		Path     string `json:"path"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Result, &seen))
+	require.Empty(t, seen.Backends, "MCP_GATEWAY_BACKENDS carries every upstream auth_token")
+	require.Empty(t, seen.JWT, "the child must not see the gateway signing key")
+	require.Equal(t, "from-config", seen.Own, "the upstream's own env must still reach it")
+	require.Equal(t, "set", seen.Path, "PATH must survive or nothing can be executed")
+}
+
+func TestCloseDuringStartLeavesNoRaceAndNoOrphan(t *testing.T) {
+	for i := 0; i < 40; i++ {
+		c, cleanup, err := NewStdioMCPUpstream(context.Background(), "u1", "alpha", []string{"sleep", "3600"}, nil, 1)
+		require.NoError(t, err)
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() { defer wg.Done(); _ = c.ensure(context.Background()) }()
+		go func() { defer wg.Done(); cleanup() }()
+		wg.Wait()
+	}
+}
+
+func TestCallDeadlineIsNotBlockedByAStuckWrite(t *testing.T) {
+	c, cleanup, err := NewStdioMCPUpstream(context.Background(), "u1", "alpha", []string{"sleep", "3600"}, nil, 4)
+	require.NoError(t, err)
+	defer cleanup()
+	require.NoError(t, c.ensure(context.Background()))
+
+	// sleep never drains stdin, so a payload past the pipe buffer wedges the writer.
+	args, err := json.Marshal(map[string]any{"blob": strings.Repeat("x", 1<<20)})
+	require.NoError(t, err)
+	go func() {
+		_, _ = c.Call(context.Background(), &rpc.Request{
+			JSONRPC: rpc.JSONRPCVersion, Method: "tools/call",
+			ID: json.RawMessage(`1`), Params: args,
+		})
+	}()
+	time.Sleep(300 * time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, err := c.Call(ctx, &rpc.Request{
+			JSONRPC: rpc.JSONRPCVersion, Method: "tools/list", ID: json.RawMessage(`2`),
+		})
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+	case <-time.After(2 * time.Second):
+		t.Fatal("a caller with its own 100ms deadline must not queue behind a wedged write")
+	}
 }
