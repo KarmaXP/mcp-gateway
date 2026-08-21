@@ -54,6 +54,8 @@ var (
 	HTTPReadTimeout = 60 * time.Second
 	HTTPIdleTimeout = 120 * time.Second
 	UpstreamSSEHandshakeTimeout = 5 * time.Second
+
+	UpstreamStdioInheritedEnv = []string{"PATH", "HOME", "TMPDIR", "TZ", "LANG", "LC_ALL"}
 	MultiplexInitTimeout = 5 * time.Second
 	MultiplexListTimeout = 10 * time.Second
 	MultiplexCallTimeout = 60 * time.Second
