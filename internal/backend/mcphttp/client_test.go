@@ -1014,3 +1014,60 @@ func TestCallReplaysToolsListAfterDelivery(t *testing.T) {
 	defer postedMu.Unlock()
 	require.Equal(t, []string{mcpwire.MethodToolsList, mcpwire.MethodToolsList}, posted)
 }
+
+func sseUpstream(t *testing.T, write func(w http.ResponseWriter, fl http.Flusher)) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /mcp/sse", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(mcpwire.HeaderMCPSessionID, "frame-sess")
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		fl, ok := w.(http.Flusher)
+		require.True(t, ok)
+		fl.Flush()
+		write(w, fl)
+		<-r.Context().Done()
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestOversizedSSELineTearsDownTheStream(t *testing.T) {
+	srv := sseUpstream(t, func(w http.ResponseWriter, fl http.Flusher) {
+		chunk := strings.Repeat("x", 1<<20)
+		for range 9 {
+			_, _ = w.Write([]byte(chunk))
+			fl.Flush()
+		}
+	})
+
+	c, cleanup, err := NewHTTPMCPUpstream(context.Background(), "u1", "alpha", srv.URL, 1, "")
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	require.NoError(t, c.ensureSession(context.Background()))
+
+	require.Eventually(t, func() bool {
+		return strings.Contains(c.disconnectErr().Error(), "frame exceeds the maximum size")
+	}, 20*time.Second, 50*time.Millisecond, "a never-terminated SSE line must drop the stream, not grow the buffer")
+}
+
+func TestSSEEventAssembledFromManyLinesIsCapped(t *testing.T) {
+	srv := sseUpstream(t, func(w http.ResponseWriter, fl http.Flusher) {
+		_, _ = w.Write([]byte("event: " + mcpwire.SSEJSONRPCEvent + "\n"))
+		line := "data: " + strings.Repeat("y", 60000) + "\n"
+		for range 200 {
+			_, _ = w.Write([]byte(line))
+		}
+		fl.Flush()
+	})
+
+	c, cleanup, err := NewHTTPMCPUpstream(context.Background(), "u1", "alpha", srv.URL, 1, "")
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	require.NoError(t, c.ensureSession(context.Background()))
+
+	require.Eventually(t, func() bool {
+		return strings.Contains(c.disconnectErr().Error(), "frame exceeds the maximum size")
+	}, 20*time.Second, 50*time.Millisecond, "short data lines must not accumulate without a cap")
+}

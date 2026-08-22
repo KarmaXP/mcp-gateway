@@ -32,6 +32,9 @@ const (
 	MaxHTTPUpstreamErrorBody = 2048
 	MaxSSEDiscardBodyBytes = 8 << 10
 
+	MaxUpstreamFrameBytes = 8 << 20
+	MaxUpstreamStderrLineBytes = 4 << 10
+
 	DefaultVectorSearchTopK = 8
 	MillisecondsPerSecond = 1000.0
 )
