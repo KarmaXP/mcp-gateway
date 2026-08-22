@@ -1,9 +1,11 @@
 package mcpstdio
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"runtime"
 	"strings"
 	"sync"
@@ -355,4 +357,53 @@ func TestCallDeadlineIsNotBlockedByAStuckWrite(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("a caller with its own 100ms deadline must not queue behind a wedged write")
 	}
+}
+
+type syncBuf struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (s *syncBuf) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.Write(p)
+}
+
+func (s *syncBuf) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.String()
+}
+
+func TestOversizedFrameKillsTheUpstreamInsteadOfBuffering(t *testing.T) {
+	// 9 MiB with no newline, past defaults.MaxUpstreamFrameBytes.
+	script := `head -c 9000000 /dev/zero | tr "\0" "x"; sleep 3600`
+	c, cleanup, err := NewStdioMCPUpstream(context.Background(), "u1", "alpha", []string{"sh", "-c", script}, nil, 1)
+	require.NoError(t, err)
+	defer cleanup()
+	require.NoError(t, c.ensure(context.Background()))
+
+	require.Eventually(t, func() bool {
+		return c.deadError() != nil
+	}, 15*time.Second, 50*time.Millisecond, "an upstream sending an unterminated frame must be dropped")
+	require.ErrorContains(t, c.deadError(), "frame exceeds the maximum size")
+}
+
+func TestChildStderrIsLoggedWithItsUpstreamID(t *testing.T) {
+	var out syncBuf
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&out, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	c, cleanup, err := NewStdioMCPUpstream(context.Background(), "u-stderr", "alpha",
+		[]string{"sh", "-c", `echo "child said boom" >&2; sleep 3600`}, nil, 1)
+	require.NoError(t, err)
+	defer cleanup()
+	require.NoError(t, c.ensure(context.Background()))
+
+	require.Eventually(t, func() bool {
+		return strings.Contains(out.String(), "child said boom")
+	}, 10*time.Second, 25*time.Millisecond, "child stderr must reach slog, not the gateway's own stderr")
+	require.Contains(t, out.String(), `"upstream_id":"u-stderr"`)
 }

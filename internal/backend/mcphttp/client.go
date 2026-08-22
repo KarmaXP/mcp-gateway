@@ -17,6 +17,7 @@ import (
 	"golang.org/x/sync/semaphore"
 	"golang.org/x/sync/singleflight"
 
+	"github.com/KarmaXP/mcp-gateway/internal/backend/framing"
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
@@ -251,13 +252,15 @@ func (c *HTTPMCPUpstream) connect(callCtx context.Context) error {
 	go func() {
 		defer c.readWG.Done()
 		defer func() { _ = body.Close() }()
-		c.readSSE(body, readCtx)
-		c.onSSEClosed()
+		c.onSSEClosed(c.readSSE(body, readCtx))
 	}()
 	return nil
 }
 
-func (c *HTTPMCPUpstream) onSSEClosed() {
+func (c *HTTPMCPUpstream) onSSEClosed(reason error) {
+	if reason == nil {
+		reason = fmt.Errorf("mcphttp %s: sse stream ended", c.id)
+	}
 	c.connMu.Lock()
 	if !c.connected {
 		c.connMu.Unlock()
@@ -266,7 +269,7 @@ func (c *HTTPMCPUpstream) onSSEClosed() {
 	c.connected = false
 	c.sseBody = nil
 	c.readCancel = nil
-	c.connErr = fmt.Errorf("mcphttp %s: sse stream ended", c.id)
+	c.connErr = reason
 	c.connMu.Unlock()
 	if c.reconnecting.Load() {
 		return
@@ -316,7 +319,7 @@ func (c *HTTPMCPUpstream) disconnectErr() error {
 	return fmt.Errorf("mcphttp %s: upstream disconnected", c.id)
 }
 
-func (c *HTTPMCPUpstream) readSSE(body io.Reader, ctx context.Context) {
+func (c *HTTPMCPUpstream) readSSE(body io.Reader, ctx context.Context) error {
 	br := bufio.NewReader(body)
 	var (
 		eventName string
@@ -337,18 +340,20 @@ func (c *HTTPMCPUpstream) readSSE(body io.Reader, ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		default:
 		}
-		line, err := br.ReadString('\n')
+		raw, err := framing.ReadFrame(br, defaults.MaxUpstreamFrameBytes)
 		if err != nil {
-			if err == io.EOF {
-				flush()
-				return
+			if errors.Is(err, framing.ErrFrameTooLarge) {
+				return fmt.Errorf("mcphttp %s: %w", c.id, err)
 			}
-			return
+			if errors.Is(err, io.EOF) {
+				flush()
+			}
+			return nil
 		}
-		line = strings.TrimRight(line, "\r\n")
+		line := strings.TrimRight(string(raw), "\r\n")
 		if line == "" {
 			flush()
 			continue
@@ -363,6 +368,9 @@ func (c *HTTPMCPUpstream) readSSE(body io.Reader, ctx context.Context) {
 		}
 		if strings.HasPrefix(line, mcpwire.SSEDataLinePrefix) {
 			payload := strings.TrimSpace(strings.TrimPrefix(line, mcpwire.SSEDataLinePrefix))
+			if dataBuf.Len()+len(payload) > defaults.MaxUpstreamFrameBytes {
+				return fmt.Errorf("mcphttp %s: sse event: %w", c.id, framing.ErrFrameTooLarge)
+			}
 			if dataBuf.Len() > 0 {
 				dataBuf.WriteByte('\n')
 			}

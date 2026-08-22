@@ -7,14 +7,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 
 	"golang.org/x/sync/semaphore"
 
+	"github.com/KarmaXP/mcp-gateway/internal/backend/framing"
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
@@ -25,9 +28,11 @@ const (
 )
 
 type proc struct {
-	cmd   *exec.Cmd
-	stdin io.WriteCloser
-	br    *bufio.Reader
+	cmd    *exec.Cmd
+	stdin  io.WriteCloser
+	stdout io.ReadCloser
+	stderr io.ReadCloser
+	br     *bufio.Reader
 }
 
 type writeRequest struct {
@@ -158,11 +163,14 @@ func (c *StdioMCPUpstream) reapProcess() {
 func (c *StdioMCPUpstream) start() error {
 	cmd := exec.CommandContext(c.lifecycle, c.command[0], c.command[1:]...)
 	cmd.Env = c.childEnv()
-	cmd.Stderr = os.Stderr
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return fmt.Errorf("mcpstdio %s: stdin: %w", c.id, err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("mcpstdio %s: stderr: %w", c.id, err)
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -171,13 +179,15 @@ func (c *StdioMCPUpstream) start() error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("mcpstdio %s: start: %w", c.id, err)
 	}
-	p := &proc{cmd: cmd, stdin: stdin, br: bufio.NewReader(stdout)}
+	p := &proc{cmd: cmd, stdin: stdin, stdout: stdout, stderr: stderr, br: bufio.NewReader(stdout)}
 
 	c.procMu.Lock()
 	select {
 	case <-c.stopped:
 		c.procMu.Unlock()
 		_ = stdin.Close()
+		_ = stdout.Close()
+		_ = stderr.Close()
 		if cmd.Process != nil {
 			_ = cmd.Process.Kill()
 		}
@@ -187,6 +197,7 @@ func (c *StdioMCPUpstream) start() error {
 	}
 	c.proc.Store(p)
 	c.readWG.Add(1)
+	c.readWG.Add(1)
 	c.writeWG.Add(1)
 	c.procMu.Unlock()
 
@@ -195,10 +206,27 @@ func (c *StdioMCPUpstream) start() error {
 		c.readLoop(p)
 	}()
 	go func() {
+		defer c.readWG.Done()
+		c.logStderr(p.stderr)
+	}()
+	go func() {
 		defer c.writeWG.Done()
 		c.writeLoop(p)
 	}()
 	return nil
+}
+
+func (c *StdioMCPUpstream) logStderr(r io.Reader) {
+	br := bufio.NewReader(r)
+	for {
+		line, err := framing.ReadLineCapped(br, defaults.MaxUpstreamStderrLineBytes)
+		if text := strings.TrimSpace(string(line)); text != "" {
+			slog.Warn("upstream stderr", "upstream_id", c.id, "line", text)
+		}
+		if err != nil {
+			return
+		}
+	}
 }
 
 func (c *StdioMCPUpstream) childEnv() []string {
@@ -214,8 +242,11 @@ func (c *StdioMCPUpstream) childEnv() []string {
 func (c *StdioMCPUpstream) readLoop(p *proc) {
 	defer c.onReaderExit()
 	for {
-		line, err := p.br.ReadBytes('\n')
+		line, err := framing.ReadFrame(p.br, defaults.MaxUpstreamFrameBytes)
 		if err != nil {
+			if errors.Is(err, framing.ErrFrameTooLarge) {
+				c.markDead(fmt.Errorf("mcpstdio %s: %w", c.id, err))
+			}
 			return
 		}
 		line = bytes.TrimSpace(line)
@@ -384,6 +415,8 @@ func (c *StdioMCPUpstream) close() {
 		c.procMu.Unlock()
 		if p != nil {
 			_ = p.stdin.Close()
+			_ = p.stdout.Close()
+			_ = p.stderr.Close()
 			if p.cmd.Process != nil {
 				_ = p.cmd.Process.Kill()
 			}
