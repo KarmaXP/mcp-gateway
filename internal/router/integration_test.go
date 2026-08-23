@@ -5,6 +5,7 @@ package router
 import (
 	"context"
 	"fmt"
+	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"net/http"
 	"os"
 	"strings"
@@ -50,7 +51,7 @@ func TestSemanticVectorRoutingWithQdrantAndMiniLM(t *testing.T) {
 	t.Cleanup(func() { _ = httpDelete(ctx, qURL+"/collections/"+coll) })
 
 	cfg := DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = ModeAssistList
+	cfg.Mode = mode.AssistList
 	cfg.ScoreMin = integrationScoreMin
 	cfg.TopK = defaults.RouterTopK
 	cfg.AllowAutoRename = true

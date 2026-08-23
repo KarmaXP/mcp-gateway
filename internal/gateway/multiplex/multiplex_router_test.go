@@ -18,6 +18,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/router"
 	"github.com/KarmaXP/mcp-gateway/internal/router/embed"
 	"github.com/KarmaXP/mcp-gateway/internal/router/index"
+	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
@@ -110,7 +111,7 @@ func routerTestSemanticRouter(t *testing.T, emb embed.Embedder, scoreMin float64
 	t.Helper()
 	st := store.NewInMemoryVectorStore(4)
 	cfg := router.DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = router.ModeAssistList
+	cfg.Mode = mode.AssistList
 	cfg.TopK = 8
 	cfg.ScoreMin = scoreMin
 	cfg.AllowAutoRename = autoRename
@@ -170,7 +171,7 @@ func TestToolsListFilterListSubsetByIntent(t *testing.T) {
 
 	st := store.NewInMemoryVectorStore(4)
 	cfg := router.DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = router.ModeFilterList
+	cfg.Mode = mode.FilterList
 	cfg.TopK = 8
 	cfg.ScoreMin = 0.99
 	cfg.EmbedTimeout = 5 * time.Second

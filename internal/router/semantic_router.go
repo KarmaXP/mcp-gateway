@@ -3,6 +3,7 @@ package router
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"log/slog"
 	"sort"
 	"sync"
@@ -74,7 +75,7 @@ func (sr *SemanticRouter) SetRules(r *rules.Rules) {
 }
 
 func (sr *SemanticRouter) Enabled() bool {
-	return sr != nil && sr.cfg.Mode != ModeOff
+	return sr != nil && sr.cfg.Mode != mode.Off
 }
 
 func (sr *SemanticRouter) AllowAutoRename() bool {

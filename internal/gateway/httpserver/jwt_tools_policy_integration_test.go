@@ -25,7 +25,6 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/auth/ratelimit"
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
-	"github.com/KarmaXP/mcp-gateway/internal/config"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/httpserver"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
@@ -85,7 +84,7 @@ func TestIntegrationJWTPermissionDeniedSkipsBackend(t *testing.T) {
 	v, err := auth.NewValidator(authCfg)
 	require.NoError(t, err)
 
-	opts := orchestrator.HTTPServerOptions("mcp-gateway-it", authCfg, v, policy.NewHolder(policy.NewEngine(config.PolicySettings{})), ratelimit.Config{})
+	opts := orchestrator.HTTPServerOptions("mcp-gateway-it", authCfg, v, policy.NewHolder(policy.NewEngine(policy.EngineInput{})), ratelimit.Config{})
 	srv := httpserver.New(agg, "", opts...)
 	ts := httptest.NewServer(srv.AsHandler())
 	defer ts.Close()
@@ -205,7 +204,7 @@ func TestIntegrationJWTEmptyIntersectionDenyAll(t *testing.T) {
 	v, err := auth.NewValidator(authCfg)
 	require.NoError(t, err)
 
-	opts := orchestrator.HTTPServerOptions("mcp-gateway-denyall-it", authCfg, v, policy.NewHolder(policy.NewEngine(config.PolicySettings{})), ratelimit.Config{})
+	opts := orchestrator.HTTPServerOptions("mcp-gateway-denyall-it", authCfg, v, policy.NewHolder(policy.NewEngine(policy.EngineInput{})), ratelimit.Config{})
 	srv := httpserver.New(agg, "", opts...)
 	ts := httptest.NewServer(srv.AsHandler())
 	defer ts.Close()

@@ -11,7 +11,6 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
-	"github.com/KarmaXP/mcp-gateway/internal/router"
 )
 
 var (
@@ -127,15 +126,21 @@ func SetIndexedCatalogToolCount(n int64) {
 	indexedCatalogTools.Store(n)
 }
 
-func RecordSemanticRouting(ctx context.Context, dec *router.RoutingDecision, resolveErr error) {
-	if !metricsReady.Load() || dec == nil {
+type SemanticRouting struct {
+	Outcome       string
+	FallbackLayer string
+	LatencyMS     int64
+}
+
+func RecordSemanticRouting(ctx context.Context, dec SemanticRouting, resolveErr error) {
+	if !metricsReady.Load() {
 		return
 	}
 	result := "miss"
 	if resolveErr == nil {
 		result = "hit"
 	}
-	outcome := string(dec.Outcome)
+	outcome := dec.Outcome
 	if outcome == "" {
 		outcome = "unknown"
 	}

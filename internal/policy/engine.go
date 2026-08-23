@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-
-	"github.com/KarmaXP/mcp-gateway/internal/config"
 )
 
 type Engine struct {
@@ -16,7 +14,15 @@ type Engine struct {
 	hardenSchemas   bool
 }
 
-func NewEngine(s config.PolicySettings) *Engine {
+type EngineInput struct {
+	Version            string
+	ElevatedTools      []string
+	ToolGroups         map[string][]string
+	AllowOnEvalFailure bool
+	HardenSchemas      bool
+}
+
+func NewEngine(s EngineInput) *Engine {
 	e := make(map[string]struct{})
 	for _, t := range s.ElevatedTools {
 		t = strings.TrimSpace(t)

@@ -1,4 +1,4 @@
-package eval
+package routertest
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/KarmaXP/mcp-gateway/internal/router"
+	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"github.com/KarmaXP/mcp-gateway/internal/router/rules"
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 )
@@ -23,7 +24,7 @@ func TestRouterEvalVectorRecallLexical(t *testing.T) {
 	st := store.NewInMemoryVectorStore(dim)
 	emb := LexicalEmbedder{Dim: dim}
 	cfg := router.DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = router.ModeAssistList
+	cfg.Mode = mode.AssistList
 	cfg.TopK = 16
 	cfg.ScoreMin = 0.08
 	cfg.AllowAutoRename = true
@@ -65,7 +66,7 @@ func TestRouterEvalEmbedAndQueryP95(t *testing.T) {
 	st := store.NewInMemoryVectorStore(dim)
 	emb := LexicalEmbedder{Dim: dim}
 	cfg := router.DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = router.ModeAssistList
+	cfg.Mode = mode.AssistList
 	cfg.TopK = 16
 	cfg.ScoreMin = 0.08
 	cfg.AllowAutoRename = true
@@ -103,7 +104,7 @@ func TestRouterEvalSiloNarrowingRespectsAllowedTools(t *testing.T) {
 	st := store.NewInMemoryVectorStore(dim)
 	emb := LexicalEmbedder{Dim: dim}
 	cfg := router.DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = router.ModeAssistList
+	cfg.Mode = mode.AssistList
 	cfg.TopK = 16
 	cfg.ScoreMin = 0.08
 	cfg.AllowAutoRename = true
@@ -133,7 +134,7 @@ func TestGoldenCasesMRRAndNDCG(t *testing.T) {
 	st := store.NewInMemoryVectorStore(dim)
 	emb := LexicalEmbedder{Dim: dim}
 	cfg := router.DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = router.ModeAssistList
+	cfg.Mode = mode.AssistList
 	cfg.TopK = 16
 	cfg.ScoreMin = 0.08
 	cfg.AllowAutoRename = true

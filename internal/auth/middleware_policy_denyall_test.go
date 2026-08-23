@@ -12,7 +12,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/config"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 	"github.com/KarmaXP/mcp-gateway/internal/policy"
 )
@@ -42,7 +41,7 @@ func TestHTTPMiddlewareEmptyIntersectionDenyAll(t *testing.T) {
 	s, err := tok.SignedString(priv)
 	require.NoError(t, err)
 
-	eng := policy.NewEngine(config.PolicySettings{Version: "v-test"})
+	eng := policy.NewEngine(policy.EngineInput{Version: "v-test"})
 	holder := policy.NewHolder(eng)
 	var mode hostctx.AllowListMode
 	var got []string

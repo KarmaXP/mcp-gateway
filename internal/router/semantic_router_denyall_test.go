@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -21,7 +22,7 @@ func TestResolveToolsCallDenyAllSkipsVectorSearch(t *testing.T) {
 	emb.vecs[doc] = []float32{1, 0, 0, 0}
 
 	cfg := DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = ModeAssistList
+	cfg.Mode = mode.AssistList
 	sr := NewSemanticRouter(cfg, emb, st, dim)
 	reindexAndApply(t, sr, context.Background(), "v1", []IndexedTool{
 		{ToolRow: aws, UpstreamID: "b1"},
@@ -45,7 +46,7 @@ func TestFilterToolsForListDenyAllSkipsEmbed(t *testing.T) {
 	}
 	st := store.NewInMemoryVectorStore(dim)
 	cfg := DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = ModeFilterList
+	cfg.Mode = mode.FilterList
 	sr := NewSemanticRouter(cfg, emb, st, dim)
 	reindexAndApply(t, sr, context.Background(), "v1", []IndexedTool{
 		{ToolRow: index.ToolRow{Name: "p__echo", Description: "echo"}, UpstreamID: "b1"},

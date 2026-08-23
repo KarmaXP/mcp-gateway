@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"errors"
+	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -40,7 +41,7 @@ func TestReindexRollsBackNewCatalogVersionOnUpsertFailure(t *testing.T) {
 	st := &failUpsertStore{inner: store.NewInMemoryVectorStore(4), upsertFailAfter: 1}
 	emb := fixedEmbed{dim: 4}
 	cfg := DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = ModeAssistList
+	cfg.Mode = mode.AssistList
 	sr := NewSemanticRouter(cfg, emb, st, 4)
 
 	tools := []IndexedTool{{ToolRow: index.ToolRow{Name: "a__one", Description: "one"}, UpstreamID: "b1"}}

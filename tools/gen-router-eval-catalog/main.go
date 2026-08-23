@@ -1,4 +1,4 @@
-// Command gen-router-eval-catalog writes docs/evaluation/router-eval-catalog.json from eval.SyntheticCatalog().
+// Command gen-router-eval-catalog writes docs/evaluation/router-eval-catalog.json from routertest.SyntheticCatalog().
 package main
 
 import (
@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/KarmaXP/mcp-gateway/internal/router/eval"
+	"github.com/KarmaXP/mcp-gateway/internal/routertest"
 )
 
 func main() {
-	cat := eval.SyntheticCatalog()
+	cat := routertest.SyntheticCatalog()
 	tools := make([]map[string]any, 0, len(cat))
 	for _, entry := range cat {
 		props := make(map[string]any, len(entry.ToolRow.ParamKeys))

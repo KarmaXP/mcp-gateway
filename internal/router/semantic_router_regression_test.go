@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"errors"
+	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -44,7 +45,7 @@ func TestResolveToolsCallSiloNarrowedZeroToolsSkipsVectorSearch(t *testing.T) {
 	emb.vecs[doc] = []float32{1, 0, 0, 0}
 
 	cfg := DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = ModeAssistList
+	cfg.Mode = mode.AssistList
 	cfg.TopK = 4
 	cfg.ScoreMin = 0.5
 	sr := NewSemanticRouter(cfg, emb, st, dim)

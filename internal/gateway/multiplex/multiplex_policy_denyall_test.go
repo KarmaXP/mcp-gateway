@@ -15,6 +15,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 	"github.com/KarmaXP/mcp-gateway/internal/router"
 	"github.com/KarmaXP/mcp-gateway/internal/router/index"
+	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 )
 
@@ -72,7 +73,7 @@ func TestToolsCallDenyAllSkipsSemanticRouter(t *testing.T) {
 
 	st := store.NewInMemoryVectorStore(4)
 	cfg := router.DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = router.ModeAssistList
+	cfg.Mode = mode.AssistList
 	cfg.ScoreMin = 0.5
 	sr := router.NewSemanticRouter(cfg, spy, st, 4)
 

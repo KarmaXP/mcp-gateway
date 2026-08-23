@@ -402,7 +402,7 @@ flowchart TD
 - Reproducible benchmark: router eval p95 under budget (performance requirements; excluding MCP backend latency).
 - Default `topK`, `score_min`, `AllowAutoRename`, and indexed document format recorded in repo configs and [calibration-results.md](../evaluation/calibration-results.md).
 
-**In-repo harness:** `internal/router/eval`, synthetic catalog (`SyntheticCatalog`, 24 tools), golden intents, `TestRouterEvalVectorRecallLexical` (recall@1), `TestRouterEvalEmbedAndQueryP95`, and silo narrowing coverage. Run: `go test ./internal/router/eval -run RouterEval -v`. Live calibration: **all-MiniLM-L6-v2** + Qdrant — recall@1 = 1.000 ([calibration-results.md](../evaluation/calibration-results.md)).
+**In-repo harness:** `internal/routertest`, synthetic catalog (`SyntheticCatalog`, 24 tools), golden intents, `TestRouterEvalVectorRecallLexical` (recall@1), `TestRouterEvalEmbedAndQueryP95`, and silo narrowing coverage. Run: `go test ./internal/routertest -run RouterEval -v`. Live calibration: **all-MiniLM-L6-v2** + Qdrant — recall@1 = 1.000 ([calibration-results.md](../evaluation/calibration-results.md)).
 
 ### Security layer
 
@@ -825,13 +825,13 @@ This subsection records **stack choices reflected in this repository** versus **
 - **Language:** if catalog mixes EN/ES, whether a multilingual model is required.
 - **Embedding cache** by text hash (avoid recomputing on every restart).
 
-**Closure criteria:** script or test that indexes N tools and runs a query with measurable recall; table documenting approximate cost per 1k embeddings if using a paid API — **met** (`internal/router/eval`, recall 1.000 in [calibration-results.md](../evaluation/calibration-results.md); local ONNX, no paid API).
+**Closure criteria:** script or test that indexes N tools and runs a query with measurable recall; table documenting approximate cost per 1k embeddings if using a paid API — **met** (`internal/routertest`, recall 1.000 in [calibration-results.md](../evaluation/calibration-results.md); local ONNX, no paid API).
 
 ---
 
 ### 4.5 Semantic router: modes, signals, and hyperparameters
 
-**Plan status:** **`internal/router/eval`** provides a reproducible router eval benchmark (synthetic catalog, recall@1 + p95 tests; see Semantic router eval). **`internal/router/rules`** implements aliases and silo→prefix narrowing. **Hybrid BM25** reranks the vector TopK with **`router.hybrid_alpha`** ∈ [0,1]. Reference values (`top_k=8`, `score_min=0.35`, `hybrid_alpha=0.2`, `allow_auto_rename=false`) are recorded in [calibration-results.md](../evaluation/calibration-results.md).
+**Plan status:** **`internal/routertest`** provides a reproducible router eval benchmark (synthetic catalog, recall@1 + p95 tests; see Semantic router eval). **`internal/router/rules`** implements aliases and silo→prefix narrowing. **Hybrid BM25** reranks the vector TopK with **`router.hybrid_alpha`** ∈ [0,1]. Reference values (`top_k=8`, `score_min=0.35`, `hybrid_alpha=0.2`, `allow_auto_rename=false`) are recorded in [calibration-results.md](../evaluation/calibration-results.md).
 
 **Deployment tuning (reference defaults closed in repo):**
 

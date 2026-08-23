@@ -1,6 +1,7 @@
 package ratelimit
 
 import (
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -80,8 +81,11 @@ func limiterKey(r *http.Request) string {
 		return "sub:" + sub
 	}
 	addr := strings.TrimSpace(r.RemoteAddr)
-	if addr != "" {
-		return "ip:" + addr
+	if addr == "" {
+		return "anon"
 	}
-	return "anon"
+	if host, _, err := net.SplitHostPort(addr); err == nil && host != "" {
+		return "ip:" + host
+	}
+	return "ip:" + addr
 }

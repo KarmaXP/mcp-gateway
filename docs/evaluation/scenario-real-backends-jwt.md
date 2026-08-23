@@ -199,7 +199,7 @@ Then query internal **mean** latency per phase (see [calibration-results.md](cal
 ```bash
 QDRANT_URL=http://127.0.0.1:6333 EMBED_URL=http://127.0.0.1:8001 \
  go test -tags=integration -race -count=1 \
- ./internal/router/eval -run TestRouterEvalVectorRecallMiniLM -v
+ ./internal/routertest -run TestRouterEvalVectorRecallMiniLM -v
 ```
 
 Expected: recall@1 = recall@3 = 1.000 (26/26).

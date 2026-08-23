@@ -1,10 +1,11 @@
-package backend
+package app
 
 import (
 	"context"
 	"fmt"
 	"strings"
 
+	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/backend/mcphttp"
 	"github.com/KarmaXP/mcp-gateway/internal/backend/mcpstdio"
 	"github.com/KarmaXP/mcp-gateway/internal/config"
@@ -12,11 +13,11 @@ import (
 )
 
 var (
-	_ Upstream = (*mcphttp.HTTPMCPUpstream)(nil)
-	_ Upstream = (*mcpstdio.StdioMCPUpstream)(nil)
+	_ backend.Upstream = (*mcphttp.HTTPMCPUpstream)(nil)
+	_ backend.Upstream = (*mcpstdio.StdioMCPUpstream)(nil)
 )
 
-func ConnectUpstreams(ctx context.Context, defs []config.UpstreamDefinition) ([]Upstream, func(), error) {
+func connectUpstreams(ctx context.Context, defs []config.UpstreamDefinition) ([]backend.Upstream, func(), error) {
 	var cleaners []func()
 	// Closes transports in reverse registration order.
 	cleanup := func() {
@@ -25,7 +26,7 @@ func ConnectUpstreams(ctx context.Context, defs []config.UpstreamDefinition) ([]
 		}
 	}
 
-	out := make([]Upstream, 0, len(defs))
+	out := make([]backend.Upstream, 0, len(defs))
 	for _, d := range defs {
 		max := int64(d.MaxConcurrency)
 		if max <= 0 {

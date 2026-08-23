@@ -64,7 +64,7 @@ curl -fsS "http://127.0.0.1:${PORT}/readyz" >/dev/null \
 1. **Unit / synthetic eval (CI-style):**
   ```bash
   go test -race ./internal/router/...
-  go test -race ./internal/router/eval/...
+  go test -race ./internal/routertest/...
   ```
 2. **Integration (real Qdrant + embed):**
   ```bash
@@ -74,7 +74,7 @@ curl -fsS "http://127.0.0.1:${PORT}/readyz" >/dev/null \
 3. **Vector recall (MiniLM + Qdrant):** run the integration recall harness (recall@1 + recall@3):
   ```bash
   QDRANT_URL=http://127.0.0.1:6333 EMBED_URL=http://127.0.0.1:8001 \
-   go test -tags=integration -race ./internal/router/eval -run TestRouterEvalVectorRecallMiniLM -v
+   go test -tags=integration -race ./internal/routertest -run TestRouterEvalVectorRecallMiniLM -v
   ```
   - Optional catalog override: set `ROUTER_EVAL_CATALOG_PATH=/absolute/path/to/router-eval-catalog.json`.
   - Default file in-repo: `docs/evaluation/router-eval-catalog.json` (`make gen-router-eval-catalog`).
@@ -83,7 +83,7 @@ curl -fsS "http://127.0.0.1:${PORT}/readyz" >/dev/null \
 
 ## Metrics definitions (GoldenCases)
 
-Use these when reporting retrieval quality from `go test ./internal/router/eval/...` and especially `TestGoldenCasesMRRAndNDCG`.
+Use these when reporting retrieval quality from `go test ./internal/routertest/...` and especially `TestGoldenCasesMRRAndNDCG`.
 
 - **MRR@5 (Mean Reciprocal Rank):** for each case, find the first rank position `r <= 5` of the highest-relevance tool and score `1/r` (or `0` if not present), then average across all cases.
 - **nDCG@5 (Normalized Discounted Cumulative Gain):** compute DCG over the top 5 candidates with graded relevance:
@@ -93,7 +93,7 @@ Use these when reporting retrieval quality from `go test ./internal/router/eval/
 Quick run:
 
 ```bash
-go test ./internal/router/eval/... -run TestGoldenCasesMRRAndNDCG -v
+go test ./internal/routertest/... -run TestGoldenCasesMRRAndNDCG -v
 ```
 
 ## Load testing (direct vs semantic)
@@ -175,9 +175,9 @@ Use when capturing a **new** calibration session. Canonical numbers for calibrat
 | Metric / artifact | Command or source | Value | Notes |
 | ----------------- | ----------------- | ----- | ----- |
 | Catalog size (tools) | | | |
-| recall@k (synthetic or labeled set) | `go test ./internal/router/eval/... -run …` or custom eval | | Define k and dataset id |
-| MRR@5 (GoldenCases) | `go test ./internal/router/eval/... -run TestGoldenCasesMRRAndNDCG -v` | | Reciprocal rank of first highest-relevance hit |
-| nDCG@5 (GoldenCases) | `go test ./internal/router/eval/... -run TestGoldenCasesMRRAndNDCG -v` | | Graded ranking quality (normalized to ideal order) |
+| recall@k (synthetic or labeled set) | `go test ./internal/routertest/... -run …` or custom eval | | Define k and dataset id |
+| MRR@5 (GoldenCases) | `go test ./internal/routertest/... -run TestGoldenCasesMRRAndNDCG -v` | | Reciprocal rank of first highest-relevance hit |
+| nDCG@5 (GoldenCases) | `go test ./internal/routertest/... -run TestGoldenCasesMRRAndNDCG -v` | | Graded ranking quality (normalized to ideal order) |
 | Router decision p95 (embed+vector path) | Prometheus / Grafana from `mcp.gateway.semantic_router.duration_seconds` or traces | | Layer breakdown (`exact` vs `vector`) |
 | Internal hop p95 | `mcp.gateway.internal.duration_seconds` by `phase` (`parse`, `security`, `router`, `mux`) | | Align with architecture latency budget for gateway-only work |
 | Embed service p95 | Your sidecar metrics or traces | | |

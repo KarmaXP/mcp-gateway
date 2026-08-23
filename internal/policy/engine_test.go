@@ -5,8 +5,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/KarmaXP/mcp-gateway/internal/config"
 )
 
 type fakeClaims struct {
@@ -22,14 +20,14 @@ func (f fakeClaims) NormalizedToolGroups() []string           { return f.groups 
 func (f fakeClaims) RawAuthorizationDetails() json.RawMessage { return f.authDetails }
 
 func TestEngine_EffectiveAllowList_JWTOnly(t *testing.T) {
-	e := NewEngine(config.PolicySettings{Version: "v1"})
+	e := NewEngine(EngineInput{Version: "v1"})
 	got, err := e.EffectiveAllowList(fakeClaims{tools: []string{"a__x", "b__y"}})
 	require.NoError(t, err)
 	require.Equal(t, []string{"a__x", "b__y"}, got)
 }
 
 func TestEngine_EffectiveAllowList_RAROnly(t *testing.T) {
-	e := NewEngine(config.PolicySettings{Version: "v1"})
+	e := NewEngine(EngineInput{Version: "v1"})
 	raw, _ := json.Marshal([]map[string]string{
 		{"type": "mcp_tool", "tool_name": "k8s__logs"},
 	})
@@ -39,7 +37,7 @@ func TestEngine_EffectiveAllowList_RAROnly(t *testing.T) {
 }
 
 func TestEngine_EffectiveAllowList_EmptyIntersectionDenyAll(t *testing.T) {
-	e := NewEngine(config.PolicySettings{Version: "v1"})
+	e := NewEngine(EngineInput{Version: "v1"})
 	raw, _ := json.Marshal([]map[string]string{
 		{"type": "mcp_tool", "tool_name": "rar__only"},
 	})
@@ -57,7 +55,7 @@ func TestEngine_EffectiveAllowList_EmptyIntersectionDenyAll(t *testing.T) {
 }
 
 func TestEngine_EffectiveAllowList_Intersection(t *testing.T) {
-	e := NewEngine(config.PolicySettings{Version: "v1"})
+	e := NewEngine(EngineInput{Version: "v1"})
 	raw, _ := json.Marshal([]map[string]string{
 		{"type": "mcp_tool", "tool_pattern": "a__*"},
 	})
@@ -70,7 +68,7 @@ func TestEngine_EffectiveAllowList_Intersection(t *testing.T) {
 }
 
 func TestEngine_ToolGroups(t *testing.T) {
-	e := NewEngine(config.PolicySettings{
+	e := NewEngine(EngineInput{
 		Version: "v1",
 		ToolGroups: map[string][]string{
 			"read": {"a__x", "a__y"},
@@ -82,13 +80,13 @@ func TestEngine_ToolGroups(t *testing.T) {
 }
 
 func TestEngine_UnknownGroupFailsClosed(t *testing.T) {
-	e := NewEngine(config.PolicySettings{Version: "v1"})
+	e := NewEngine(EngineInput{Version: "v1"})
 	_, err := e.EffectiveAllowList(fakeClaims{groups: []string{"missing"}})
 	require.Error(t, err)
 }
 
 func TestEngine_EffectiveAllowList_RejectsEmptyRARToolEntry(t *testing.T) {
-	e := NewEngine(config.PolicySettings{Version: "v1"})
+	e := NewEngine(EngineInput{Version: "v1"})
 	raw, _ := json.Marshal([]map[string]string{
 		{"type": "mcp_tool"},
 	})
@@ -98,7 +96,7 @@ func TestEngine_EffectiveAllowList_RejectsEmptyRARToolEntry(t *testing.T) {
 }
 
 func TestEngine_RARParseDegrade(t *testing.T) {
-	e := NewEngine(config.PolicySettings{
+	e := NewEngine(EngineInput{
 		Version:            "v1",
 		AllowOnEvalFailure: true,
 	})
@@ -111,7 +109,7 @@ func TestEngine_RARParseDegrade(t *testing.T) {
 }
 
 func TestEngine_RequiresStrictSchema(t *testing.T) {
-	e := NewEngine(config.PolicySettings{
+	e := NewEngine(EngineInput{
 		ElevatedTools: []string{"a__danger"},
 	})
 	require.True(t, e.RequiresStrictSchema("a__danger"))
@@ -119,7 +117,7 @@ func TestEngine_RequiresStrictSchema(t *testing.T) {
 }
 
 func TestEngine_HardenSchemas(t *testing.T) {
-	e := NewEngine(config.PolicySettings{
+	e := NewEngine(EngineInput{
 		HardenSchemas: true,
 	})
 	require.True(t, e.HardenSchemas())

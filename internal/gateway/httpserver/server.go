@@ -176,12 +176,12 @@ func mergeWithShutdown(reqCtx, shutdownCtx context.Context) (context.Context, co
 
 func (s *Server) handleMCPRPC(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	rctx := telemetry.ContextWithExtractedW3CTrace(r.Context(), r.Header)
+	rctx := r.Context()
 	var span trace.Span
 	if telemetry.HostRPCStartedFromContext(rctx) {
 		span = trace.SpanFromContext(rctx)
 	} else {
-		rctx, span = telemetry.StartSpan(rctx, telemetry.SpanMCPHostRequest)
+		rctx, span = telemetry.StartSpan(telemetry.ContextWithExtractedW3CTrace(rctx, r.Header), telemetry.SpanMCPHostRequest)
 	}
 	defer func() {
 		if span != nil && span.IsRecording() {

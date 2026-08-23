@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"log/slog"
 	"strings"
 	"time"
@@ -12,7 +13,7 @@ import (
 
 // FilterListActive is true when router.mode is filter_list (intent-based tools/list subsetting).
 func (sr *SemanticRouter) FilterListActive() bool {
-	return sr != nil && sr.cfg.Mode == ModeFilterList
+	return sr != nil && sr.cfg.Mode == mode.FilterList
 }
 
 // FilterToolsForList ranks tools by intent and returns names to keep, or useFull=true to serve the merged catalog

@@ -5,8 +5,6 @@ import (
 	"log/slog"
 	"sync"
 	"time"
-
-	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
 )
 
 type AuditRecord struct {
@@ -20,6 +18,10 @@ type AuditRecord struct {
 
 type AuditSink interface {
 	Emit(ctx context.Context, rec AuditRecord) error
+}
+
+type DecisionMetrics interface {
+	RecordPolicyDecision(ctx context.Context, outcome, reason string)
 }
 
 type SlogAuditSink struct{}
@@ -39,7 +41,6 @@ func (SlogAuditSink) Emit(ctx context.Context, rec AuditRecord) error {
 		attrs = append(attrs, "tool_name", rec.ToolName)
 	}
 	slog.InfoContext(ctx, "mcp policy decision", attrs...)
-	telemetry.RecordPolicyDecision(ctx, rec.Outcome, rec.Reason)
 	return nil
 }
 
@@ -65,4 +66,25 @@ func currentAuditSink() AuditSink {
 		return SlogAuditSink{}
 	}
 	return globalAuditSink
+}
+
+type meteredAuditSink struct {
+	inner   AuditSink
+	metrics DecisionMetrics
+}
+
+func WithDecisionMetrics(inner AuditSink, metrics DecisionMetrics) AuditSink {
+	if inner == nil || metrics == nil {
+		return inner
+	}
+	return meteredAuditSink{inner: inner, metrics: metrics}
+}
+
+func (m meteredAuditSink) Emit(ctx context.Context, rec AuditRecord) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	err := m.inner.Emit(ctx, rec)
+	m.metrics.RecordPolicyDecision(ctx, rec.Outcome, rec.Reason)
+	return err
 }

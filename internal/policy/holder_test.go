@@ -3,16 +3,15 @@ package policy
 import (
 	"testing"
 
-	"github.com/KarmaXP/mcp-gateway/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
 func TestHolder_LoadStore(t *testing.T) {
-	e1 := NewEngine(config.PolicySettings{Version: "v1"})
+	e1 := NewEngine(EngineInput{Version: "v1"})
 	h := NewHolder(e1)
 	require.Same(t, e1, h.Load())
 
-	e2 := NewEngine(config.PolicySettings{Version: "v2"})
+	e2 := NewEngine(EngineInput{Version: "v2"})
 	h.Store(e2)
 	require.Same(t, e2, h.Load())
 
@@ -23,5 +22,5 @@ func TestHolder_LoadStore(t *testing.T) {
 func TestHolder_nil_receiver(t *testing.T) {
 	var h *Holder
 	require.Nil(t, h.Load())
-	h.Store(NewEngine(config.PolicySettings{})) // no-op
+	h.Store(NewEngine(EngineInput{})) // no-op
 }
