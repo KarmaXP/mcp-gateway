@@ -25,7 +25,6 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/auth/ratelimit"
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
-	"github.com/KarmaXP/mcp-gateway/internal/config"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/httpserver"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"

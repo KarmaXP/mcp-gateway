@@ -224,12 +224,14 @@ test-cover:
 test-integration:
 	@echo "Integration tests (JWT/RPC always; Qdrant+embed+OTLP when reachable — see docs/DEVELOPER.md)..."
 	@go vet ./...
+	@go vet -tags=integration ./...
 	@QDRANT_URL=$${QDRANT_URL:-http://127.0.0.1:6333} \
 	 EMBED_URL=$${EMBED_URL:-http://127.0.0.1:8001} \
 	 OTEL_EXPORTER_OTLP_ENDPOINT=$${OTEL_EXPORTER_OTLP_ENDPOINT:-http://127.0.0.1:4318} \
 	 go test -tags=integration -race -count=1 \
 		./internal/gateway/httpserver/... \
 		./internal/router/... \
+		./internal/routertest/... \
 		./internal/telemetry/...
 
 ci:

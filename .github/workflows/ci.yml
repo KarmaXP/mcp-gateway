@@ -124,6 +124,7 @@ jobs:
           go test -tags=integration -race -count=1 \
             ./internal/gateway/httpserver/... \
             ./internal/router/... \
+            ./internal/routertest/... \
             ./internal/telemetry/...
 
   perf-gate:
