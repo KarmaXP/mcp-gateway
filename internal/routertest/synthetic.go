@@ -1,4 +1,4 @@
-package eval
+package routertest
 
 import (
 	"github.com/KarmaXP/mcp-gateway/internal/router"

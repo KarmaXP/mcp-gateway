@@ -1,9 +1,11 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"strconv"
@@ -12,9 +14,9 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/KarmaXP/mcp-gateway/internal/auth/ratelimit"
+	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
+
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
-	"github.com/KarmaXP/mcp-gateway/internal/validate"
 )
 
 type GatewayConfig struct {
@@ -132,7 +134,9 @@ func Load() (GatewayConfig, error) {
 		if err != nil {
 			return GatewayConfig{}, fmt.Errorf("config: read %s: %w", path, err)
 		}
-		if err := yaml.Unmarshal(raw, &cfg); err != nil {
+		dec := yaml.NewDecoder(bytes.NewReader(raw))
+		dec.KnownFields(true)
+		if err := dec.Decode(&cfg); err != nil && !errors.Is(err, io.EOF) {
 			return GatewayConfig{}, fmt.Errorf("config: yaml %s: %w", path, err)
 		}
 	}
@@ -145,10 +149,10 @@ func Load() (GatewayConfig, error) {
 		cfg.Upstreams = append(cfg.Upstreams, extra...)
 	}
 
-	if err := cfg.Validate(); err != nil {
+	cfg.ApplyEnvOverrides()
+	if err := cfg.normalize(); err != nil {
 		return GatewayConfig{}, err
 	}
-	cfg.ApplyEnvOverrides()
 	if err := cfg.Validate(); err != nil {
 		return GatewayConfig{}, err
 	}
@@ -180,9 +184,7 @@ func (c *GatewayConfig) Validate() error {
 		seen[u.Prefix] = struct{}{}
 	}
 	if c.SemanticRouter.Mode != "" {
-		switch strings.ToLower(strings.TrimSpace(c.SemanticRouter.Mode)) {
-		case "off", "on", "assist_list", "filter_list":
-		default:
+		if _, ok := mode.Parse(c.SemanticRouter.Mode); !ok {
 			return fmt.Errorf("config: router.mode must be off, on, assist_list, or filter_list")
 		}
 	}
@@ -211,11 +213,9 @@ func (c *GatewayConfig) ApplyEnvOverrides() {
 	}
 
 	if v := strings.TrimSpace(os.Getenv("ROUTER_MODE")); v != "" {
-		mode := strings.ToLower(v)
-		switch mode {
-		case "off", "on", "assist_list", "filter_list":
-			c.SemanticRouter.Mode = mode
-		default:
+		if mode, ok := mode.Parse(v); ok {
+			c.SemanticRouter.Mode = string(mode)
+		} else {
 			warnIgnoredEnv("ROUTER_MODE", v)
 		}
 	}
@@ -251,9 +251,7 @@ func (c *GatewayConfig) ApplyEnvOverrides() {
 			c.SemanticRouter.HybridAlpha = f
 		}
 	}
-	if v := strings.ToLower(strings.TrimSpace(os.Getenv("ROUTER_ALLOW_AUTO_RENAME"))); v != "" {
-		c.SemanticRouter.AllowAutoRename = v == "1" || v == "true" || v == "yes"
-	}
+	envBool("ROUTER_ALLOW_AUTO_RENAME", &c.SemanticRouter.AllowAutoRename)
 	if v := strings.TrimSpace(os.Getenv("QDRANT_COLLECTION")); v != "" {
 		c.Qdrant.Collection = v
 	}
@@ -269,38 +267,18 @@ func (c *GatewayConfig) ApplyEnvOverrides() {
 	if v := strings.TrimSpace(os.Getenv("POLICY_AUDIT_SYSLOG_ADDRESS")); v != "" {
 		c.Policy.AuditSyslogAddress = v
 	}
-	if v := strings.TrimSpace(os.Getenv("POLICY_ALLOW_ON_EVAL_FAILURE")); v != "" {
-		if b, ok := parseBoolValue(v); ok {
-			c.Policy.AllowOnEvalFailure = b
-		}
-	}
-	if v := strings.TrimSpace(os.Getenv("POLICY_HARDEN_SCHEMAS")); v != "" {
-		if b, ok := parseBoolValue(v); ok {
-			c.Policy.HardenSchemas = b
-		}
-	}
-	if v := strings.ToLower(strings.TrimSpace(os.Getenv("AGGREGATION_STRICT_INITIALIZE"))); v == "1" || v == "true" || v == "yes" {
-		c.Aggregation.StrictInitialize = true
-	}
-	if v := strings.ToLower(strings.TrimSpace(os.Getenv("AGGREGATION_STRICT_LIST"))); v == "1" || v == "true" || v == "yes" {
-		c.Aggregation.StrictList = true
-	}
-	if v := strings.ToLower(strings.TrimSpace(os.Getenv("AGGREGATION_FORWARD_TOOLS_LIST_CHANGED"))); v == "1" || v == "true" || v == "yes" {
-		c.Aggregation.ForwardToolsListChanged = true
-	}
-	if v := strings.ToLower(strings.TrimSpace(os.Getenv("AGGREGATION_REPORT_PARTIAL_FAILURES"))); v == "1" || v == "true" || v == "yes" {
-		c.Aggregation.ReportPartialFailures = true
-	}
+	envBool("POLICY_ALLOW_ON_EVAL_FAILURE", &c.Policy.AllowOnEvalFailure)
+	envBool("POLICY_HARDEN_SCHEMAS", &c.Policy.HardenSchemas)
+	envBool("AGGREGATION_STRICT_INITIALIZE", &c.Aggregation.StrictInitialize)
+	envBool("AGGREGATION_STRICT_LIST", &c.Aggregation.StrictList)
+	envBool("AGGREGATION_FORWARD_TOOLS_LIST_CHANGED", &c.Aggregation.ForwardToolsListChanged)
+	envBool("AGGREGATION_REPORT_PARTIAL_FAILURES", &c.Aggregation.ReportPartialFailures)
 	if v := strings.TrimSpace(os.Getenv("AGGREGATION_MAX_IN_FLIGHT")); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
 			c.Aggregation.MaxInFlight = n
 		}
 	}
-	if v := strings.TrimSpace(os.Getenv("RATE_LIMIT_ENABLED")); v != "" {
-		if b, ok := parseBoolValue(v); ok {
-			c.RateLimitCfg.Enabled = b
-		}
-	}
+	envBool("RATE_LIMIT_ENABLED", &c.RateLimitCfg.Enabled)
 	if v := strings.TrimSpace(os.Getenv("RATE_LIMIT_RPS")); v != "" {
 		f, err := strconv.ParseFloat(v, 64)
 		if err != nil || f <= 0 {
@@ -325,28 +303,6 @@ func warnIgnoredEnv(key, value string) {
 
 func (c *GatewayConfig) ForwardToolsListChanged() bool {
 	return c != nil && c.Aggregation.ForwardToolsListChanged
-}
-
-func (c *GatewayConfig) PolicyArgumentLimits() validate.Limits {
-	dl := validate.DefaultLimits()
-	if c == nil {
-		return dl
-	}
-	out := validate.Limits{
-		MaxBytes: c.Policy.MaxArgumentBytes,
-		MaxDepth: c.Policy.MaxArgumentDepth,
-		MaxKeys:  c.Policy.MaxArgumentKeys,
-	}
-	if out.MaxBytes <= 0 {
-		out.MaxBytes = dl.MaxBytes
-	}
-	if out.MaxDepth <= 0 {
-		out.MaxDepth = dl.MaxDepth
-	}
-	if out.MaxKeys <= 0 {
-		out.MaxKeys = dl.MaxKeys
-	}
-	return out
 }
 
 func (c *GatewayConfig) ResolvePolicyAuditSink() (PolicyAuditSinkConfig, error) {
@@ -434,12 +390,15 @@ func (c *GatewayConfig) AggregationCallTimeout() time.Duration {
 
 func (c *GatewayConfig) AggregationListCacheTTL() time.Duration {
 	if c == nil {
-		return 0
+		return defaults.MultiplexListCacheTTL
 	}
-	if d, err := parseDurationString(c.Aggregation.ListCacheTTL); err == nil && d > 0 {
+	if strings.TrimSpace(c.Aggregation.ListCacheTTL) == "" {
+		return defaults.MultiplexListCacheTTL
+	}
+	if d, err := parseDurationString(c.Aggregation.ListCacheTTL); err == nil && d >= 0 {
 		return d
 	}
-	return 0
+	return defaults.MultiplexListCacheTTL
 }
 
 func (c *GatewayConfig) AggregationMaxInFlight() int {
@@ -452,12 +411,56 @@ func (c *GatewayConfig) AggregationMaxInFlight() int {
 	return c.Aggregation.MaxInFlight
 }
 
+// normalize resolves every duration field once, so a malformed value is a startup error
+// instead of a silent fall back to the default. Idempotent.
+func (c *GatewayConfig) normalize() error {
+	fields := []struct {
+		name     string
+		value    *string
+		fallback time.Duration
+	}{
+		{"router.embed_timeout", &c.SemanticRouter.EmbedTimeout, defaults.RouterEmbedTimeout},
+		{"router.query_timeout", &c.SemanticRouter.QueryTimeout, defaults.RouterQueryTimeout},
+		{"aggregation.init_timeout", &c.Aggregation.InitTimeout, defaults.MultiplexInitTimeout},
+		{"aggregation.list_timeout", &c.Aggregation.ListTimeout, defaults.MultiplexListTimeout},
+		{"aggregation.call_timeout", &c.Aggregation.CallTimeout, defaults.MultiplexCallTimeout},
+		{"aggregation.list_cache_ttl", &c.Aggregation.ListCacheTTL, defaults.MultiplexListCacheTTL},
+	}
+	for _, f := range fields {
+		if strings.TrimSpace(*f.value) == "" {
+			*f.value = f.fallback.String()
+			continue
+		}
+		d, err := parseDurationString(*f.value)
+		if err != nil {
+			return fmt.Errorf("config: %s: %w", f.name, err)
+		}
+		if d < 0 {
+			return fmt.Errorf("config: %s: must not be negative", f.name)
+		}
+	}
+	return nil
+}
+
 func parseDurationString(s string) (time.Duration, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return 0, errors.New("empty")
 	}
 	return time.ParseDuration(s)
+}
+
+func envBool(key string, target *bool) {
+	raw, present := os.LookupEnv(key)
+	if !present || strings.TrimSpace(raw) == "" {
+		return
+	}
+	value, ok := parseBoolValue(raw)
+	if !ok {
+		warnIgnoredEnv(key, raw)
+		return
+	}
+	*target = value
 }
 
 func parseBoolValue(v string) (bool, bool) {
@@ -499,29 +502,6 @@ func (c *GatewayConfig) QdrantCollection() string {
 		return defaults.DefaultQdrantCollectionName
 	}
 	return strings.TrimSpace(c.Qdrant.Collection)
-}
-
-func (c *GatewayConfig) RateLimit() ratelimit.Config {
-	if c == nil {
-		return ratelimit.Config{
-			Enabled: false,
-			RPS:     float64(defaults.DefaultRateLimitRPS),
-			Burst:   defaults.DefaultRateLimitBurst,
-		}
-	}
-	rps := c.RateLimitCfg.RPS
-	if rps <= 0 {
-		rps = float64(defaults.DefaultRateLimitRPS)
-	}
-	burst := c.RateLimitCfg.Burst
-	if burst <= 0 {
-		burst = defaults.DefaultRateLimitBurst
-	}
-	return ratelimit.Config{
-		Enabled: c.RateLimitCfg.Enabled,
-		RPS:     rps,
-		Burst:   burst,
-	}
 }
 
 func (u *UpstreamDefinition) ResolveAuthToken() string {

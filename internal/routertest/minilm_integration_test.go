@@ -1,6 +1,6 @@
 //go:build integration
 
-package eval
+package routertest
 
 import (
 	"context"
@@ -18,6 +18,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/router"
 	"github.com/KarmaXP/mcp-gateway/internal/router/embed"
+	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 )
 
@@ -51,7 +52,7 @@ func TestRouterEvalVectorRecallMiniLM(t *testing.T) {
 	t.Cleanup(func() { _ = httpDelete(ctx, qURL+"/collections/"+coll) })
 
 	cfg := router.DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = router.ModeAssistList
+	cfg.Mode = mode.AssistList
 	cfg.TopK = defaults.RouterTopK
 	cfg.ScoreMin = defaults.RouterScoreMin
 	cfg.HybridAlpha = 0.2
@@ -128,7 +129,7 @@ func routerEvalCatalogForIntegration(t *testing.T) ([]router.IndexedTool, string
 
 	candidates := []string{
 		strings.TrimSpace(os.Getenv("ROUTER_EVAL_CATALOG_PATH")),
-		"../../../docs/evaluation/router-eval-catalog.json",
+		"../../docs/evaluation/router-eval-catalog.json",
 	}
 
 	for _, path := range candidates {

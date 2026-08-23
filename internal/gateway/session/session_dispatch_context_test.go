@@ -15,6 +15,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/router"
 	"github.com/KarmaXP/mcp-gateway/internal/router/index"
+	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
@@ -55,7 +56,7 @@ func TestSessionDispatchMergesPOSTIntentForToolsListFilter(t *testing.T) {
 
 	st := store.NewInMemoryVectorStore(4)
 	cfg := router.DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = router.ModeFilterList
+	cfg.Mode = mode.FilterList
 	cfg.TopK = 8
 	cfg.ScoreMin = 0.99
 	cfg.EmbedTimeout = 5 * time.Second

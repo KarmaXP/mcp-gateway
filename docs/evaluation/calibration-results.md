@@ -36,7 +36,7 @@ Hyperparameters: `deployments/gateway.example.yaml` (`top_k=8`, `score_min=0.35`
 ```bash
 QDRANT_URL=http://127.0.0.1:6333 EMBED_URL=http://127.0.0.1:8001 \
  go test -tags=integration -race -count=1 \
- ./internal/router/eval -run TestRouterEvalVectorRecallMiniLM -v
+ ./internal/routertest -run TestRouterEvalVectorRecallMiniLM -v
 ```
 
 | Metric | Value |
@@ -124,7 +124,7 @@ Re-run on 2026-05-30 to confirm no regression with stack up:
 ```bash
 QDRANT_URL=http://127.0.0.1:6333 EMBED_URL=http://127.0.0.1:8001 \
  go test -tags=integration -race -count=1 \
- ./internal/router/eval -run TestRouterEvalVectorRecallMiniLM -v
+ ./internal/routertest -run TestRouterEvalVectorRecallMiniLM -v
 ```
 
 | Metric | Value |

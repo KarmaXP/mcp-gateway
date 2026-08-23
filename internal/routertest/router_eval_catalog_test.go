@@ -1,4 +1,4 @@
-package eval
+package routertest
 
 import (
 	"os"
@@ -14,7 +14,7 @@ import (
 func TestRouterEvalCatalogJSONLoads(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	require.True(t, ok)
-	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", ".."))
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", ".."))
 	catalogPath := filepath.Join(repoRoot, "docs", "evaluation", "router-eval-catalog.json")
 	raw, err := os.ReadFile(catalogPath)
 	require.NoError(t, err, "docs/evaluation/router-eval-catalog.json must exist (make gen-router-eval-catalog)")

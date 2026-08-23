@@ -10,6 +10,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/router"
+	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 )
 
@@ -17,7 +18,7 @@ func TestInvalidateToolCachePreservesCatalogVersion(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "p", []string{"echo"})
 	emb := &countingEmbed{dim: 4}
 	rcfg := router.DefaultSemanticRouterRuntimeConfig()
-	rcfg.Mode = router.ModeAssistList
+	rcfg.Mode = mode.AssistList
 	sr := router.NewSemanticRouter(rcfg, emb, store.NewInMemoryVectorStore(4), 4)
 
 	a, err := New([]backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))

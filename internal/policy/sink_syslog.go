@@ -7,8 +7,6 @@ import (
 	"log/syslog"
 	"strings"
 	"sync"
-
-	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
 )
 
 type syslogWriter interface {
@@ -37,26 +35,19 @@ func NewSyslogAuditSink(network, address string) (*SyslogAuditSink, error) {
 	return &SyslogAuditSink{writer: w}, nil
 }
 
-func (s *SyslogAuditSink) Emit(ctx context.Context, rec AuditRecord) error {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+func (s *SyslogAuditSink) Emit(_ context.Context, rec AuditRecord) error {
 	payload, err := marshalAuditRecord(rec)
 	if err != nil {
-		telemetry.RecordPolicyDecision(ctx, rec.Outcome, rec.Reason)
 		return err
 	}
 
 	if s == nil || s.writer == nil {
-		telemetry.RecordPolicyDecision(ctx, rec.Outcome, rec.Reason)
 		return fmt.Errorf("policy: syslog audit sink is not initialized")
 	}
 
 	s.mu.Lock()
 	writeErr := s.writer.Info(payload)
 	s.mu.Unlock()
-
-	telemetry.RecordPolicyDecision(ctx, rec.Outcome, rec.Reason)
 	return writeErr
 }
 

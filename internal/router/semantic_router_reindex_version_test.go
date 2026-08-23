@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -31,7 +32,7 @@ func TestReindexDeletesPreviousCatalogVersion(t *testing.T) {
 	st := store.NewInMemoryVectorStore(4)
 	emb := fixedEmbed{dim: 4}
 	cfg := DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = ModeAssistList
+	cfg.Mode = mode.AssistList
 	cfg.ScoreMin = 0.01
 	cfg.TopK = 8
 	sr := NewSemanticRouter(cfg, emb, st, 4)

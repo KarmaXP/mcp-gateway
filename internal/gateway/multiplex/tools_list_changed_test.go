@@ -13,6 +13,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/router"
+	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
@@ -68,7 +69,7 @@ func TestHandleToolsListChangedDebouncesUpstreamRefresh(t *testing.T) {
 	up := newDynamicToolsUpstream("b1", "p", []string{"echo"})
 	emb := &countingEmbed{dim: 4}
 	rcfg := router.DefaultSemanticRouterRuntimeConfig()
-	rcfg.Mode = router.ModeAssistList
+	rcfg.Mode = mode.AssistList
 	rcfg.ScoreMin = 0.01
 	rcfg.TopK = 8
 	sr := router.NewSemanticRouter(rcfg, emb, store.NewInMemoryVectorStore(4), 4)

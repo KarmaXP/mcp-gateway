@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -38,7 +39,7 @@ func TestConcurrentReindexSerialized(t *testing.T) {
 	st := store.NewInMemoryVectorStore(4)
 	emb := &countingEmbed{inner: fixedEmbed{dim: 4}, delay: 25 * time.Millisecond}
 	cfg := DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = ModeAssistList
+	cfg.Mode = mode.AssistList
 	sr := NewSemanticRouter(cfg, emb, st, 4)
 
 	toolsA := []IndexedTool{{ToolRow: index.ToolRow{Name: "a__one", Description: "one"}, UpstreamID: "b1"}}
@@ -68,7 +69,7 @@ func TestReindexDoesNotExposeCatalogVersionUntilApplyCatalog(t *testing.T) {
 	st := store.NewInMemoryVectorStore(4)
 	emb := fixedEmbed{dim: 4}
 	cfg := DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = ModeAssistList
+	cfg.Mode = mode.AssistList
 	sr := NewSemanticRouter(cfg, emb, st, 4)
 
 	toolsV1 := []IndexedTool{{ToolRow: index.ToolRow{Name: "a__one", Description: "one"}, UpstreamID: "b1"}}
@@ -92,7 +93,7 @@ func TestConcurrentReindexAndApplyCatalogUnderRace(t *testing.T) {
 	st := store.NewInMemoryVectorStore(4)
 	emb := fixedEmbed{dim: 4}
 	cfg := DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = ModeAssistList
+	cfg.Mode = mode.AssistList
 	sr := NewSemanticRouter(cfg, emb, st, 4)
 
 	toolsV1 := []IndexedTool{{ToolRow: index.ToolRow{Name: "a__one", Description: "one"}, UpstreamID: "b1"}}

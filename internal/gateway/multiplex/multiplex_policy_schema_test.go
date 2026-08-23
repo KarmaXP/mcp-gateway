@@ -9,7 +9,6 @@ import (
 
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
-	"github.com/KarmaXP/mcp-gateway/internal/config"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 	"github.com/KarmaXP/mcp-gateway/internal/policy"
@@ -82,7 +81,7 @@ func TestToolsCallValidatesArgumentsAgainstSchema(t *testing.T) {
 
 func TestToolsCallElevatedToolRequiresSchema(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	pol := policy.NewEngine(config.PolicySettings{
+	pol := policy.NewEngine(policy.EngineInput{
 		Version:       "t",
 		ElevatedTools: []string{"alpha__echo"},
 	})
@@ -110,7 +109,7 @@ func TestToolsCallHardensElevatedObjectSchemas(t *testing.T) {
 	b1.InputSchemaByTool = map[string]map[string]any{
 		"echo": inputSchema,
 	}
-	pol := policy.NewEngine(config.PolicySettings{
+	pol := policy.NewEngine(policy.EngineInput{
 		Version:       "t",
 		HardenSchemas: true,
 		ElevatedTools: []string{"alpha__echo"},
@@ -148,7 +147,7 @@ func TestToolsCallDoesNotHardenSchemaWhenPolicyDisabled(t *testing.T) {
 	b1.InputSchemaByTool = map[string]map[string]any{
 		"echo": inputSchema,
 	}
-	pol := policy.NewEngine(config.PolicySettings{
+	pol := policy.NewEngine(policy.EngineInput{
 		Version:       "t",
 		HardenSchemas: false,
 		ElevatedTools: []string{"alpha__echo"},

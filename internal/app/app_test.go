@@ -1,8 +1,9 @@
-package main
+package app
 
 import (
 	"context"
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/KarmaXP/mcp-gateway/internal/config"
@@ -28,7 +29,7 @@ func TestConfigureAuditSink_Slog(t *testing.T) {
 
 	cleanup, err := configureAuditSink(config.GatewayConfig{
 		Policy: config.PolicySettings{AuditSink: config.PolicyAuditSinkSlog},
-	})
+	}, nil)
 	require.NoError(t, err)
 	require.Nil(t, cleanup)
 }
@@ -36,23 +37,16 @@ func TestConfigureAuditSink_Slog(t *testing.T) {
 func TestConfigureAuditSink_SyslogRequiresAddress(t *testing.T) {
 	_, err := configureAuditSink(config.GatewayConfig{
 		Policy: config.PolicySettings{AuditSink: config.PolicyAuditSinkSyslog},
-	})
+	}, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "policy.audit_syslog_address")
 }
 
 func TestConfigureAuditSink_SyslogCleanupClosesSink(t *testing.T) {
-	t.Cleanup(func() {
-		newSyslogAuditSink = func(network, address string) (auditSinkCloser, error) {
-			return policy.NewSyslogAuditSink(network, address)
-		}
-		policy.SetAuditSink(nil)
-	})
+	t.Cleanup(func() { policy.SetAuditSink(nil) })
 
 	sink := &fakeAuditSink{}
-	newSyslogAuditSink = func(network, address string) (auditSinkCloser, error) {
-		return sink, nil
-	}
+	newSyslog := func(network, address string) (auditSinkCloser, error) { return sink, nil }
 
 	cleanup, err := configureAuditSink(config.GatewayConfig{
 		Policy: config.PolicySettings{
@@ -60,7 +54,7 @@ func TestConfigureAuditSink_SyslogCleanupClosesSink(t *testing.T) {
 			AuditSyslogNetwork: "udp",
 			AuditSyslogAddress: "127.0.0.1:514",
 		},
-	})
+	}, newSyslog)
 	require.NoError(t, err)
 	require.NotNil(t, cleanup)
 	require.False(t, sink.closed)
@@ -70,30 +64,23 @@ func TestConfigureAuditSink_SyslogCleanupClosesSink(t *testing.T) {
 
 func TestPreflightStrictEnabled(t *testing.T) {
 	t.Setenv("GATEWAY_PREFLIGHT_STRICT", "")
-	require.False(t, preflightStrictEnabled())
+	require.False(t, preflightStrictEnabled(os.Getenv))
 
 	t.Setenv("GATEWAY_PREFLIGHT_STRICT", "true")
-	require.True(t, preflightStrictEnabled())
+	require.True(t, preflightStrictEnabled(os.Getenv))
 }
 
 func TestPreflightQdrantSkipsWhenRouterOff(t *testing.T) {
-	err := preflightQdrant(config.GatewayConfig{
+	err := preflightQdrant(context.Background(), config.GatewayConfig{
 		SemanticRouter: config.SemanticRouterSettings{Mode: "off"},
-	})
+	}, os.Getenv)
 	require.NoError(t, err)
 }
 
 func TestConfigureAuditSink_SyslogInitError(t *testing.T) {
-	t.Cleanup(func() {
-		newSyslogAuditSink = func(network, address string) (auditSinkCloser, error) {
-			return policy.NewSyslogAuditSink(network, address)
-		}
-		policy.SetAuditSink(nil)
-	})
+	t.Cleanup(func() { policy.SetAuditSink(nil) })
 
-	newSyslogAuditSink = func(network, address string) (auditSinkCloser, error) {
-		return nil, errors.New("dial failed")
-	}
+	newSyslog := func(network, address string) (auditSinkCloser, error) { return nil, errors.New("dial failed") }
 
 	cleanup, err := configureAuditSink(config.GatewayConfig{
 		Policy: config.PolicySettings{
@@ -101,7 +88,7 @@ func TestConfigureAuditSink_SyslogInitError(t *testing.T) {
 			AuditSyslogNetwork: "udp",
 			AuditSyslogAddress: "127.0.0.1:514",
 		},
-	})
+	}, newSyslog)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "dial failed")
 	require.Nil(t, cleanup)

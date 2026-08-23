@@ -1,13 +1,14 @@
 package router
 
 import (
+	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"time"
 
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 )
 
 type SemanticRouterRuntimeConfig struct {
-	Mode Mode
+	Mode mode.Mode
 
 	TopK     int
 	ScoreMin float64
@@ -22,7 +23,7 @@ type SemanticRouterRuntimeConfig struct {
 
 func DefaultSemanticRouterRuntimeConfig() SemanticRouterRuntimeConfig {
 	return SemanticRouterRuntimeConfig{
-		Mode:            ModeOff,
+		Mode:            mode.Off,
 		TopK:            defaults.RouterTopK,
 		ScoreMin:        defaults.RouterScoreMin,
 		HybridAlpha:     0,

@@ -12,7 +12,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/config"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 	"github.com/KarmaXP/mcp-gateway/internal/policy"
 )
@@ -42,7 +41,7 @@ func TestHTTPMiddlewarePolicyIntersectsRARAndMcpTools(t *testing.T) {
 	s, err := tok.SignedString(priv)
 	require.NoError(t, err)
 
-	eng := policy.NewEngine(config.PolicySettings{Version: "v-test"})
+	eng := policy.NewEngine(policy.EngineInput{Version: "v-test"})
 	holder := policy.NewHolder(eng)
 	var got []string
 	h := HTTPMiddleware(cfg, v, holder)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -83,7 +82,7 @@ func TestHTTPMiddlewarePolicyVersionAfterHolderReload(t *testing.T) {
 	s, err := tok.SignedString(priv)
 	require.NoError(t, err)
 
-	holder := policy.NewHolder(policy.NewEngine(config.PolicySettings{Version: "before"}))
+	holder := policy.NewHolder(policy.NewEngine(policy.EngineInput{Version: "before"}))
 	var versions []string
 	h := HTTPMiddleware(cfg, v, holder)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		versions = append(versions, hostctx.PolicyVersionFromContext(r.Context()))
@@ -99,9 +98,7 @@ func TestHTTPMiddlewarePolicyVersionAfterHolderReload(t *testing.T) {
 	require.Equal(t, http.StatusOK, res1.StatusCode)
 	require.NoError(t, res1.Body.Close())
 
-	policy.ReloadEngine(holder, config.GatewayConfig{
-		Policy: config.PolicySettings{Version: "after"},
-	})
+	policy.ReloadEngine(holder, policy.EngineInput{Version: "after"})
 
 	req2, _ := http.NewRequest(http.MethodGet, ts.URL+"/mcp/rpc", nil)
 	req2.Header.Set("Authorization", "Bearer "+s)
@@ -164,7 +161,7 @@ func TestHTTPMiddlewarePolicyAllowOnEvalFailureControlsRARDegradation(t *testing
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			holder := policy.NewHolder(policy.NewEngine(config.PolicySettings{
+			holder := policy.NewHolder(policy.NewEngine(policy.EngineInput{
 				Version:            "v-test",
 				AllowOnEvalFailure: tc.allowOnEvalFailure,
 			}))

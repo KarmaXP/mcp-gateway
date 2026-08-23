@@ -7,14 +7,20 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 )
 
-func TestAggregationListCacheTTLUnsetOrZero(t *testing.T) {
+func TestAggregationListCacheTTLUnsetUsesTheDefault(t *testing.T) {
 	var c GatewayConfig
-	require.Equal(t, time.Duration(0), c.AggregationListCacheTTL())
+	require.Equal(t, defaults.MultiplexListCacheTTL, c.AggregationListCacheTTL(),
+		"an absent field must fall back like its four siblings, or the default is dead code")
+}
 
-	c = GatewayConfig{Aggregation: AggregationSettings{ListCacheTTL: "0s"}}
-	require.Equal(t, time.Duration(0), c.AggregationListCacheTTL())
+func TestAggregationListCacheTTLExplicitZeroDisablesTheCache(t *testing.T) {
+	c := GatewayConfig{Aggregation: AggregationSettings{ListCacheTTL: "0s"}}
+	require.Equal(t, time.Duration(0), c.AggregationListCacheTTL(),
+		"disabling the cache needs an explicit sentinel, not an absent field")
 }
 
 func TestAggregationListCacheTTLParsePositive(t *testing.T) {
@@ -22,9 +28,9 @@ func TestAggregationListCacheTTLParsePositive(t *testing.T) {
 	require.Equal(t, 30*time.Second, c.AggregationListCacheTTL())
 }
 
-func TestAggregationListCacheTTLInvalidIgnored(t *testing.T) {
+func TestAggregationListCacheTTLInvalidFallsBackToTheDefault(t *testing.T) {
 	c := GatewayConfig{Aggregation: AggregationSettings{ListCacheTTL: "not-a-duration"}}
-	require.Equal(t, time.Duration(0), c.AggregationListCacheTTL())
+	require.Equal(t, defaults.MultiplexListCacheTTL, c.AggregationListCacheTTL())
 }
 
 func TestAggregationListCacheTTLLoadFromYAML(t *testing.T) {

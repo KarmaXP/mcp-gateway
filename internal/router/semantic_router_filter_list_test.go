@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -15,7 +16,7 @@ func TestFilterToolsForListEmptyIntentReturnsFull(t *testing.T) {
 	st := store.NewInMemoryVectorStore(dim)
 	emb := &mapEmbed{vecs: map[string][]float32{}, dim: dim}
 	cfg := DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = ModeFilterList
+	cfg.Mode = mode.FilterList
 	sr := NewSemanticRouter(cfg, emb, st, dim)
 	row := index.ToolRow{Name: "pre__tool", Description: "d", ParamKeys: nil}
 	reindexAndApply(t, sr, context.Background(), "v1", []IndexedTool{
@@ -39,7 +40,7 @@ func TestFilterToolsForListSubsetsByIntent(t *testing.T) {
 	emb.vecs[d2] = []float32{0, 1, 0, 0}
 
 	cfg := DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = ModeFilterList
+	cfg.Mode = mode.FilterList
 	cfg.TopK = 4
 	cfg.ScoreMin = 0.99
 	sr := NewSemanticRouter(cfg, emb, st, dim)
@@ -66,7 +67,7 @@ func TestFilterToolsForListStaleCatalogReturnsFull(t *testing.T) {
 	st := store.NewInMemoryVectorStore(dim)
 	emb := &mapEmbed{vecs: make(map[string][]float32), dim: dim}
 	cfg := DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = ModeFilterList
+	cfg.Mode = mode.FilterList
 	sr := NewSemanticRouter(cfg, emb, st, dim)
 	row := index.ToolRow{Name: "pre__tool", Description: "d", ParamKeys: nil}
 	reindexAndApply(t, sr, context.Background(), "v1", []IndexedTool{
@@ -91,7 +92,7 @@ func TestFilterToolsForListScoreMinExcludesAllReturnsFull(t *testing.T) {
 	emb.vecs[d1] = []float32{1, 0, 0, 0}
 	emb.vecs[d2] = []float32{0, 1, 0, 0}
 	cfg := DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = ModeFilterList
+	cfg.Mode = mode.FilterList
 	cfg.TopK = 4
 	cfg.ScoreMin = 1.01
 	sr := NewSemanticRouter(cfg, emb, st, dim)
@@ -122,7 +123,7 @@ func TestFilterToolsForListAllowedToolsRestrictsHits(t *testing.T) {
 	emb.vecs[d2] = []float32{0, 1, 0, 0}
 
 	cfg := DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = ModeFilterList
+	cfg.Mode = mode.FilterList
 	cfg.TopK = 4
 	cfg.ScoreMin = 0.5
 	sr := NewSemanticRouter(cfg, emb, st, dim)
@@ -162,7 +163,7 @@ func TestFilterToolsForListIndexNotReadySkipsEmbed(t *testing.T) {
 	st := store.NewInMemoryVectorStore(dim)
 	emb := &countingMapEmbed{vecs: make(map[string][]float32), dim: dim}
 	cfg := DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = ModeFilterList
+	cfg.Mode = mode.FilterList
 	sr := NewSemanticRouter(cfg, emb, st, dim)
 
 	keep, full := sr.FilterToolsForList(context.Background(), RoutingSignal{

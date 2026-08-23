@@ -135,7 +135,13 @@ func (a *Multiplexer) applySemanticToolRouting(ctx context.Context, hostID json.
 	span.SetAttributes(attribute.String(telemetry.AttrMCPMethod, "tools/call"))
 	sig := a.semanticRoutingSignal(ctx, p.Name, p.Arguments)
 	resolved, dec, err := a.semantic.ResolveToolsCall(rctx, sig)
-	telemetry.RecordSemanticRouting(rctx, dec, err)
+	if dec != nil {
+		telemetry.RecordSemanticRouting(rctx, telemetry.SemanticRouting{
+			Outcome:       string(dec.Outcome),
+			FallbackLayer: dec.FallbackLayer,
+			LatencyMS:     dec.LatencyMS,
+		}, err)
+	}
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "semantic router")

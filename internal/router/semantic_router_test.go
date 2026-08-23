@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -39,7 +40,7 @@ func TestSemanticRouterExactShortcutNoVector(t *testing.T) {
 	st := store.NewInMemoryVectorStore(dim)
 	emb := &mapEmbed{vecs: map[string][]float32{}, dim: dim}
 	cfg := DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = ModeAssistList
+	cfg.Mode = mode.AssistList
 	cfg.TopK = 4
 	cfg.ScoreMin = 0.9
 	e := NewSemanticRouter(cfg, emb, st, dim)
@@ -72,7 +73,7 @@ func TestSemanticRouterVectorResolvesWhenNameWrong(t *testing.T) {
 	emb.vecs[d2] = []float32{0, 1, 0, 0}
 
 	cfg := DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = ModeAssistList
+	cfg.Mode = mode.AssistList
 	cfg.TopK = 4
 	cfg.ScoreMin = 0.99
 	cfg.AllowAutoRename = true
@@ -103,7 +104,7 @@ func TestSemanticRouterRejectRenameWhenDisabled(t *testing.T) {
 	emb.vecs[q] = []float32{1, 0, 0, 0}
 
 	cfg := DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = ModeAssistList
+	cfg.Mode = mode.AssistList
 	cfg.TopK = 4
 	cfg.ScoreMin = 0.99
 	cfg.AllowAutoRename = false
@@ -126,7 +127,7 @@ func TestSemanticRouterAllowedToolsFilter(t *testing.T) {
 	emb.vecs[q] = []float32{1, 0, 0, 0}
 
 	cfg := DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = ModeAssistList
+	cfg.Mode = mode.AssistList
 	cfg.TopK = 4
 	cfg.ScoreMin = 0.5
 	cfg.AllowAutoRename = true
@@ -149,7 +150,7 @@ func TestSemanticRouterRulesAliasExact(t *testing.T) {
 	st := store.NewInMemoryVectorStore(dim)
 	emb := &mapEmbed{vecs: map[string][]float32{}, dim: dim}
 	cfg := DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = ModeAssistList
+	cfg.Mode = mode.AssistList
 	e := NewSemanticRouter(cfg, emb, st, dim)
 	e.SetRules(rules.New(map[string]string{"legacy__logs": "pre__tool"}, nil))
 	row := index.ToolRow{Name: "pre__tool", Description: "d", ParamKeys: nil}
@@ -184,12 +185,12 @@ func TestNilSemanticRouterSurface(t *testing.T) {
 func TestDefaultSemanticRouterRuntimeEmbedTimeout(t *testing.T) {
 	c := DefaultSemanticRouterRuntimeConfig()
 	require.NotZero(t, c.EmbedTimeout)
-	require.Equal(t, ModeOff, c.Mode)
+	require.Equal(t, mode.Off, c.Mode)
 }
 
 func TestSemanticRouterReindexRequiresEmbed(t *testing.T) {
 	cfg := DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = ModeAssistList
+	cfg.Mode = mode.AssistList
 	e := NewSemanticRouter(cfg, nil, store.NewInMemoryVectorStore(4), 4)
 	err := e.Reindex(context.Background(), "v1", []IndexedTool{{ToolRow: index.ToolRow{Name: "a__b"}, UpstreamID: "x"}})
 	require.Error(t, err)
@@ -204,7 +205,7 @@ func TestReindexNoOpWhenRouterDisabled(t *testing.T) {
 
 func TestReindexRejectsEmptyCatalogVersion(t *testing.T) {
 	cfg := DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = ModeAssistList
+	cfg.Mode = mode.AssistList
 	e := NewSemanticRouter(cfg, &mapEmbed{dim: 4}, store.NewInMemoryVectorStore(4), 4)
 	err := e.Reindex(context.Background(), "", []IndexedTool{
 		{ToolRow: index.ToolRow{Name: "a__b"}, UpstreamID: "x"},
@@ -217,7 +218,7 @@ func TestSemanticRouterRejectsStaleClientCatalogPin(t *testing.T) {
 	st := store.NewInMemoryVectorStore(dim)
 	emb := &mapEmbed{vecs: map[string][]float32{}, dim: dim}
 	cfg := DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = ModeAssistList
+	cfg.Mode = mode.AssistList
 	e := NewSemanticRouter(cfg, emb, st, dim)
 	row := index.ToolRow{Name: "pre__tool", Description: "d", ParamKeys: nil}
 	reindexAndApply(t, e, context.Background(), "v2", []IndexedTool{{ToolRow: row, UpstreamID: "be1"}})
@@ -248,7 +249,7 @@ func TestSemanticRouterVectorQueryUsesArgumentKeysFromPayload(t *testing.T) {
 	emb.vecs[q] = []float32{1, 0, 0, 0}
 
 	cfg := DefaultSemanticRouterRuntimeConfig()
-	cfg.Mode = ModeAssistList
+	cfg.Mode = mode.AssistList
 	cfg.TopK = 4
 	cfg.ScoreMin = 0.99
 	cfg.AllowAutoRename = true
