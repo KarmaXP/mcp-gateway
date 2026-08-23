@@ -136,7 +136,9 @@ func hardenSchemaNode(v any) {
 }
 
 func hardenObjectSchemaMap(doc map[string]any) {
-	if isObjectSchema(doc) {
+	if apMap, isSchema := doc["additionalProperties"].(map[string]any); isSchema {
+		hardenSchemaNode(apMap)
+	} else if isObjectSchema(doc) {
 		doc["additionalProperties"] = false
 	}
 	for _, key := range schemaCombinatorKeys {
@@ -154,12 +156,7 @@ func hardenObjectSchemaMap(doc map[string]any) {
 			hardenSchemaNode(vv)
 		}
 	}
-	if ap, ok := doc["additionalProperties"]; ok {
-		if apMap, ok := ap.(map[string]any); ok {
-			hardenSchemaNode(apMap)
-		}
-	}
-	if defs, ok := doc[""].(map[string]any); ok {
+	if defs, ok := doc["$defs"].(map[string]any); ok {
 		for _, vv := range defs {
 			hardenSchemaNode(vv)
 		}

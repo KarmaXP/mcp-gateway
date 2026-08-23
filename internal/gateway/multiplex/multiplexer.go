@@ -79,6 +79,7 @@ type Multiplexer struct {
 	listChangedDebounce   time.Duration
 	listChangedTimer      *time.Timer
 	listChangedPendingCtx context.Context
+	listChangedGeneration uint64
 }
 
 type Option func(*Multiplexer)
@@ -340,10 +341,13 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 		span.SetStatus(codes.Error, "marshal initialize")
 		return nil, fmt.Errorf("multiplex: marshal initialize result: %w", err)
 	}
-	a.initMu.Lock()
-	a.initDone = true
-	a.initResult = append(json.RawMessage(nil), raw...)
-	a.initMu.Unlock()
+	everyUpstreamInitialized := len(initFailures) == 0
+	if everyUpstreamInitialized {
+		a.initMu.Lock()
+		a.initDone = true
+		a.initResult = append(json.RawMessage(nil), raw...)
+		a.initMu.Unlock()
+	}
 	a.invalidateToolCache()
 	span.SetStatus(codes.Ok, "")
 	return rpc.NewResult(hostID, raw), nil
@@ -394,7 +398,10 @@ func upstreamInitParams(ctx context.Context) json.RawMessage {
 func mergeInitParamMaps(base, host map[string]any) map[string]any {
 	out := cloneMap(base)
 	for k, v := range host {
-		if k == "capabilities" || k == "clientInfo" {
+		if k == "capabilities" {
+			continue
+		}
+		if k == "clientInfo" {
 			if bm, bOK := out[k].(map[string]any); bOK {
 				if hm, hOK := v.(map[string]any); hOK {
 					out[k] = mergeInitParamMaps(bm, hm)

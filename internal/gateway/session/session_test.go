@@ -339,3 +339,34 @@ func TestSessionDispatchNilRequestContext(t *testing.T) {
 		t.Fatal("timeout")
 	}
 }
+
+func TestSessionMiddlewareRejectionDoesNotAlsoDispatch(t *testing.T) {
+	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
+	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
+	require.NoError(t, err)
+
+	mw := Middleware(func(ctx context.Context, req *rpc.Request) error {
+		if req.Method == "tools/list" {
+			return context.DeadlineExceeded
+		}
+		return nil
+	})
+	s := NewSession(context.Background(), "reject-once", agg, []Middleware{mw})
+
+	require.NoError(t, s.Dispatch(context.Background(), &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: "initialize", ID: json.RawMessage(`0`), Params: json.RawMessage(`{}`)}))
+	<-s.Out()
+	require.NoError(t, s.Dispatch(context.Background(), &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: "notifications/initialized"}))
+	require.NoError(t, s.Dispatch(context.Background(), &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: "tools/list", ID: json.RawMessage(`3`)}))
+
+	raw := <-s.Out()
+	var resp rpc.Response
+	require.NoError(t, json.Unmarshal(raw, &resp))
+	require.NotNil(t, resp.Error)
+	require.Equal(t, errcodes.RequestRejected, resp.Error.Code)
+
+	select {
+	case extra := <-s.Out():
+		t.Fatalf("a rejected request must not run: the host got a second payload for id 3: %s", extra)
+	case <-time.After(500 * time.Millisecond):
+	}
+}

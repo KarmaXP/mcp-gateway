@@ -287,7 +287,7 @@ func (s *Session) enqueueBackpressureError(id json.RawMessage) error {
 	bp := rpc.NewError(id, errcodes.GatewayInternal, "session outbound buffer full", nil)
 	payload, err := bp.Marshal()
 	if err != nil {
-		return nil
+		return fmt.Errorf("session: marshal backpressure error: %w", err)
 	}
 	if !s.forceEnqueueOutbound(payload) {
 		s.droppedOutbound.Add(1)
@@ -351,7 +351,8 @@ func (s *Session) Dispatch(reqCtx context.Context, req *rpc.Request) error {
 	ctx, cancel := mergeDispatchContext(s.ctx, reqCtx)
 	defer cancel()
 
-	if err := s.runMiddlewares(ctx, req); err != nil {
+	rejected, err := s.runMiddlewares(ctx, req)
+	if rejected || err != nil {
 		return err
 	}
 
@@ -385,19 +386,19 @@ func (s *Session) Dispatch(reqCtx context.Context, req *rpc.Request) error {
 	}
 }
 
-func (s *Session) runMiddlewares(ctx context.Context, req *rpc.Request) error {
+func (s *Session) runMiddlewares(ctx context.Context, req *rpc.Request) (bool, error) {
 	for _, mw := range s.middlewares {
 		if mw == nil {
 			continue
 		}
 		if err := mw(ctx, req); err != nil {
 			if req.IsNotification() {
-				return err
+				return true, err
 			}
-			return s.enqueueDispatchResponse(rpc.NewError(req.ID, errcodes.RequestRejected, err.Error(), nil))
+			return true, s.enqueueDispatchResponse(rpc.NewError(req.ID, errcodes.RequestRejected, err.Error(), nil))
 		}
 	}
-	return nil
+	return false, nil
 }
 
 func mergeDispatchContext(sessionCtx, reqCtx context.Context) (context.Context, context.CancelFunc) {
