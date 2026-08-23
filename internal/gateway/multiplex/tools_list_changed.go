@@ -26,23 +26,23 @@ func (a *Multiplexer) scheduleToolsListChangedRefresh(trigger context.Context) {
 	defer a.listChangedMu.Unlock()
 
 	if a.listChangedTimer != nil {
-		if !a.listChangedTimer.Stop() {
-			select {
-			case <-a.listChangedTimer.C:
-			default:
-			}
-		}
+		a.listChangedTimer.Stop()
 	}
+	a.listChangedGeneration++
+	generation := a.listChangedGeneration
 	a.listChangedPendingCtx = trigger
-	timer := time.AfterFunc(delay, func() {
+	a.listChangedTimer = time.AfterFunc(delay, func() {
 		a.listChangedMu.Lock()
+		if generation != a.listChangedGeneration {
+			a.listChangedMu.Unlock()
+			return
+		}
 		pending := a.listChangedPendingCtx
 		a.listChangedPendingCtx = nil
 		a.listChangedTimer = nil
 		a.listChangedMu.Unlock()
 		a.runToolsListChangedRefresh(pending)
 	})
-	a.listChangedTimer = timer
 }
 
 func (a *Multiplexer) runToolsListChangedRefresh(trigger context.Context) {

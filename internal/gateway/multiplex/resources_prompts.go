@@ -167,6 +167,7 @@ func (a *Multiplexer) invokeUpstreamGeneric(ctx context.Context, hostID json.Raw
 		bspan.SetStatus(codes.Ok, "")
 	}
 	muxSpan.SetStatus(codes.Ok, "")
+	resp.ID = hostID
 	return resp, nil
 }
 

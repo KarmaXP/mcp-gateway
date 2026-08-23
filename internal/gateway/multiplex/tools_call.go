@@ -26,16 +26,19 @@ func (a *Multiplexer) ToolsCall(ctx context.Context, hostID json.RawMessage, par
 	}
 
 	mode, _ := hostctx.AllowListModeFromContext(ctx)
+	authorizedName := ""
 	switch mode {
 	case hostctx.AllowListDenyAll:
 		if errResp := a.enforceHostToolAuthz(ctx, hostID, p.Name); errResp != nil {
 			return errResp, nil
 		}
+		authorizedName = p.Name
 	case hostctx.AllowListRestricted:
 		if a.semantic == nil || !a.semantic.AllowAutoRename() {
 			if errResp := a.enforceHostToolAuthz(ctx, hostID, p.Name); errResp != nil {
 				return errResp, nil
 			}
+			authorizedName = p.Name
 		}
 	}
 
@@ -43,8 +46,10 @@ func (a *Multiplexer) ToolsCall(ctx context.Context, hostID json.RawMessage, par
 		return errResp, nil
 	}
 
-	if errResp := a.enforceHostToolAuthz(ctx, hostID, p.Name); errResp != nil {
-		return errResp, nil
+	if p.Name != authorizedName {
+		if errResp := a.enforceHostToolAuthz(ctx, hostID, p.Name); errResp != nil {
+			return errResp, nil
+		}
 	}
 
 	argsForForward := coalesceArgs(p.Arguments)
@@ -201,8 +206,22 @@ func (a *Multiplexer) invokeUpstreamToolsCall(ctx context.Context, hostID json.R
 	} else {
 		bspan.SetStatus(codes.Ok, "")
 	}
-	if resp.Error == nil {
+	if resp.Error == nil && !isToolResultError(resp.Result) {
 		hostctx.RecordSuccessfulToolCall(ctx, namespacedTool)
 	}
+	resp.ID = hostID
 	return resp, nil
+}
+
+func isToolResultError(result json.RawMessage) bool {
+	if len(result) == 0 {
+		return false
+	}
+	var envelope struct {
+		IsError bool `json:"isError"`
+	}
+	if err := json.Unmarshal(result, &envelope); err != nil {
+		return false
+	}
+	return envelope.IsError
 }
