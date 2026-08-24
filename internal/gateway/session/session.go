@@ -24,6 +24,7 @@ import (
 
 var (
 	ErrUnknownSession = errors.New("session: unknown id")
+	ErrTooManySessions = errors.New("session: concurrent session limit reached")
 	errOutboundBufferFull = errors.New("session: outbound buffer full")
 )
 
@@ -57,13 +58,16 @@ func NewSessionManager(mpx *multiplex.Multiplexer, mws ...Middleware) *SessionMa
 	return sm
 }
 
-func (sm *SessionManager) Create(ctx context.Context) *Session {
+func (sm *SessionManager) Create(ctx context.Context) (*Session, error) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	if len(sm.sessions) >= defaults.MaxConcurrentSSESessions {
+		return nil, ErrTooManySessions
+	}
 	id := uuid.NewString()
 	s := NewSession(ctx, id, sm.multiplexer, sm.middlewares)
-	sm.mu.Lock()
 	sm.sessions[id] = s
-	sm.mu.Unlock()
-	return s
+	return s, nil
 }
 
 func (sm *SessionManager) Get(id string) (*Session, error) {

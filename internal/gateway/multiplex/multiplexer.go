@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/santhosh-tekuri/jsonschema/v6"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"golang.org/x/sync/errgroup"
@@ -63,7 +62,7 @@ type Multiplexer struct {
 	catRefreshGen atomic.Uint64
 
 	schemaMu       sync.RWMutex
-	toolValidators map[string]*jsonschema.Schema
+	toolValidators map[string]toolSchema
 
 	strictInit            bool
 	strictList            bool

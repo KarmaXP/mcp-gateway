@@ -212,3 +212,46 @@ func TestToolsCallHardensSchemasByDefaultForEveryTool(t *testing.T) {
 		})
 	}
 }
+
+func TestElevatedToolNeedsASchemaThatDeclaresSomething(t *testing.T) {
+	tests := []struct {
+		name        string
+		inputSchema map[string]any
+		wantErr     string
+	}{
+		{
+			name:        "a schema that enumerates nothing does not satisfy the rule",
+			inputSchema: map[string]any{"type": "object"},
+			wantErr:     "requires an input schema that declares its properties",
+		},
+		{
+			name: "an enumerated schema does",
+			inputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"msg": map[string]any{"type": "string"}},
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
+			b1.InputSchemaByTool = map[string]map[string]any{"echo": tc.inputSchema}
+			pol := policy.NewEngine(policy.EngineInput{Version: "t", ElevatedTools: []string{"alpha__echo"}})
+			a, err := New([]backend.Upstream{b1}, WithListTTL(0), WithPolicyEngine(pol))
+			require.NoError(t, err)
+			_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
+			_, _ = a.ToolsList(context.Background(), json.RawMessage(`2`))
+
+			params, _ := json.Marshal(map[string]any{"name": "alpha__echo", "arguments": map[string]any{"msg": "hi"}})
+			resp, err := a.ToolsCall(context.Background(), json.RawMessage(`3`), params)
+			require.NoError(t, err)
+			if tc.wantErr == "" {
+				require.Nil(t, resp.Error)
+				return
+			}
+			require.NotNil(t, resp.Error, "an elevated tool must not run unvalidated arguments")
+			require.Equal(t, errcodes.InvalidParams, resp.Error.Code)
+			require.Contains(t, resp.Error.Message, tc.wantErr)
+		})
+	}
+}

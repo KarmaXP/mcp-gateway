@@ -45,7 +45,7 @@ func TestHTTPMiddlewareEmptyIntersectionDenyAll(t *testing.T) {
 	holder := policy.NewHolder(eng)
 	var mode hostctx.AllowListMode
 	var got []string
-	h := HTTPMiddleware(cfg, v, holder)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := HTTPMiddleware(cfg, v, holder, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mode, got = hostctx.AllowListModeFromContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -109,7 +109,7 @@ func TestHTTPMiddlewareTokenWithoutToolClaimsIsDenyAll(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var mode hostctx.AllowListMode
 			var names []string
-			h := HTTPMiddleware(cfg, v, policy.NewHolder(policy.NewEngine(policy.EngineInput{})))(
+			h := HTTPMiddleware(cfg, v, policy.NewHolder(policy.NewEngine(policy.EngineInput{})), nil)(
 				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					mode, names = hostctx.AllowListModeFromContext(r.Context())
 					w.WriteHeader(http.StatusOK)

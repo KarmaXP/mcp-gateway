@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/KarmaXP/mcp-gateway/internal/auth"
+	"github.com/KarmaXP/mcp-gateway/internal/auth/ratelimit"
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/config"
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
@@ -93,7 +94,8 @@ func New(ctx context.Context, opts Options) (app *App, err error) {
 	if checker := newReadinessChecker(opts.Config, os.Getenv, http.DefaultClient); checker != nil {
 		httpOpts = append(httpOpts, httpserver.WithReadinessChecker(checker))
 	}
-	httpOpts = append(httpOpts, orchestrator.HTTPServerOptions(serviceName(opts), authCfg, validator, a.policy, rateLimitConfig(opts.Config))...)
+	limiter := ratelimit.New(ctx, rateLimitConfig(opts.Config))
+	httpOpts = append(httpOpts, orchestrator.HTTPServerOptions(serviceName(opts), authCfg, validator, a.policy, limiter)...)
 	httpOpts = append(httpOpts, httpserver.WithShutdownContext(ctx))
 	a.srv = httpserver.New(mpx, a.addr, httpOpts...)
 

@@ -11,11 +11,12 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/policy"
 )
 
-func HTTPServerOptions(serviceName string, authCfg auth.JWTAuthConfig, v *auth.Validator, pol *policy.Holder, rl ratelimit.Config) []httpserver.Option {
+func HTTPServerOptions(serviceName string, authCfg auth.JWTAuthConfig, v *auth.Validator, pol *policy.Holder, limiter *ratelimit.Limiter) []httpserver.Option {
 	if serviceName == "" {
 		serviceName = "mcp-gateway"
 	}
 	// Outermost: HTTP server span; then JWT (may start mcp.host.request for POST /mcp/rpc); then rate limit; then mux.
+	// The failure budget lives inside the JWT middleware, since only a failed verification spends it.
 	return []httpserver.Option{
 		httpserver.WithHTTPMiddleware(func(h http.Handler) http.Handler {
 			return otelhttp.NewHandler(h, serviceName,
@@ -24,7 +25,7 @@ func HTTPServerOptions(serviceName string, authCfg auth.JWTAuthConfig, v *auth.V
 				}),
 			)
 		}),
-		httpserver.WithHTTPMiddleware(auth.HTTPMiddleware(authCfg, v, pol)),
-		httpserver.WithHTTPMiddleware(ratelimit.HTTPMiddleware(rl)),
+		httpserver.WithHTTPMiddleware(auth.HTTPMiddleware(authCfg, v, pol, limiter)),
+		httpserver.WithHTTPMiddleware(limiter.Middleware()),
 	}
 }

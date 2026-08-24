@@ -17,7 +17,7 @@ import (
 
 func TestHTTPMiddlewareDisabledPassesThrough(t *testing.T) {
 	cfg := Config{Enabled: false}
-	h := HTTPMiddleware(cfg)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	h := New(context.Background(), cfg).Middleware()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	}))
 	ts := httptest.NewServer(h)
@@ -31,7 +31,7 @@ func TestHTTPMiddlewareDisabledPassesThrough(t *testing.T) {
 
 func TestHTTPMiddlewareSkipsMCPSSE(t *testing.T) {
 	cfg := Config{Enabled: true, RPS: 1, Burst: 1}
-	h := HTTPMiddleware(cfg)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	h := New(context.Background(), cfg).Middleware()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	ts := httptest.NewServer(h)
@@ -55,7 +55,7 @@ func TestHTTPMiddlewareSkipsMCPSSE(t *testing.T) {
 
 func TestHTTPMiddlewareSkipsHealthPaths(t *testing.T) {
 	cfg := Config{Enabled: true, RPS: 0.001, Burst: 1}
-	h := HTTPMiddleware(cfg)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	h := New(context.Background(), cfg).Middleware()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	ts := httptest.NewServer(h)
@@ -70,7 +70,7 @@ func TestHTTPMiddlewareSkipsHealthPaths(t *testing.T) {
 func TestHTTPMiddleware429WhenExhausted(t *testing.T) {
 	cfg := Config{Enabled: true, RPS: 1, Burst: 1}
 	var innerHits int
-	h := HTTPMiddleware(cfg)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	h := New(context.Background(), cfg).Middleware()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		innerHits++
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -95,7 +95,7 @@ func TestLimiterKeyUsesSubjectWhenPresent(t *testing.T) {
 	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	h := HTTPMiddleware(cfg)(inner)
+	h := New(context.Background(), cfg).Middleware()(inner)
 
 	reqA := httptest.NewRequest(http.MethodGet, "/mcp/rpc", nil)
 	reqA = reqA.WithContext(hostctx.WithSubjectID(context.Background(), "user-a"))
@@ -131,7 +131,7 @@ func TestBucketMapEvictsLRUWhenAtCap(t *testing.T) {
 
 func TestHTTPMiddlewareCapsUniqueKeys(t *testing.T) {
 	cfg := Config{Enabled: true, RPS: 100, Burst: 100, MaxBuckets: 3}
-	h := HTTPMiddleware(cfg)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	h := New(context.Background(), cfg).Middleware()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -154,7 +154,7 @@ func TestHTTPMiddlewareCapsUniqueKeys(t *testing.T) {
 func TestHTTPMiddlewareEvictsStaleBuckets(t *testing.T) {
 	cfg := Config{Enabled: true, RPS: 100, Burst: 100, BucketIdleTTL: 20 * time.Millisecond}
 	var hits atomic.Int32
-	h := HTTPMiddleware(cfg)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	h := New(context.Background(), cfg).Middleware()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		hits.Add(1)
 		w.WriteHeader(http.StatusOK)
 	}))

@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -24,7 +25,7 @@ func TestHTTPServerOptionsWithServer(t *testing.T) {
 	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
-	opts := HTTPServerOptions("test-svc", cfg, v, nil, ratelimit.Config{})
+	opts := HTTPServerOptions("test-svc", cfg, v, nil, ratelimit.New(context.Background(), ratelimit.Config{}))
 	srv := httpserver.New(agg, "", opts...)
 
 	ts := httptest.NewServer(srv)
