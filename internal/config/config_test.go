@@ -83,8 +83,8 @@ policy:
 	require.Equal(t, "test-pol", cfg.Policy.Version)
 	require.Equal(t, []string{"a__x"}, cfg.Policy.ElevatedTools)
 	require.Equal(t, []string{"a__list"}, cfg.Policy.ToolGroups["read"])
-	require.True(t, cfg.Policy.AllowOnEvalFailure)
-	require.True(t, cfg.Policy.HardenSchemas)
+	require.True(t, cfg.Policy.AllowOnRARParseFailure)
+	require.True(t, cfg.PolicyHardenSchemas())
 	require.Equal(t, 4096, cfg.Policy.MaxArgumentBytes)
 	require.Equal(t, 10, cfg.Policy.MaxArgumentDepth)
 	require.Equal(t, 99, cfg.Policy.MaxArgumentKeys)
@@ -152,19 +152,19 @@ func TestApplyEnvOverridesPolicyAllowOnEvalFailureTrue(t *testing.T) {
 	t.Setenv("POLICY_ALLOW_ON_EVAL_FAILURE", "true")
 
 	cfg.ApplyEnvOverrides()
-	require.True(t, cfg.Policy.AllowOnEvalFailure)
+	require.True(t, cfg.Policy.AllowOnRARParseFailure)
 }
 
 func TestApplyEnvOverridesPolicyAllowOnEvalFailureFalse(t *testing.T) {
 	cfg := GatewayConfig{
 		Policy: PolicySettings{
-			AllowOnEvalFailure: true,
+			AllowOnRARParseFailure: true,
 		},
 	}
 	t.Setenv("POLICY_ALLOW_ON_EVAL_FAILURE", "false")
 
 	cfg.ApplyEnvOverrides()
-	require.False(t, cfg.Policy.AllowOnEvalFailure)
+	require.False(t, cfg.Policy.AllowOnRARParseFailure)
 }
 
 func TestApplyEnvOverridesAggregationMaxInFlight(t *testing.T) {

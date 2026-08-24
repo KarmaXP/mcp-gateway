@@ -55,6 +55,8 @@ func (a *Multiplexer) runToolsListChangedRefresh(trigger context.Context) {
 		slog.Warn("tools/list_changed refresh skipped", "err", err)
 		return
 	}
+	a.replaceToolSchemasFromMerged(merged)
+
 	outFull, err := json.Marshal(map[string]any{"tools": merged})
 	if err != nil {
 		slog.Warn("tools/list_changed refresh marshal failed", "err", err)

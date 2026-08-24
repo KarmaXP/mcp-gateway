@@ -151,7 +151,7 @@ func TestPolicyHardenSchemasInsideAllOf(t *testing.T) {
 	}
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b1.InputSchemaByTool = map[string]map[string]any{"echo": inputSchema}
-	pol := policy.NewEngine(policy.EngineInput{Version: "t", HardenSchemas: true, ElevatedTools: []string{"alpha__echo"}})
+	pol := policy.NewEngine(policy.EngineInput{Version: "t", ElevatedTools: []string{"alpha__echo"}})
 	a, err := New([]backend.Upstream{b1}, WithListTTL(0), WithPolicyEngine(pol))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage([]byte("1")))

@@ -70,14 +70,15 @@ info:
 
     | YAML key | Env var(s) | Type | Behavior / notes |
     |---|---|---|---|
-    | `policy.allow_on_eval_failure` | `POLICY_ALLOW_ON_EVAL_FAILURE` | `bool` | Opt-in degradation for malformed/unparseable JWT `authorization_details` (RAR): when true, policy evaluation falls back to JWT-only claims (`mcp_tools` / `mcp_tool_groups`) instead of rejecting. Default behavior is fail-closed. |
-    | `policy.harden_schemas` | `POLICY_HARDEN_SCHEMAS` | `bool` | Enforces stricter schema checks in policy evaluation paths (defense-in-depth for tool-call argument validation). |
+    | `policy.allow_on_eval_failure` | `POLICY_ALLOW_ON_EVAL_FAILURE` | `bool` | Opt-in degradation for a malformed or unparseable JWT `authorization_details` (RAR): when true the request is not rejected, but the principal is degraded to **deny-all**, never to their `mcp_tools` / `mcp_tool_groups` list. Covers RAR parsing only. Default is fail-closed (401). |
+    | `policy.harden_schemas` | `POLICY_HARDEN_SCHEMAS` | `bool` | **Default true.** Every tool schema that enumerates properties is completed with `additionalProperties: false` before compilation (SEC4); a schema enumerating none stays open. Set false to accept undeclared arguments. |
     | `policy.max_argument_bytes` | _(none)_ | `int` | Maximum serialized argument bytes accepted by policy argument validator. |
     | `policy.max_argument_depth` | _(none)_ | `int` | Maximum nested object/array depth accepted by policy argument validator. |
     | `policy.max_argument_keys` | _(none)_ | `int` | Maximum number of object keys accepted by policy argument validator. |
     | `policy.audit_sink` | `POLICY_AUDIT_SINK` | `string` | Audit sink backend: `slog` (default) or `syslog`. |
     | `policy.audit_syslog_network` | `POLICY_AUDIT_SYSLOG_NETWORK` | `string` | Syslog network for audit records (`udp` default when sink is `syslog`). |
     | `policy.audit_syslog_address` | `POLICY_AUDIT_SYSLOG_ADDRESS` | `string` | Required syslog destination address when `policy.audit_sink=syslog`. |
+    | _(none)_ | `POLICY_AUDIT_SUBJECT_PEPPER` | `string` | Secret keying the subject pseudonym in audit records (HMAC-SHA256, 64 bits). Stable per deployment; absent means unkeyed. |
 
     JWT mode (`AUTH_MODE=jwt`) requirements and rate-limit **429** semantics are summarized in the HTTP status table below.
 
@@ -237,8 +238,9 @@ paths:
         Optional header **`X-Agent-Tokens-Used`**: non-negative integer token count from the host/agent for this RPC;
         used only as span metadata (`mcp.agent.tokens_used`) when valid.
 
-        When **`AUTH_MODE=jwt`**, optional claims **`mcp_tools`**, **`authorization_details`**, and **`mcp_tool_groups`**
-        filter **`tools/list`** and reject **`tools/call`** outside the effective allow list (**-32003** on SSE); see `bearerAuth` and schema **`AuthorizationDetailsMcpTool`**.
+        When **`AUTH_MODE=jwt`**, claims **`mcp_tools`**, **`authorization_details`** and **`mcp_tool_groups`**
+        filter **`tools/list`** and reject **`tools/call`** outside the effective allow list (**-32003** on SSE). A token carrying
+        none of them is allowed no tools; see `bearerAuth` and schema **`AuthorizationDetailsMcpTool`**.
       operationId: postMcpRpc
       security: []
       parameters:
@@ -382,12 +384,12 @@ components:
         JWKS retrieval/lookup failures are fail-closed in JWT mode (401); no JWKS-unavailable bypass flag is supported.
 
         **Registered claims (validated when configured via env):**
-        - **`iss`**: must match **`JWT_ISS`** when set.
-        - **`aud`**: must include **`JWT_AUD`** when set (string match against claim array).
+        - **`iss`**: must match **`JWT_ISS`**, which is required in `jwt` mode.
+        - **`aud`**: must include **`JWT_AUD`**, which is required in `jwt` mode (string match against claim array).
         - **`exp`**: required; expired tokens are rejected (**401**).
 
-        **MCP / policy claims (optional):**
-        - **`mcp_tools`**: JSON array of namespaced tool ids (e.g. `["alpha__echo"]`). Merged with RAR-derived tools by **intersection** when both are present. Enforced on **`tools/list`** (subset) and **`tools/call`** (**-32003** on SSE if not allowed).
+        **MCP / policy claims.** A token carrying none of the three is allowed no tools; use `mcp_tools: ["*"]` for the whole catalog.
+        - **`mcp_tools`**: JSON array of namespaced tool ids (e.g. `["alpha__echo"]`), or `["*"]`. Merged with RAR-derived tools by **intersection** when both are present. Enforced on **`tools/list`** (subset) and **`tools/call`** (**-32003** on SSE if not allowed).
         - **`mcp_tool_groups`**: array of group keys resolved against gateway YAML `policy.tool_groups`.
         - **`authorization_details`**: JSON array of **`AuthorizationDetailsMcpTool`** objects (RFC 9396–style). Non-`mcp_tool` types are ignored by this gateway.
 
@@ -398,7 +400,7 @@ components:
       type: object
       description: |
         One element of JWT claim **`authorization_details`** for type **`mcp_tool`** (see `internal/policy/rar.go`).
-        Use exactly one of **`tool_name`** (exact namespaced id) or **`tool_pattern`** (glob: `*`, `?`, `[]`, `filepath.Match` semantics).
+        Use exactly one of **`tool_name`** (exact namespaced id) or **`tool_pattern`** (glob over the whole tool id, `*` and `?` only, case sensitive; `[`, `]` and `\` are rejected).
         **`tool_name`** and **`tool_pattern`** are mutually exclusive; payloads that set both are rejected when the policy engine parses claims.
       required: [type]
       properties:

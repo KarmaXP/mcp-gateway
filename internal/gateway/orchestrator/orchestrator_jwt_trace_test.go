@@ -60,11 +60,14 @@ func TestHTTPServerOptionsJWTAndOTelProduceSpans(t *testing.T) {
 	ts := httptest.NewServer(srv)
 	defer ts.Close()
 
-	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.RegisteredClaims{
-		Issuer:    "iss",
-		Audience:  jwt.ClaimStrings{"aud"},
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
-		IssuedAt:  jwt.NewNumericDate(time.Now().Add(-time.Minute)),
+	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, auth.TokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    "iss",
+			Audience:  jwt.ClaimStrings{"aud"},
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now().Add(-time.Minute)),
+		},
+		McpTools: []string{"*"},
 	})
 	tok.Header["kid"] = "k1"
 	signed, err := tok.SignedString(priv)

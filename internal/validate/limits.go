@@ -38,7 +38,7 @@ func CheckArgumentJSON(raw json.RawMessage, lim Limits) error {
 	}
 	var v any
 	if err := json.Unmarshal(raw, &v); err != nil {
-		return fmt.Errorf("arguments are not valid JSON: %w", err)
+		return errors.New("arguments are not valid JSON")
 	}
 	if lim.MaxDepth > 0 {
 		if d := jsonDepth(v, 1); d > lim.MaxDepth {

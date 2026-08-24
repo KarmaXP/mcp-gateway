@@ -78,7 +78,7 @@ func HTTPMiddleware(cfg JWTAuthConfig, v *Validator, pol *policy.Holder) func(ht
 			if pol != nil {
 				eng = pol.Load()
 			}
-			tools, err := effectiveAllowList(eng, claims)
+			tools, err := eng.EffectiveAllowList(claims)
 			if err != nil {
 				telemetry.RecordPolicyDecision(ctx, defaults.MetricPolicyOutcomeDeny, defaults.MetricPolicyReasonPolicyEvalFailed)
 				telemetry.RecordInternalPhase(ctx, defaults.MetricInternalMethodUnknown, defaults.MetricInternalPhaseSecurity, time.Since(secStart))
@@ -86,7 +86,7 @@ func HTTPMiddleware(cfg JWTAuthConfig, v *Validator, pol *policy.Holder) func(ht
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
-			ctx2 := hostctx.AttachPolicyAllowList(ctx, tools)
+			ctx2 := hostctx.WithAllowedToolNames(ctx, tools)
 			if sub := claims.Subject(); sub != "" {
 				ctx2 = hostctx.WithSubjectID(ctx2, sub)
 			}
@@ -97,11 +97,4 @@ func HTTPMiddleware(cfg JWTAuthConfig, v *Validator, pol *policy.Holder) func(ht
 			next.ServeHTTP(w, r.WithContext(ctx2))
 		})
 	}
-}
-
-func effectiveAllowList(pol *policy.Engine, claims *TokenClaims) ([]string, error) {
-	if pol == nil {
-		return claims.NormalizedMcpTools(), nil
-	}
-	return pol.EffectiveAllowList(claims)
 }

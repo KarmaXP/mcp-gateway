@@ -54,17 +54,17 @@ type RateLimitSettings struct {
 
 // RAR merge with JWT allow lists, elevated tools (strict schema), tool groups.
 type PolicySettings struct {
-	Version            string              `yaml:"version"`
-	ElevatedTools      []string            `yaml:"elevated_tools"`
-	ToolGroups         map[string][]string `yaml:"tool_groups"`
-	AllowOnEvalFailure bool                `yaml:"allow_on_eval_failure"`
-	HardenSchemas      bool                `yaml:"harden_schemas"`
-	MaxArgumentBytes   int                 `yaml:"max_argument_bytes"`
-	MaxArgumentDepth   int                 `yaml:"max_argument_depth"`
-	MaxArgumentKeys    int                 `yaml:"max_argument_keys"`
-	AuditSink          string              `yaml:"audit_sink"`
-	AuditSyslogNetwork string              `yaml:"audit_syslog_network"`
-	AuditSyslogAddress string              `yaml:"audit_syslog_address"`
+	Version                string              `yaml:"version"`
+	ElevatedTools          []string            `yaml:"elevated_tools"`
+	ToolGroups             map[string][]string `yaml:"tool_groups"`
+	AllowOnRARParseFailure bool                `yaml:"allow_on_eval_failure"`
+	HardenSchemas          *bool               `yaml:"harden_schemas"`
+	MaxArgumentBytes       int                 `yaml:"max_argument_bytes"`
+	MaxArgumentDepth       int                 `yaml:"max_argument_depth"`
+	MaxArgumentKeys        int                 `yaml:"max_argument_keys"`
+	AuditSink              string              `yaml:"audit_sink"`
+	AuditSyslogNetwork     string              `yaml:"audit_syslog_network"`
+	AuditSyslogAddress     string              `yaml:"audit_syslog_address"`
 }
 
 type UpstreamDefinition struct {
@@ -267,8 +267,8 @@ func (c *GatewayConfig) ApplyEnvOverrides() {
 	if v := strings.TrimSpace(os.Getenv("POLICY_AUDIT_SYSLOG_ADDRESS")); v != "" {
 		c.Policy.AuditSyslogAddress = v
 	}
-	envBool("POLICY_ALLOW_ON_EVAL_FAILURE", &c.Policy.AllowOnEvalFailure)
-	envBool("POLICY_HARDEN_SCHEMAS", &c.Policy.HardenSchemas)
+	envBool("POLICY_ALLOW_ON_EVAL_FAILURE", &c.Policy.AllowOnRARParseFailure)
+	envBoolPointer("POLICY_HARDEN_SCHEMAS", &c.Policy.HardenSchemas)
 	envBool("AGGREGATION_STRICT_INITIALIZE", &c.Aggregation.StrictInitialize)
 	envBool("AGGREGATION_STRICT_LIST", &c.Aggregation.StrictList)
 	envBool("AGGREGATION_FORWARD_TOOLS_LIST_CHANGED", &c.Aggregation.ForwardToolsListChanged)
@@ -299,6 +299,14 @@ func (c *GatewayConfig) ApplyEnvOverrides() {
 
 func warnIgnoredEnv(key, value string) {
 	slog.Warn("config: ignoring invalid environment value", "env", key, "value", value)
+}
+
+// Absent means hardened: additionalProperties defaults to false (SEC4).
+func (c *GatewayConfig) PolicyHardenSchemas() bool {
+	if c == nil || c.Policy.HardenSchemas == nil {
+		return true
+	}
+	return *c.Policy.HardenSchemas
 }
 
 func (c *GatewayConfig) ForwardToolsListChanged() bool {
@@ -461,6 +469,19 @@ func envBool(key string, target *bool) {
 		return
 	}
 	*target = value
+}
+
+func envBoolPointer(key string, target **bool) {
+	raw, present := os.LookupEnv(key)
+	if !present || strings.TrimSpace(raw) == "" {
+		return
+	}
+	value, ok := parseBoolValue(raw)
+	if !ok {
+		warnIgnoredEnv(key, raw)
+		return
+	}
+	*target = &value
 }
 
 func parseBoolValue(v string) (bool, bool) {

@@ -111,16 +111,16 @@ func TestMatchTool(t *testing.T) {
 			wantMatch:      true,
 		},
 		{
-			name:           "character class edge case",
+			name:           "character class is rejected, not interpreted",
 			namespacedTool: "k8s__pod2",
 			entry:          "k8s__pod[12]",
-			wantMatch:      true,
+			wantErr:        "use only * and ?",
 		},
 		{
-			name:           "invalid glob returns parse error",
+			name:           "unbalanced bracket is rejected",
 			namespacedTool: "k8s__pod1",
 			entry:          "k8s__pod[",
-			wantErr:        "glob",
+			wantErr:        "use only * and ?",
 		},
 		{
 			name:           "empty tool returns false",

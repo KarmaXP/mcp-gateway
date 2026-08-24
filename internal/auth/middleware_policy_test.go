@@ -110,7 +110,7 @@ func TestHTTPMiddlewarePolicyVersionAfterHolderReload(t *testing.T) {
 	require.Equal(t, []string{"before", "after"}, versions)
 }
 
-func TestHTTPMiddlewarePolicyAllowOnEvalFailureControlsRARDegradation(t *testing.T) {
+func TestHTTPMiddlewarePolicyMalformedRARNeverWidensTheAllowList(t *testing.T) {
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	cfg := JWTAuthConfig{Mode: "jwt", Issuer: "iss", Audience: "aud", PublicKeyPEM: rsaPublicPEM(t, &priv.PublicKey)}
@@ -141,33 +141,36 @@ func TestHTTPMiddlewarePolicyAllowOnEvalFailureControlsRARDegradation(t *testing
 	require.NoError(t, err)
 
 	tests := []struct {
-		name               string
-		allowOnEvalFailure bool
-		wantStatus         int
-		wantAllowedTools   []string
+		name                   string
+		allowOnRARParseFailure bool
+		wantStatus             int
+		wantMode               hostctx.AllowListMode
+		wantAllowedTools       []string
 	}{
 		{
-			name:               "fail closed when disabled",
-			allowOnEvalFailure: false,
-			wantStatus:         http.StatusUnauthorized,
+			name:                   "the request is rejected when degradation is off",
+			allowOnRARParseFailure: false,
+			wantStatus:             http.StatusUnauthorized,
 		},
 		{
-			name:               "degrade to JWT tools when enabled",
-			allowOnEvalFailure: true,
-			wantStatus:         http.StatusOK,
-			wantAllowedTools:   []string{"alpha__echo", "beta__view"},
+			name:                   "degradation grants no tools, never the wider JWT list",
+			allowOnRARParseFailure: true,
+			wantStatus:             http.StatusOK,
+			wantMode:               hostctx.AllowListDenyAll,
+			wantAllowedTools:       []string{},
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			holder := policy.NewHolder(policy.NewEngine(policy.EngineInput{
-				Version:            "v-test",
-				AllowOnEvalFailure: tc.allowOnEvalFailure,
+				Version:                "v-test",
+				AllowOnRARParseFailure: tc.allowOnRARParseFailure,
 			}))
 			var got []string
+			var mode hostctx.AllowListMode
 			h := HTTPMiddleware(cfg, v, holder)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				got = hostctx.AllowedToolNamesFromContext(r.Context())
+				mode, got = hostctx.AllowListModeFromContext(r.Context())
 				w.WriteHeader(http.StatusOK)
 			}))
 			ts := httptest.NewServer(h)
@@ -180,6 +183,7 @@ func TestHTTPMiddlewarePolicyAllowOnEvalFailureControlsRARDegradation(t *testing
 			require.Equal(t, tc.wantStatus, res.StatusCode)
 			require.NoError(t, res.Body.Close())
 			require.Equal(t, tc.wantAllowedTools, got)
+			require.Equal(t, tc.wantMode, mode)
 		})
 	}
 }

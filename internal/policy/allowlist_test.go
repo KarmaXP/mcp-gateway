@@ -32,3 +32,11 @@ func TestAllowedListContains_EmptySliceDenyAll(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, ok)
 }
+
+func TestAllowedListContains_StarEntryIsTheFullCatalog(t *testing.T) {
+	for _, tool := range []string{"alpha__echo", "k8s__get_pod_logs", "x"} {
+		ok, err := AllowedListContains(tool, []string{"*"})
+		require.NoError(t, err)
+		require.True(t, ok, "a single * entry is how a principal asks for the whole catalog")
+	}
+}

@@ -111,7 +111,6 @@ func TestToolsCallHardensElevatedObjectSchemas(t *testing.T) {
 	}
 	pol := policy.NewEngine(policy.EngineInput{
 		Version:       "t",
-		HardenSchemas: true,
 		ElevatedTools: []string{"alpha__echo"},
 	})
 	a, err := New([]backend.Upstream{b1}, WithListTTL(0), WithPolicyEngine(pol))
@@ -148,9 +147,9 @@ func TestToolsCallDoesNotHardenSchemaWhenPolicyDisabled(t *testing.T) {
 		"echo": inputSchema,
 	}
 	pol := policy.NewEngine(policy.EngineInput{
-		Version:       "t",
-		HardenSchemas: false,
-		ElevatedTools: []string{"alpha__echo"},
+		Version:          "t",
+		AllowOpenSchemas: true,
+		ElevatedTools:    []string{"alpha__echo"},
 	})
 	a, err := New([]backend.Upstream{b1}, WithListTTL(0), WithPolicyEngine(pol))
 	require.NoError(t, err)
@@ -167,4 +166,49 @@ func TestToolsCallDoesNotHardenSchemaWhenPolicyDisabled(t *testing.T) {
 	resp, err := a.ToolsCall(context.Background(), json.RawMessage(`3`), params)
 	require.NoError(t, err)
 	require.Nil(t, resp.Error)
+}
+
+func TestToolsCallHardensSchemasByDefaultForEveryTool(t *testing.T) {
+	tests := []struct {
+		name        string
+		inputSchema map[string]any
+		arguments   map[string]any
+		wantError   bool
+	}{
+		{
+			name: "an enumerated shape is closed even without an elevated_tools entry",
+			inputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"msg": map[string]any{"type": "string"}},
+			},
+			arguments: map[string]any{"msg": "hi", "extra": "nope"},
+			wantError: true,
+		},
+		{
+			name:        "a schema that enumerates nothing stays open",
+			inputSchema: map[string]any{"type": "object"},
+			arguments:   map[string]any{"anything": "goes"},
+			wantError:   false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
+			b1.InputSchemaByTool = map[string]map[string]any{"echo": tc.inputSchema}
+			a, err := New([]backend.Upstream{b1}, WithListTTL(0))
+			require.NoError(t, err)
+			_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
+			_, _ = a.ToolsList(context.Background(), json.RawMessage(`2`))
+
+			params, _ := json.Marshal(map[string]any{"name": "alpha__echo", "arguments": tc.arguments})
+			resp, err := a.ToolsCall(context.Background(), json.RawMessage(`3`), params)
+			require.NoError(t, err)
+			if tc.wantError {
+				require.NotNil(t, resp.Error)
+				require.Equal(t, errcodes.InvalidParams, resp.Error.Code)
+				return
+			}
+			require.Nil(t, resp.Error)
+		})
+	}
 }

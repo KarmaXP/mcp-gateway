@@ -42,7 +42,7 @@ func New(ctx context.Context, opts Options) (app *App, err error) {
 		}
 	}()
 
-	auditCleanup, err := configureAuditSink(opts.Config, nil)
+	auditor, auditCleanup, err := configureAuditSink(opts.Config, nil, os.Getenv)
 	if err != nil {
 		return nil, fmt.Errorf("policy audit sink: %w", err)
 	}
@@ -60,7 +60,11 @@ func New(ctx context.Context, opts Options) (app *App, err error) {
 		return nil, fmt.Errorf("auth config: %w", err)
 	}
 
-	a.policy = policy.NewHolder(policy.NewEngine(policyEngineInput(opts.Config.Policy)))
+	engineInput, err := policyEngineInput(opts.Config)
+	if err != nil {
+		return nil, err
+	}
+	a.policy = policy.NewHolder(policy.NewEngine(engineInput))
 
 	upstreams, cleanupUpstreams, err := connectUpstreams(ctx, opts.Config.Upstreams)
 	if err != nil {
@@ -74,6 +78,7 @@ func New(ctx context.Context, opts Options) (app *App, err error) {
 	}
 	mpxOpts = append(mpxOpts,
 		multiplex.WithPolicyHolder(a.policy),
+		multiplex.WithAuditor(auditor),
 		multiplex.WithArgumentValidateLimits(argumentLimits(opts.Config)),
 		multiplex.WithAggregationStrict(opts.Config.Aggregation.StrictInitialize, opts.Config.Aggregation.StrictList),
 		multiplex.WithReportPartialFailures(opts.Config.Aggregation.ReportPartialFailures),
@@ -173,7 +178,12 @@ func (a *App) watchSIGHUP(ctx context.Context) <-chan struct{} {
 					slog.Error("policy reload skipped: config load failed", "err", err)
 					continue
 				}
-				policy.ReloadEngine(a.policy, policyEngineInput(cfg.Policy))
+				reloaded, err := policyEngineInput(cfg)
+				if err != nil {
+					slog.Error("policy reload skipped: invalid tool pattern", "err", err)
+					continue
+				}
+				policy.ReloadEngine(a.policy, reloaded)
 				slog.Warn("SIGHUP applies policy-only reload", "reloaded", "config.Load + policy.ReloadEngine", "not_reloaded", "rate_limit, allowed_origins, aggregation, audit_sink, backends, max_in_flight")
 				slog.Info("policy reloaded from config", "policy_version", cfg.Policy.Version)
 			}
