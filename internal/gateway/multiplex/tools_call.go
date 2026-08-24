@@ -10,6 +10,7 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
@@ -29,6 +30,8 @@ func (a *Multiplexer) ToolsCall(ctx context.Context, hostID json.RawMessage, par
 	mode, _ := hostctx.AllowListModeFromContext(ctx)
 	authorizedName := ""
 	switch mode {
+	case hostctx.AllowListUnrestricted:
+		// Nothing to authorize before routing, and enforceHostToolAuthz allows every name.
 	case hostctx.AllowListDenyAll:
 		if errResp := a.enforceHostToolAuthz(ctx, hostID, p.Name); errResp != nil {
 			return errResp, nil
@@ -83,25 +86,35 @@ func (a *Multiplexer) enforceHostToolAuthz(ctx context.Context, hostID json.RawM
 		span.SetStatus(codes.Ok, "")
 		return nil
 	case hostctx.AllowListDenyAll:
-		span.SetStatus(codes.Error, "not in allow list")
-		a.auditToolDecision(actx, defaults.MetricPolicyOutcomeDeny, defaults.MetricPolicyReasonNotInAllowList, namespacedTool)
-		return rpc.NewError(hostID, errcodes.PermissionDenied, fmt.Sprintf("tool %q not allowed for this principal", namespacedTool), nil)
+		return a.denyToolCall(actx, hostID, namespacedTool)
+	case hostctx.AllowListRestricted:
+		return a.authorizeAgainstAllowList(actx, hostID, namespacedTool, hostctx.PolicyAllowListView(mode, names))
 	}
-	ok, err := policy.AllowedListContains(namespacedTool, hostctx.PolicyAllowListView(mode, names))
+	// A mode this switch does not know denies, so adding one cannot widen access.
+	return a.denyToolCall(actx, hostID, namespacedTool)
+}
+
+func (a *Multiplexer) authorizeAgainstAllowList(ctx context.Context, hostID json.RawMessage, namespacedTool string, allowed []string) *rpc.Response {
+	span := trace.SpanFromContext(ctx)
+	ok, err := policy.AllowedListContains(namespacedTool, allowed)
 	if err != nil {
 		span.RecordError(errors.New("policy evaluation failed"))
 		span.SetStatus(codes.Error, "policy evaluation failed")
-		a.auditToolDecision(actx, defaults.MetricPolicyOutcomeDeny, defaults.MetricPolicyReasonPolicyEvalFailed, namespacedTool)
+		a.auditToolDecision(ctx, defaults.MetricPolicyOutcomeDeny, defaults.MetricPolicyReasonPolicyEvalFailed, namespacedTool)
 		return rpc.NewError(hostID, errcodes.GatewayInternal, "policy evaluation failed", nil)
 	}
 	if !ok {
-		span.SetStatus(codes.Error, "not in allow list")
-		a.auditToolDecision(actx, defaults.MetricPolicyOutcomeDeny, defaults.MetricPolicyReasonNotInAllowList, namespacedTool)
-		return rpc.NewError(hostID, errcodes.PermissionDenied, fmt.Sprintf("tool %q not allowed for this principal", namespacedTool), nil)
+		return a.denyToolCall(ctx, hostID, namespacedTool)
 	}
-	a.auditToolDecision(actx, defaults.MetricPolicyOutcomeAllow, defaults.MetricPolicyReasonAllowListMatch, namespacedTool)
+	a.auditToolDecision(ctx, defaults.MetricPolicyOutcomeAllow, defaults.MetricPolicyReasonAllowListMatch, namespacedTool)
 	span.SetStatus(codes.Ok, "")
 	return nil
+}
+
+func (a *Multiplexer) denyToolCall(ctx context.Context, hostID json.RawMessage, namespacedTool string) *rpc.Response {
+	trace.SpanFromContext(ctx).SetStatus(codes.Error, "not in allow list")
+	a.auditToolDecision(ctx, defaults.MetricPolicyOutcomeDeny, defaults.MetricPolicyReasonNotInAllowList, namespacedTool)
+	return rpc.NewError(hostID, errcodes.PermissionDenied, fmt.Sprintf("tool %q not allowed for this principal", namespacedTool), nil)
 }
 
 func (a *Multiplexer) auditToolDecision(ctx context.Context, outcome, reason, namespacedTool string) {

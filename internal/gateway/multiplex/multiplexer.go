@@ -538,11 +538,13 @@ func (a *Multiplexer) semanticRoutingSignal(ctx context.Context, toolName string
 
 func routerAllowListAuthz(mode hostctx.AllowListMode) router.AllowListAuthz {
 	switch mode {
+	case hostctx.AllowListUnrestricted:
+		return router.AllowListAuthzUnrestricted
 	case hostctx.AllowListDenyAll:
 		return router.AllowListAuthzDenyAll
 	case hostctx.AllowListRestricted:
 		return router.AllowListAuthzRestricted
-	default:
-		return router.AllowListAuthzUnrestricted
 	}
+	// A mode this function does not know denies, so adding one cannot widen access.
+	return router.AllowListAuthzDenyAll
 }

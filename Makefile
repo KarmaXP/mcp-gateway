@@ -82,6 +82,9 @@ help:
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "ci" "Same checks as GitHub Actions lint-and-unit job (lint + vet + race tests, -count=1)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "gen-router-eval-catalog" "Write docs/evaluation/router-eval-catalog.json from SyntheticCatalog()"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "tidy" "Clean up and verify Go modules"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "tidy-check" "Fail if go.mod or go.sum is not tidy (CI gate)"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "shellcheck" "shellcheck -S warning over scripts/*.sh (CI gate)"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "vulncheck" "govulncheck over all packages (CI gate)"
 	@printf "\n"
 	@printf "$(BLUE)▶ MCP Gateway (Docker Compose)$(RESET)\n"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "docker-build"    "Build the gateway Docker image"
@@ -239,6 +242,9 @@ ci:
 	@$(MAKE) lint
 	@go vet ./...
 	@go test -race -count=1 ./...
+	@$(MAKE) tidy-check
+	@$(MAKE) shellcheck
+	@$(MAKE) vulncheck
 
 smoke:
 	@echo "Smoke test (smoke_upstream + gateway MCP over curl)..."
@@ -258,7 +264,7 @@ fmt:
 
 lint:
 	@echo "golangci-lint..."
-	@go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8 run ./...
+	@go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1 run ./...
 	@chmod +x scripts/check-go-eq-spacing.sh
 	@./scripts/check-go-eq-spacing.sh
 
@@ -266,6 +272,21 @@ tidy:
 	@echo "Tidying Go modules..."
 	@go mod tidy
 	@go mod verify
+
+tidy-check:
+	@echo "Checking go.mod and go.sum are tidy..."
+	@go mod tidy
+	@git diff --exit-code go.mod go.sum
+
+shellcheck:
+	@echo "shellcheck..."
+	@shellcheck -S warning scripts/*.sh
+
+# Neither this pin nor the golangci-lint one above is bumped by anything: dependabot's gomod
+# ecosystem does not read versions out of a go run argument. Bump both by hand.
+vulncheck:
+	@echo "govulncheck..."
+	@go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
 
 clean:
 	@echo "Cleaning..."

@@ -56,17 +56,17 @@ func CheckArgumentJSON(raw json.RawMessage, lim Limits) error {
 func jsonDepth(v any, cur int) int {
 	switch t := v.(type) {
 	case map[string]any:
-		max := cur
+		deepest := cur
 		for _, vv := range t {
-			max = maxInt(max, jsonDepth(vv, cur+1))
+			deepest = max(deepest, jsonDepth(vv, cur+1))
 		}
-		return max
+		return deepest
 	case []any:
-		max := cur
+		deepest := cur
 		for _, vv := range t {
-			max = maxInt(max, jsonDepth(vv, cur+1))
+			deepest = max(deepest, jsonDepth(vv, cur+1))
 		}
-		return max
+		return deepest
 	default:
 		return cur
 	}
@@ -89,11 +89,4 @@ func jsonKeyCount(v any) int {
 	default:
 		return 0
 	}
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

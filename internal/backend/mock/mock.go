@@ -187,6 +187,7 @@ func (b *MockUpstream) toolsCall(ctx context.Context, req *rpc.Request) (*rpc.Re
 	}
 	if len(req.Params) > 0 {
 		if err := json.Unmarshal(req.Params, &params); err != nil {
+			//nolint:nilerr // a JSON-RPC error travels in the response; the error return means transport failure
 			return rpc.NewError(req.ID, errcodes.InvalidParams, "invalid params", nil), nil
 		}
 	}
@@ -248,6 +249,7 @@ func (b *MockUpstream) resourcesRead(_ context.Context, req *rpc.Request) (*rpc.
 		URI string `json:"uri"`
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil || p.URI == "" {
+		//nolint:nilerr // a JSON-RPC error travels in the response; the error return means transport failure
 		return rpc.NewError(req.ID, errcodes.InvalidParams, "uri required", nil), nil
 	}
 	raw, err := json.Marshal(map[string]any{
@@ -292,6 +294,7 @@ func (b *MockUpstream) promptsGet(_ context.Context, req *rpc.Request) (*rpc.Res
 		Name string `json:"name"`
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil || p.Name == "" {
+		//nolint:nilerr // a JSON-RPC error travels in the response; the error return means transport failure
 		return rpc.NewError(req.ID, errcodes.InvalidParams, "name required", nil), nil
 	}
 	raw, err := json.Marshal(map[string]any{

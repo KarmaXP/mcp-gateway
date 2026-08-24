@@ -25,9 +25,9 @@ func AttrJSONRPCID(raw json.RawMessage) attribute.KeyValue {
 	if s == "" {
 		return attribute.String(AttrMCPJSONRPCID, "")
 	}
-	max := defaults.MaxOTelSpanAttributeBytes
-	if len(s) > max {
-		s = s[:max] + "..."
+	maxBytes := defaults.MaxOTelSpanAttributeBytes
+	if len(s) > maxBytes {
+		s = s[:maxBytes] + "..."
 	}
 	return attribute.String(AttrMCPJSONRPCID, s)
 }

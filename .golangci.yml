@@ -1,38 +1,78 @@
+version: "2"
+
 run:
-  timeout: 3m
   tests: true
 
-# disable-all: only these linters run. We intentionally do NOT enable gofmt: standard gofmt
-# column-aligns '=' in const/var groups; this repo normalizes to a single space before '='
-# (make fmt + scripts/normalize-go-eq-spacing.sh). The gofmt linter would always fail on that style.
+# default: none means only the linters listed here run. We intentionally do NOT enable the
+# gofmt formatter: standard gofmt column-aligns '=' in const/var groups, and this repo
+# normalizes to a single space before '=' (make fmt + scripts/normalize-go-eq-spacing.sh).
+# The gofmt linter would always fail on that style; scripts/check-go-eq-spacing.sh is the
+# real gate.
 linters:
-  disable-all: true
+  # prealloc is deliberately absent: its only hit asks for make+append where a 5 element
+  # literal reads better, on a startup path rather than a hot one.
+  default: none
   enable:
     - bodyclose
     - errcheck
-    - gosimple
+    - errorlint
+    - exhaustive
+    - gocritic
+    - gosec
     - govet
     - ineffassign
     - misspell
     - mnd
+    - nilerr
+    - revive
     - staticcheck
     - unconvert
     - unused
-
-linters-settings:
-  staticcheck:
-    checks: ["all"]
-  mnd:
-    checks:
-      - argument
-      - case
-      - condition
-      - operation
-      - return
+    - wastedassign
+  settings:
+    exhaustive:
+      default-signifies-exhaustive: false
+    gosec:
+      # These four cannot tell operator-supplied configuration from attacker input, and every
+      # hit is the former: a file the operator names, the upstream command it configures, the
+      # gateway URL a demo client is pointed at, and header names such as X-Agent-Tokens-Used.
+      excludes:
+        - G101
+        - G204
+        - G703
+        - G704
+    mnd:
+      checks:
+        - argument
+        - case
+        - condition
+        - operation
+        - return
+    revive:
+      # unused-parameter is noise in this codebase; the builtin shadowing is not.
+      rules:
+        - name: redefines-builtin-id
+    staticcheck:
+      checks:
+        - all
+  exclusions:
+    generated: lax
+    # These four presets are the v2 spelling of v1's exclude-use-default, which this repo
+    # ran with. Dropping them surfaces ~108 pre-existing style issues, not new defects.
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters:
+          - bodyclose
+          - gosec
+          - mnd
 
 issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - bodyclose
-        - mnd
+  # golangci truncates at 50 per linter and 3 per message by default, which makes a newly
+  # enabled linter look clean when it is not.
+  max-issues-per-linter: 0
+  max-same-issues: 0

@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -56,8 +57,15 @@ func Run(cfg Config) error {
 	mux.HandleFunc("POST /mcp/rpc", s.handleRPC)
 
 	log.Printf("%s listening on http://%s (GET /mcp/sse POST /mcp/rpc)", cfg.ServerName, cfg.ListenAddr)
-	return http.ListenAndServe(cfg.ListenAddr, mux)
+	srv := &http.Server{
+		Addr:              cfg.ListenAddr,
+		Handler:           mux,
+		ReadHeaderTimeout: mockReadHeaderTimeout,
+	}
+	return srv.ListenAndServe()
 }
+
+const mockReadHeaderTimeout = 10 * time.Second
 
 type server struct {
 	cfg Config

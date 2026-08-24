@@ -75,13 +75,15 @@ func AllowListModeFromContext(ctx context.Context) (AllowListMode, []string) {
 		return AllowListUnrestricted, nil
 	}
 	switch st.mode {
+	case AllowListUnrestricted:
+		return AllowListUnrestricted, nil
 	case AllowListDenyAll:
 		return AllowListDenyAll, []string{}
 	case AllowListRestricted:
 		return AllowListRestricted, append([]string(nil), st.names...)
-	default:
-		return AllowListUnrestricted, nil
 	}
+	// A mode this function does not know denies, so adding one cannot widen access.
+	return AllowListDenyAll, []string{}
 }
 
 func AllowedToolNamesFromContext(ctx context.Context) []string {
