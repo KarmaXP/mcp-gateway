@@ -76,6 +76,7 @@ help:
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test-cover" "go test -race with coverage report (internal/*)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test-integration" "go test -tags=integration (JWT policy + optional Qdrant/embed/OTLP; see docs/DEVELOPER.md)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "smoke" "curl MCP flow against gateway + scripts/smoke_upstream (sets SMOKE_AUTO_START_GATEWAY=1)"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "smoke-jwt" "MCP smoke with JWT auth, what the CI smoke-jwt check runs"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "smoke-e2e" "curl MCP handshake/tools flow against an already-running gateway"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "fmt" "gofmt -w . then normalize const/var '=' spacing (gofmt re-aligns)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "lint" "Run golangci-lint + check for column-aligned '=' in Go sources"
@@ -120,23 +121,23 @@ lab-jwt-env: lab-jwt-keys
 lab-jwt-verify: lab-jwt-keys
 	@bash scripts/lab_jwt_keys.sh verify
 
+# The Makefile includes .env, so a lab .env would otherwise turn the router on and point the
+# demo at Qdrant and embed, which is exactly the Docker this target promises you do not need.
 demo:
 	@echo "Plug-and-play demo (no Docker)..."
 	@chmod +x scripts/smoke_test.sh
-	@MCP_GATEWAY_CONFIG=$(DEMO_CONFIG) SMOKE_AUTO_START_GATEWAY=1 DEMO_PRINT_HELP=1 bash scripts/smoke_test.sh
+	@MCP_GATEWAY_CONFIG=$(DEMO_CONFIG) ROUTER_MODE=off OTEL_EXPORTER_OTLP_ENDPOINT= \
+		SMOKE_AUTO_START_GATEWAY=1 DEMO_PRINT_HELP=1 bash scripts/smoke_test.sh
 
 demo-backends:
-	@chmod +x scripts/demo_backends.sh
-	@bash scripts/demo_backends.sh start
+	@bash scripts/mock_upstreams.sh demo start
 
 demo-backends-stop:
-	@chmod +x scripts/demo_backends.sh
-	@bash scripts/demo_backends.sh stop
+	@bash scripts/mock_upstreams.sh demo stop
 
 demo-full: bootstrap demo-backends
 	@echo "Multi-backend demo (gateway.example.yaml + alpha__echo)..."
-	@chmod +x scripts/demo_multibackend_smoke.sh
-	@MCP_GATEWAY_CONFIG=$(EXAMPLE_CONFIG) bash scripts/demo_multibackend_smoke.sh
+	@MCP_GATEWAY_CONFIG=$(EXAMPLE_CONFIG) bash scripts/scenario_smoke.sh demo
 	@$(MAKE) demo-backends-stop
 
 verify-e2e: ci
@@ -152,12 +153,10 @@ verify-e2e: ci
 	@echo "VERIFY-E2E OK"
 
 sre-backends:
-	@chmod +x scripts/sre_backends.sh
-	@bash scripts/sre_backends.sh start
+	@bash scripts/mock_upstreams.sh sre start
 
 sre-backends-stop:
-	@chmod +x scripts/sre_backends.sh
-	@bash scripts/sre_backends.sh stop
+	@bash scripts/mock_upstreams.sh sre stop
 
 sre-up: bootstrap sre-backends
 	@echo "Starting compose dependencies (Qdrant, embed, OTel)..."
@@ -168,8 +167,7 @@ sre-down: sre-backends-stop
 	@echo "SRE mocks stopped (docker compose deps still up; use make docker-down to stop all)"
 
 sre-smoke:
-	@chmod +x scripts/sre_smoke.sh
-	@MCP_GATEWAY_CONFIG=$(SRE_CONFIG) bash scripts/sre_smoke.sh
+	@MCP_GATEWAY_CONFIG=$(SRE_CONFIG) bash scripts/scenario_smoke.sh sre
 
 gen-router-eval-catalog:
 	@go run ./tools/gen-router-eval-catalog/main.go > docs/evaluation/router-eval-catalog.json
@@ -250,6 +248,10 @@ smoke:
 	@echo "Smoke test (smoke_upstream + gateway MCP over curl)..."
 	@chmod +x scripts/smoke_test.sh
 	@SMOKE_AUTO_START_GATEWAY=1 bash scripts/smoke_test.sh
+
+smoke-jwt:
+	@echo "MCP JWT smoke (gateway + smoke_upstream + generated RS256 token)..."
+	@SMOKE_AUTO_START_GATEWAY=1 bash scripts/smoke_jwt.sh
 
 smoke-e2e:
 	@echo "Smoke E2E (expects already-running gateway/upstream)..."

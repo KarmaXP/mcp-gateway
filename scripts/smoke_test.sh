@@ -30,7 +30,7 @@ fi
 GATEWAY_URL="${SMOKE_GATEWAY_URL:-http://127.0.0.1:${GATEWAY_PORT}}"
 
 TMPYAML=""
-USE_DEMO_CONFIG=0
+USER_SUPPLIED_CONFIG=0
 SSE_HDR=""
 SSE_OUT=""
 UP_PID=""
@@ -41,13 +41,28 @@ cleanup() {
   [[ -n "${SSE_PID:-}" ]] && kill "${SSE_PID}" 2>/dev/null || true
   [[ -n "${UP_PID:-}" ]] && kill "${UP_PID}" 2>/dev/null || true
   [[ -n "${GW_PID:-}" ]] && kill "${GW_PID}" 2>/dev/null || true
-  if [[ "${USE_DEMO_CONFIG}" -eq 0 && -n "${TMPYAML}" && -f "${TMPYAML}" ]]; then
+  if [[ "${USER_SUPPLIED_CONFIG}" -eq 0 && -n "${TMPYAML}" && -f "${TMPYAML}" ]]; then
     rm -f "${TMPYAML}"
   fi
   [[ -n "${SSE_HDR}" && -f "${SSE_HDR}" ]] && rm -f "${SSE_HDR}"
   [[ -n "${SSE_OUT}" && -f "${SSE_OUT}" ]] && rm -f "${SSE_OUT}"
 }
 trap cleanup EXIT
+
+# This smoke asserts the aggregated tool smoke__echo, so the config has to declare the
+# upstream that serves it. A config without it fails on that assertion, hundreds of lines
+# of JSON later, saying nothing about the cause.
+require_smoke_upstream() {
+  local cfg="$1"
+  if grep -qE "^[[:space:]]*prefix:[[:space:]]*smoke[[:space:]]*$" "${cfg}"; then
+    return 0
+  fi
+  echo "This smoke needs an upstream with prefix 'smoke' on http://127.0.0.1:${UPSTREAM_PORT}," >&2
+  echo "and ${cfg} does not declare one, so tools/list can never contain smoke__echo." >&2
+  echo "Use MCP_GATEWAY_CONFIG=deployments/gateway.demo.yaml, or unset it and this script" >&2
+  echo "writes a temporary config for you." >&2
+  exit 1
+}
 
 wait_http_ok() {
   local url="$1"
@@ -92,7 +107,8 @@ fi
 
 if [[ -n "${MCP_GATEWAY_CONFIG:-}" && -f "${MCP_GATEWAY_CONFIG}" ]]; then
   echo "==> using MCP_GATEWAY_CONFIG=${MCP_GATEWAY_CONFIG}"
-  USE_DEMO_CONFIG=1
+  require_smoke_upstream "${MCP_GATEWAY_CONFIG}"
+  USER_SUPPLIED_CONFIG=1
 else
   TMPYAML="$(mktemp)"
   cat >"${TMPYAML}" <<EOF
@@ -123,6 +139,7 @@ fi
 echo "==> starting smoke upstream on 127.0.0.1:${UPSTREAM_PORT}"
 ${UPSTREAM_BIN} -listen "127.0.0.1:${UPSTREAM_PORT}" &
 UP_PID=$!
+disown "${UP_PID}" 2>/dev/null || true
 sleep 0.5
 
 if [[ "${SMOKE_AUTO_START_GATEWAY:-}" == "1" ]]; then
@@ -147,6 +164,7 @@ if [[ "${SMOKE_AUTO_START_GATEWAY:-}" == "1" ]]; then
   MCP_GATEWAY_CONFIG="${MCP_GATEWAY_CONFIG}" AUTH_MODE=none PORT="${GATEWAY_PORT}" \
     ${GATEWAY_BIN} &
   GW_PID=$!
+  disown "${GW_PID}" 2>/dev/null || true
   wait_http_ok "${GATEWAY_URL}/healthz" || {
     echo "gateway failed to become healthy at ${GATEWAY_URL}/healthz" >&2
     exit 1
@@ -158,6 +176,7 @@ SSE_OUT="$(mktemp)"
 echo "==> GET ${GATEWAY_URL}/mcp/sse (background) -> ${SSE_OUT}"
 curl -sS -N -o "${SSE_OUT}" -D "${SSE_HDR}" "${GATEWAY_URL}/mcp/sse" &
 SSE_PID=$!
+disown "${SSE_PID}" 2>/dev/null || true
 sleep 0.6
 
 SID="$(grep -i '^mcp-session-id:' "${SSE_HDR}" | head -1 | sed 's/[^:]*: *//' | tr -d '\r\n' || true)"
