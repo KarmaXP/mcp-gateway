@@ -207,12 +207,12 @@ func (s *Session) RecordSuccessfulToolCall(namespaced string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.toolHist = append(s.toolHist, namespaced)
-	max := defaults.SessionToolHistoryMax
-	if max <= 0 {
-		max = 8
+	maxEntries := defaults.SessionToolHistoryMax
+	if maxEntries <= 0 {
+		maxEntries = 8
 	}
-	if len(s.toolHist) > max {
-		s.toolHist = s.toolHist[len(s.toolHist)-max:]
+	if len(s.toolHist) > maxEntries {
+		s.toolHist = s.toolHist[len(s.toolHist)-maxEntries:]
 	}
 }
 

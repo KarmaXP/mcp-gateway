@@ -31,3 +31,5 @@ tmp/
 # OS specific files
 .DS_Store
 Thumbs.db
+# golangci-lint migrate leaves this behind
+.golangci.bck.yml

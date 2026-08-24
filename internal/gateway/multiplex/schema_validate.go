@@ -27,8 +27,14 @@ func filterToolsForPolicy(merged []map[string]any, mode hostctx.AllowListMode, a
 		return merged, nil
 	case hostctx.AllowListDenyAll:
 		return []map[string]any{}, nil
+	case hostctx.AllowListRestricted:
+		return keepAllowedTools(merged, hostctx.PolicyAllowListView(mode, allowed))
 	}
-	policyList := hostctx.PolicyAllowListView(mode, allowed)
+	// A mode this function does not know shows nothing, so adding one cannot widen access.
+	return []map[string]any{}, nil
+}
+
+func keepAllowedTools(merged []map[string]any, policyList []string) ([]map[string]any, error) {
 	out := make([]map[string]any, 0, len(merged))
 	for _, t := range merged {
 		name, _ := t["name"].(string)

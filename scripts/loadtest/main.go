@@ -215,11 +215,11 @@ func oneIteration(client *http.Client, base, mode string, cfg callConfig) (callL
 	return callLatency, nil
 }
 
-var idSeq atomic.Uint64
+var idSeq atomic.Int64
 
 // nextID stays below 2^53 so Node MCP servers do not round JSON-RPC ids as float64.
 func nextID() int64 {
-	return int64(idSeq.Add(1))
+	return idSeq.Add(1)
 }
 
 func openSSE(ctx context.Context, client *http.Client, u, bearer string) (sid string, out <-chan string, cancel func(), err error) {

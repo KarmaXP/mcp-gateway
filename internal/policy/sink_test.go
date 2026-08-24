@@ -31,9 +31,9 @@ func (c *captureAuditSink) record() AuditRecord {
 
 func TestAuditorRecordHashesTheSubjectAndReachesItsOwnSink(t *testing.T) {
 	t.Parallel()
-	cap := &captureAuditSink{}
+	sink := &captureAuditSink{}
 
-	NewAuditor(cap, []byte("test-pepper")).Record(context.Background(), Decision{
+	NewAuditor(sink, []byte("test-pepper")).Record(context.Background(), Decision{
 		Outcome:       "deny",
 		Reason:        "not_in_allow_list",
 		ToolName:      "k8s__x",
@@ -41,7 +41,7 @@ func TestAuditorRecordHashesTheSubjectAndReachesItsOwnSink(t *testing.T) {
 		PolicyVersion: "pv2",
 	})
 
-	got := cap.record()
+	got := sink.record()
 	require.Equal(t, "deny", got.Outcome)
 	require.Equal(t, "not_in_allow_list", got.Reason)
 	require.Equal(t, "k8s__x", got.ToolName)
