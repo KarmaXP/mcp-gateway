@@ -3,7 +3,6 @@ package policy
 import (
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"strings"
 )
 
@@ -15,7 +14,7 @@ type rarDetail struct {
 	ToolPattern string `json:"tool_pattern"`
 }
 
-// RAR authorization_details → namespaced ids; globs use filepath.Match.
+// RAR authorization_details → namespaced ids; patterns support * and ?.
 func expandAuthorizationDetails(raw json.RawMessage) ([]string, error) {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil, nil
@@ -51,18 +50,51 @@ func expandAuthorizationDetails(raw json.RawMessage) ([]string, error) {
 	return dedupeStrings(out), nil
 }
 
+func ValidateToolPattern(pattern string) error {
+	if i := strings.IndexAny(pattern, `[]\`); i >= 0 {
+		return fmt.Errorf("policy: tool pattern %q: %q is not supported, use only * and ?", pattern, pattern[i:i+1])
+	}
+	return nil
+}
+
 func MatchTool(namespacedTool, entry string) (bool, error) {
 	if namespacedTool == "" || entry == "" {
 		return false, nil
 	}
-	if !strings.ContainsAny(entry, "*?[]") {
+	if err := ValidateToolPattern(entry); err != nil {
+		return false, err
+	}
+	if !strings.ContainsAny(entry, "*?") {
 		return namespacedTool == entry, nil
 	}
-	ok, err := filepath.Match(entry, namespacedTool)
-	if err != nil {
-		return false, fmt.Errorf("policy: glob %q: %w", entry, err)
+	return matchToolPattern(namespacedTool, entry), nil
+}
+
+// Tool names are not paths: * spans the whole name, separators included.
+func matchToolPattern(name, pattern string) bool {
+	ni, pi := 0, 0
+	starP, starN := -1, 0
+	for ni < len(name) {
+		switch {
+		case pi < len(pattern) && (pattern[pi] == '?' || pattern[pi] == name[ni]):
+			ni++
+			pi++
+		case pi < len(pattern) && pattern[pi] == '*':
+			starP = pi
+			starN = ni
+			pi++
+		case starP >= 0:
+			starN++
+			ni = starN
+			pi = starP + 1
+		default:
+			return false
+		}
 	}
-	return ok, nil
+	for pi < len(pattern) && pattern[pi] == '*' {
+		pi++
+	}
+	return pi == len(pattern)
 }
 
 func anyEntryMatchesTool(tool string, entries []string) (bool, error) {

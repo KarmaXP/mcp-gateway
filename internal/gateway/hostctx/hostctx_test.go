@@ -40,22 +40,6 @@ func TestWithAllowedToolNamesNilMeansUnrestricted(t *testing.T) {
 	require.Nil(t, AllowedToolNamesFromContext(ctx))
 }
 
-func TestAttachPolicyAllowListExplicitUnrestricted(t *testing.T) {
-	ctx := AttachPolicyAllowList(context.Background(), nil)
-	mode, names := AllowListModeFromContext(ctx)
-	require.Equal(t, AllowListUnrestricted, mode)
-	require.Nil(t, names)
-}
-
-func TestMergeRequestValuesClearsAllowListOnUnrestrictedPOST(t *testing.T) {
-	parent := WithAllowedToolNames(context.Background(), []string{"a__x"})
-	req := AttachPolicyAllowList(context.Background(), nil)
-	merged := MergeRequestValues(parent, req)
-	mode, names := AllowListModeFromContext(merged)
-	require.Equal(t, AllowListUnrestricted, mode)
-	require.Nil(t, names)
-}
-
 func TestMergeRequestValuesClearsIntentOnEmptyPOST(t *testing.T) {
 	parent := WithClientIntent(context.Background(), "old intent")
 	req := WithClientIntent(context.Background(), "")

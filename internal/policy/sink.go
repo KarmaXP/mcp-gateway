@@ -3,7 +3,6 @@ package policy
 import (
 	"context"
 	"log/slog"
-	"sync"
 	"time"
 )
 
@@ -42,30 +41,6 @@ func (SlogAuditSink) Emit(ctx context.Context, rec AuditRecord) error {
 	}
 	slog.InfoContext(ctx, "mcp policy decision", attrs...)
 	return nil
-}
-
-var (
-	sinkMu          sync.RWMutex
-	globalAuditSink AuditSink = SlogAuditSink{}
-)
-
-func SetAuditSink(s AuditSink) {
-	sinkMu.Lock()
-	defer sinkMu.Unlock()
-	if s == nil {
-		globalAuditSink = SlogAuditSink{}
-		return
-	}
-	globalAuditSink = s
-}
-
-func currentAuditSink() AuditSink {
-	sinkMu.RLock()
-	defer sinkMu.RUnlock()
-	if globalAuditSink == nil {
-		return SlogAuditSink{}
-	}
-	return globalAuditSink
 }
 
 type meteredAuditSink struct {

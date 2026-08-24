@@ -55,6 +55,7 @@ type Multiplexer struct {
 	semantic *router.SemanticRouter
 
 	policyHolder *policy.Holder
+	auditor      *policy.Auditor
 	argLimits    validate.Limits
 
 	catMu         sync.RWMutex
@@ -106,6 +107,10 @@ func WithSemanticRouter(sr *router.SemanticRouter) Option {
 
 func WithPolicyHolder(h *policy.Holder) Option {
 	return func(a *Multiplexer) { a.policyHolder = h }
+}
+
+func WithAuditor(a *policy.Auditor) Option {
+	return func(m *Multiplexer) { m.auditor = a }
 }
 
 func WithPolicyEngine(p *policy.Engine) Option {

@@ -72,16 +72,16 @@ Exact tool names skip vector search. See [Connecting agents — Semantic routing
 | `JWT_PUBLIC_KEY_FILE` | n/a | Path to PEM file (preferred in CI/scripts; overrides inline PEM when set) |
 | `JWT_JWKS_URL` | n/a | JWKS endpoint (requires `kid` on tokens) |
 | `JWT_JWKS_CACHE_TTL` | `5m` | JWKS cache duration |
-| `JWT_ISS` | n/a | Optional issuer check |
-| `JWT_AUD` | n/a | Optional audience check |
+| `JWT_ISS` | n/a | Expected `iss`. Required when `AUTH_MODE=jwt` |
+| `JWT_AUD` | n/a | Expected `aud`. Required when `AUTH_MODE=jwt` |
 
 JWT claims used by the gateway:
 
-- **`mcp_tools`**, array of allowed namespaced tool ids
+- **`mcp_tools`**, array of allowed namespaced tool ids, or `["*"]` for the whole catalog
 - **`authorization_details`**, RAR-style entries (see [ADR 0003](adr/0003-security-rar-jwt-merge-failmode.md))
 - **`mcp_tool_groups`**, expanded via YAML `policy.tool_groups`
 
-Each group key in the JWT must exist in `policy.tool_groups`. **Unknown group names fail policy evaluation** (fail-closed → **401** on `tools/list` and `tools/call`). This matches [ADR 0003](adr/0003-security-rar-jwt-merge-failmode.md). Opt-in **`allow_on_eval_failure`** applies to malformed **`authorization_details`** (RAR), not to unknown group keys.
+A token carrying none of the three grants **no tools at all** (ADR 0003 Decision 6). Each group key in the JWT must exist in `policy.tool_groups`. **Unknown group names fail policy evaluation** (fail-closed → **401** on `tools/list` and `tools/call`). This matches [ADR 0003](adr/0003-security-rar-jwt-merge-failmode.md). Opt-in **`allow_on_eval_failure`** applies to malformed **`authorization_details`** (RAR) only, not to unknown group keys, and it degrades the principal to **deny-all**, never to their wider JWT list.
 
 JWKS or signature failure → **401** (fail-closed). There is no bypass when JWKS is down.
 
@@ -94,10 +94,11 @@ JWKS or signature failure → **401** (fail-closed). There is no bypass when JWK
 | `version` / `POLICY_VERSION` | Audit/policy version string |
 | `elevated_tools` | Tools that require compiled JSON Schema (elevated-tools policy) |
 | `tool_groups` | Named groups for JWT `mcp_tool_groups` |
-| `allow_on_eval_failure` / `POLICY_ALLOW_ON_EVAL_FAILURE` | If `true`, malformed RAR falls back to JWT-only lists instead of 401 |
-| `harden_schemas` / `POLICY_HARDEN_SCHEMAS` | Stricter schema compilation for elevated tools |
+| `allow_on_eval_failure` / `POLICY_ALLOW_ON_EVAL_FAILURE` | If `true`, a malformed RAR degrades the principal to deny-all instead of returning 401. Covers RAR parsing only |
+| `harden_schemas` / `POLICY_HARDEN_SCHEMAS` | **Default true.** Completes every tool schema that enumerates properties with `additionalProperties: false`; a schema that enumerates none is left open. Set false to accept undeclared arguments |
 | `max_argument_*` | Size/depth/key limits before schema validation |
 | `audit_sink` / `POLICY_AUDIT_*` | `slog` (default) or `syslog` |
+| _(env only)_ `POLICY_AUDIT_SUBJECT_PEPPER` | Secret that keys the subject pseudonym in audit records. Keep it stable for a deployment, or pseudonyms stop correlating across restarts. Absent means unkeyed |
 
 ---
 

@@ -95,17 +95,17 @@ func TestEngine_EffectiveAllowList_RejectsEmptyRARToolEntry(t *testing.T) {
 	require.Contains(t, err.Error(), "requires tool_name or tool_pattern")
 }
 
-func TestEngine_RARParseDegrade(t *testing.T) {
+func TestEngine_RARParseDegradeGrantsNothing(t *testing.T) {
 	e := NewEngine(EngineInput{
-		Version:            "v1",
-		AllowOnEvalFailure: true,
+		Version:                "v1",
+		AllowOnRARParseFailure: true,
 	})
 	got, err := e.EffectiveAllowList(fakeClaims{
 		tools:       []string{"a__x"},
 		authDetails: json.RawMessage(`not-json`),
 	})
-	require.NoError(t, err)
-	require.Equal(t, []string{"a__x"}, got)
+	require.NoError(t, err, "degradation keeps the request alive")
+	require.Equal(t, []string{}, got, "a malformed RAR must not promote the principal to its wider JWT list")
 }
 
 func TestEngine_RequiresStrictSchema(t *testing.T) {
@@ -117,8 +117,29 @@ func TestEngine_RequiresStrictSchema(t *testing.T) {
 }
 
 func TestEngine_HardenSchemas(t *testing.T) {
-	e := NewEngine(EngineInput{
-		HardenSchemas: true,
-	})
+	e := NewEngine(EngineInput{})
 	require.True(t, e.HardenSchemas())
+}
+
+func TestEffectiveAllowListDeniesWhenNothingIsAuthorized(t *testing.T) {
+	eng := NewEngine(EngineInput{Version: "v-test"})
+	tests := []struct {
+		name   string
+		claims ClaimsInput
+	}{
+		{name: "no tools, no groups, no RAR", claims: fakeClaims{}},
+		{name: "no claims at all", claims: nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := eng.EffectiveAllowList(tc.claims)
+			require.NoError(t, err)
+			require.NotNil(t, got, "a nil list means unrestricted downstream, which is the fail-open this closes")
+			require.Empty(t, got)
+
+			ok, err := AllowedListContains("alpha__echo", got)
+			require.NoError(t, err)
+			require.False(t, ok)
+		})
+	}
 }

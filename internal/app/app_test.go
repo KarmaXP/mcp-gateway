@@ -25,37 +25,35 @@ func (f *fakeAuditSink) Close() error {
 }
 
 func TestConfigureAuditSink_Slog(t *testing.T) {
-	t.Cleanup(func() { policy.SetAuditSink(nil) })
-
-	cleanup, err := configureAuditSink(config.GatewayConfig{
+	auditor, cleanup, err := configureAuditSink(config.GatewayConfig{
 		Policy: config.PolicySettings{AuditSink: config.PolicyAuditSinkSlog},
-	}, nil)
+	}, nil, nil)
 	require.NoError(t, err)
+	require.NotNil(t, auditor)
 	require.Nil(t, cleanup)
 }
 
 func TestConfigureAuditSink_SyslogRequiresAddress(t *testing.T) {
-	_, err := configureAuditSink(config.GatewayConfig{
+	_, _, err := configureAuditSink(config.GatewayConfig{
 		Policy: config.PolicySettings{AuditSink: config.PolicyAuditSinkSyslog},
-	}, nil)
+	}, nil, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "policy.audit_syslog_address")
 }
 
 func TestConfigureAuditSink_SyslogCleanupClosesSink(t *testing.T) {
-	t.Cleanup(func() { policy.SetAuditSink(nil) })
-
 	sink := &fakeAuditSink{}
 	newSyslog := func(network, address string) (auditSinkCloser, error) { return sink, nil }
 
-	cleanup, err := configureAuditSink(config.GatewayConfig{
+	auditor, cleanup, err := configureAuditSink(config.GatewayConfig{
 		Policy: config.PolicySettings{
 			AuditSink:          config.PolicyAuditSinkSyslog,
 			AuditSyslogNetwork: "udp",
 			AuditSyslogAddress: "127.0.0.1:514",
 		},
-	}, newSyslog)
+	}, newSyslog, nil)
 	require.NoError(t, err)
+	require.NotNil(t, auditor)
 	require.NotNil(t, cleanup)
 	require.False(t, sink.closed)
 	cleanup()
@@ -78,18 +76,17 @@ func TestPreflightQdrantSkipsWhenRouterOff(t *testing.T) {
 }
 
 func TestConfigureAuditSink_SyslogInitError(t *testing.T) {
-	t.Cleanup(func() { policy.SetAuditSink(nil) })
-
 	newSyslog := func(network, address string) (auditSinkCloser, error) { return nil, errors.New("dial failed") }
 
-	cleanup, err := configureAuditSink(config.GatewayConfig{
+	auditor, cleanup, err := configureAuditSink(config.GatewayConfig{
 		Policy: config.PolicySettings{
 			AuditSink:          config.PolicyAuditSinkSyslog,
 			AuditSyslogNetwork: "udp",
 			AuditSyslogAddress: "127.0.0.1:514",
 		},
-	}, newSyslog)
+	}, newSyslog, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "dial failed")
+	require.Nil(t, auditor)
 	require.Nil(t, cleanup)
 }

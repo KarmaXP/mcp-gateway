@@ -104,7 +104,7 @@ Confirm log line shows `"addr":":18080"`.
 
 ```bash
 eval "$(bash scripts/lab_jwt_keys.sh env)"
-# JWT_ADMIN (3 tools), JWT_ADMIN_FULL (full catalog), JWT_RESTRICTED (deny demo)
+# JWT_ADMIN (3 tools), JWT_ADMIN_FULL (mcp_tools ["*"], full catalog), JWT_RESTRICTED (deny demo)
 ```
 
 Manual equivalent:

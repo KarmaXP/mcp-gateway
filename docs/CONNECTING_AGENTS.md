@@ -139,7 +139,7 @@ Smoke scripts (curl-based): `scripts/smoke_test.sh`, `scripts/smoke_e2e.sh`, `ma
 1. Set `AUTH_MODE=jwt` and configure `JWT_PUBLIC_KEY_PEM` or `JWT_JWKS_URL` (see `.env.example`).
 2. Send `Authorization: Bearer <token>` on **both** `GET /mcp/sse` and every `POST /mcp/rpc`.
 3. Restrict tools with JWT claims:
-  - `mcp_tools`: array of namespaced tool ids, e.g. `["k8s__get_pod_logs"]`
+  - `mcp_tools`: array of namespaced tool ids, e.g. `["k8s__get_pod_logs"]`, or `["*"]` for the whole catalog. A token with none of these three claims is allowed no tools.
   - `authorization_details`: RAR-style entries (see [ADR 0003](adr/0003-security-rar-jwt-merge-failmode.md))
   - `mcp_tool_groups`: expanded via `policy.tool_groups` in gateway YAML
 

@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPolicyHardenSchemasEnvOverride(t *testing.T) {
+func TestPolicyHardenSchemasDefaultsToHardenedWhenAbsent(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "gateway.yaml")
 	err := os.WriteFile(p, []byte(`
@@ -20,11 +20,31 @@ backends:
 	require.NoError(t, err)
 	t.Setenv("MCP_GATEWAY_CONFIG", p)
 	t.Setenv("MCP_GATEWAY_BACKENDS", "")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.True(t, cfg.PolicyHardenSchemas(), "additionalProperties defaults to false (SEC4)")
+}
+
+func TestPolicyHardenSchemasEnvOverrideCanReenableDisabledYAML(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "gateway.yaml")
+	err := os.WriteFile(p, []byte(`
+backends:
+  - id: one
+    prefix: a
+    url: http://example.invalid:9
+policy:
+  harden_schemas: false
+`), 0o644)
+	require.NoError(t, err)
+	t.Setenv("MCP_GATEWAY_CONFIG", p)
+	t.Setenv("MCP_GATEWAY_BACKENDS", "")
 	t.Setenv("POLICY_HARDEN_SCHEMAS", "true")
 
 	cfg, err := Load()
 	require.NoError(t, err)
-	require.True(t, cfg.Policy.HardenSchemas)
+	require.True(t, cfg.PolicyHardenSchemas())
 }
 
 func TestPolicyHardenSchemasEnvOverrideCanDisableYAML(t *testing.T) {
@@ -45,16 +65,13 @@ policy:
 
 	cfg, err := Load()
 	require.NoError(t, err)
-	require.False(t, cfg.Policy.HardenSchemas)
+	require.False(t, cfg.PolicyHardenSchemas())
 }
 
 func TestPolicyHardenSchemasEnvInvalidKeepsYAMLValue(t *testing.T) {
-	cfg := GatewayConfig{
-		Policy: PolicySettings{
-			HardenSchemas: true,
-		},
-	}
+	disabled := false
+	cfg := GatewayConfig{Policy: PolicySettings{HardenSchemas: &disabled}}
 	t.Setenv("POLICY_HARDEN_SCHEMAS", "not-a-bool")
 	cfg.ApplyEnvOverrides()
-	require.True(t, cfg.Policy.HardenSchemas)
+	require.False(t, cfg.PolicyHardenSchemas(), "an unparseable value must not flip the configured one")
 }

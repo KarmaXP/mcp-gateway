@@ -34,7 +34,7 @@
 # policy:
 #   version: "2026-05-01"
 #   allow_on_eval_failure: false
-#   harden_schemas: true
+#   harden_schemas: true    # default; false accepts arguments a tool schema does not declare
 #   audit_sink: slog # slog (default) | syslog
 #   audit_syslog_network: udp # default udp; only used when audit_sink=syslog
 #   audit_syslog_address: 127.0.0.1:514 # required when audit_sink=syslog

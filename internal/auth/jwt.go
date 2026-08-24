@@ -35,6 +35,9 @@ func NewValidator(cfg JWTAuthConfig) (*Validator, error) {
 	if cfg.Mode != "jwt" {
 		return nil, fmt.Errorf("auth: unknown AUTH_MODE %q", cfg.Mode)
 	}
+	if err := checkRequiredJWTSettings(cfg); err != nil {
+		return nil, err
+	}
 	if strings.TrimSpace(cfg.PublicKeyPEM) == "" && strings.TrimSpace(cfg.JWKSURL) == "" {
 		return nil, fmt.Errorf("auth: jwt: JWKS URL or JWT_PUBLIC_KEY_PEM required")
 	}
@@ -47,6 +50,8 @@ func NewValidator(cfg JWTAuthConfig) (*Validator, error) {
 			jwt.WithValidMethods([]string{jwt.SigningMethodRS256.Alg()}),
 			jwt.WithIssuedAt(),
 			jwt.WithExpirationRequired(),
+			jwt.WithIssuer(cfg.Issuer),
+			jwt.WithAudience(cfg.Audience),
 		),
 	}
 	if cfg.PublicKeyPEM != "" {
@@ -66,6 +71,20 @@ func NewValidator(cfg JWTAuthConfig) (*Validator, error) {
 		return nil, warmErr
 	}
 	return v, nil
+}
+
+func checkRequiredJWTSettings(cfg JWTAuthConfig) error {
+	var missing []string
+	if strings.TrimSpace(cfg.Issuer) == "" {
+		missing = append(missing, "JWT_ISS")
+	}
+	if strings.TrimSpace(cfg.Audience) == "" {
+		missing = append(missing, "JWT_AUD")
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	return fmt.Errorf("auth: jwt: %s required", strings.Join(missing, " and "))
 }
 
 func parseRSAPublicKey(pemStr string) (*rsa.PublicKey, error) {
@@ -93,42 +112,17 @@ func (v *Validator) keyFunc(ctx context.Context) jwt.Keyfunc {
 	}
 }
 
-func (v *Validator) checkIssAud(c *jwt.RegisteredClaims) error {
-	if v.cfg.Issuer != "" && c.Issuer != v.cfg.Issuer {
-		return fmt.Errorf("auth: jwt: invalid iss")
-	}
-	if v.cfg.Audience != "" {
-		ok := false
-		for _, a := range c.Audience {
-			if a == v.cfg.Audience {
-				ok = true
-				break
-			}
-		}
-		if !ok {
-			return fmt.Errorf("auth: jwt: invalid aud")
-		}
+func (v *Validator) Validate(ctx context.Context, token string) error {
+	if _, err := v.parser.Parse(token, v.keyFunc(ctx)); err != nil {
+		return fmt.Errorf("auth: jwt: %w", err)
 	}
 	return nil
 }
 
-func (v *Validator) Validate(ctx context.Context, token string) error {
-	var claims jwt.RegisteredClaims
-	_, err := v.parser.ParseWithClaims(token, &claims, v.keyFunc(ctx))
-	if err != nil {
-		return fmt.Errorf("auth: jwt: %w", err)
-	}
-	return v.checkIssAud(&claims)
-}
-
 func (v *Validator) ParseTokenClaims(ctx context.Context, token string) (*TokenClaims, error) {
 	var claims TokenClaims
-	_, err := v.parser.ParseWithClaims(token, &claims, v.keyFunc(ctx))
-	if err != nil {
+	if _, err := v.parser.ParseWithClaims(token, &claims, v.keyFunc(ctx)); err != nil {
 		return nil, fmt.Errorf("auth: jwt: %w", err)
-	}
-	if err := v.checkIssAud(&claims.RegisteredClaims); err != nil {
-		return nil, err
 	}
 	return &claims, nil
 }

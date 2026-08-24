@@ -3,6 +3,7 @@ package multiplex
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -83,24 +84,34 @@ func (a *Multiplexer) enforceHostToolAuthz(ctx context.Context, hostID json.RawM
 		return nil
 	case hostctx.AllowListDenyAll:
 		span.SetStatus(codes.Error, "not in allow list")
-		policy.LogAudit(actx, "deny", "not_in_allow_list", namespacedTool, hostctx.SubjectIDFromContext(actx), hostctx.PolicyVersionFromContext(actx))
+		a.auditToolDecision(actx, defaults.MetricPolicyOutcomeDeny, defaults.MetricPolicyReasonNotInAllowList, namespacedTool)
 		return rpc.NewError(hostID, errcodes.PermissionDenied, fmt.Sprintf("tool %q not allowed for this principal", namespacedTool), nil)
 	}
 	ok, err := policy.AllowedListContains(namespacedTool, hostctx.PolicyAllowListView(mode, names))
 	if err != nil {
-		span.RecordError(err)
+		span.RecordError(errors.New("policy evaluation failed"))
 		span.SetStatus(codes.Error, "policy evaluation failed")
-		policy.LogAudit(actx, "deny", "policy_eval_failed", namespacedTool, hostctx.SubjectIDFromContext(actx), hostctx.PolicyVersionFromContext(actx))
+		a.auditToolDecision(actx, defaults.MetricPolicyOutcomeDeny, defaults.MetricPolicyReasonPolicyEvalFailed, namespacedTool)
 		return rpc.NewError(hostID, errcodes.GatewayInternal, "policy evaluation failed", nil)
 	}
 	if !ok {
 		span.SetStatus(codes.Error, "not in allow list")
-		policy.LogAudit(actx, "deny", "not_in_allow_list", namespacedTool, hostctx.SubjectIDFromContext(actx), hostctx.PolicyVersionFromContext(actx))
+		a.auditToolDecision(actx, defaults.MetricPolicyOutcomeDeny, defaults.MetricPolicyReasonNotInAllowList, namespacedTool)
 		return rpc.NewError(hostID, errcodes.PermissionDenied, fmt.Sprintf("tool %q not allowed for this principal", namespacedTool), nil)
 	}
-	telemetry.RecordPolicyDecision(actx, defaults.MetricPolicyOutcomeAllow, defaults.MetricPolicyReasonAllowListMatch)
+	a.auditToolDecision(actx, defaults.MetricPolicyOutcomeAllow, defaults.MetricPolicyReasonAllowListMatch, namespacedTool)
 	span.SetStatus(codes.Ok, "")
 	return nil
+}
+
+func (a *Multiplexer) auditToolDecision(ctx context.Context, outcome, reason, namespacedTool string) {
+	a.auditor.Record(ctx, policy.Decision{
+		Outcome:       outcome,
+		Reason:        reason,
+		ToolName:      namespacedTool,
+		SubjectID:     hostctx.SubjectIDFromContext(ctx),
+		PolicyVersion: hostctx.PolicyVersionFromContext(ctx),
+	})
 }
 
 type toolsCallParams struct {

@@ -29,21 +29,35 @@ func (c *captureAuditSink) record() AuditRecord {
 	return c.last
 }
 
-func TestSetAuditSink_DelegatesLogAudit(t *testing.T) {
+func TestAuditorRecordHashesTheSubjectAndReachesItsOwnSink(t *testing.T) {
+	t.Parallel()
 	cap := &captureAuditSink{}
-	SetAuditSink(cap)
-	t.Cleanup(func() { SetAuditSink(nil) })
 
-	ctx := context.Background()
-	LogAudit(ctx, "deny", "not_in_allow_list", "k8s__x", "sub-1", "pv2")
+	NewAuditor(cap, []byte("test-pepper")).Record(context.Background(), Decision{
+		Outcome:       "deny",
+		Reason:        "not_in_allow_list",
+		ToolName:      "k8s__x",
+		SubjectID:     "sub-1",
+		PolicyVersion: "pv2",
+	})
 
 	got := cap.record()
 	require.Equal(t, "deny", got.Outcome)
 	require.Equal(t, "not_in_allow_list", got.Reason)
 	require.Equal(t, "k8s__x", got.ToolName)
-	require.Equal(t, HashSubject("sub-1"), got.SubjectSHA256)
+	require.Len(t, got.SubjectSHA256, 16)
 	require.Equal(t, "pv2", got.PolicyVersion)
+	require.NotEqual(t, "sub-1", got.SubjectSHA256, "the raw subject must never reach a sink")
 	require.WithinDuration(t, time.Now(), got.At, 2*time.Second)
+}
+
+func TestNilAuditorRecordsNothing(t *testing.T) {
+	t.Parallel()
+	var auditor *Auditor
+	require.NotPanics(t, func() {
+		auditor.Record(context.Background(), Decision{Outcome: "deny"})
+	})
+	require.Nil(t, NewAuditor(nil, nil), "no sink means no auditor, not an auditor that drops records")
 }
 
 func TestSlogAuditSink_EmitWithTelemetryNoPanic(t *testing.T) {
@@ -55,9 +69,6 @@ func TestSlogAuditSink_EmitWithTelemetryNoPanic(t *testing.T) {
 		defer cancel()
 		_ = shutdown(ctx)
 	}()
-
-	SetAuditSink(nil)
-	t.Cleanup(func() { SetAuditSink(nil) })
 
 	ctx := context.Background()
 	rec := AuditRecord{

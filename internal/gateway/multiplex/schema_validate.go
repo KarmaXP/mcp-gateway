@@ -76,7 +76,7 @@ func (a *Multiplexer) replaceToolSchemasFromMerged(merged []map[string]any) {
 		if !ok || sch == nil {
 			continue
 		}
-		if pol != nil && pol.HardenSchemas() && pol.RequiresStrictSchema(name) {
+		if pol.HardenSchemas() {
 			sch = hardenObjectSchemasForValidation(sch)
 		}
 		raw, err := json.Marshal(sch)
@@ -168,25 +168,14 @@ func hardenObjectSchemaMap(doc map[string]any) {
 	}
 }
 
+// Closing a schema that enumerates no properties would leave a tool accepting nothing,
+// so only an enumerated shape is completed with additionalProperties: false.
 func isObjectSchema(doc map[string]any) bool {
 	if _, ok := doc["properties"]; ok {
 		return true
 	}
-	t, ok := doc["type"]
-	if !ok {
-		return false
-	}
-	switch tt := t.(type) {
-	case string:
-		return tt == "object"
-	case []any:
-		for _, entry := range tt {
-			if s, ok := entry.(string); ok && s == "object" {
-				return true
-			}
-		}
-	}
-	return false
+	_, ok := doc["patternProperties"]
+	return ok
 }
 
 func (a *Multiplexer) refreshToolSchemasFromListJSON(raw json.RawMessage) {
@@ -247,13 +236,13 @@ func (a *Multiplexer) validateToolArgsWithSpan(ctx context.Context, hostID json.
 	}
 	var inst any
 	if err := json.Unmarshal(argsJSON, &inst); err != nil {
-		span.RecordError(err)
+		span.RecordError(errors.New("invalid JSON arguments"))
 		span.SetStatus(codes.Error, "arguments json")
 		telemetry.RecordToolArgsValidation(ctx, defaults.MetricArgsStageSchema, defaults.MetricArgsResultFail)
 		return rpc.NewError(hostID, errcodes.InvalidParams, "invalid JSON arguments", nil)
 	}
 	if err := sch.Validate(inst); err != nil {
-		span.RecordError(err)
+		span.RecordError(errors.New(hostVisibleJSONSchemaError(err)))
 		span.SetStatus(codes.Error, "json schema")
 		telemetry.RecordToolArgsValidation(ctx, defaults.MetricArgsStageSchema, defaults.MetricArgsResultFail)
 		return rpc.NewError(hostID, errcodes.InvalidParams, hostVisibleJSONSchemaError(err), nil)

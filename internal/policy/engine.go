@@ -7,27 +7,27 @@ import (
 )
 
 type Engine struct {
-	version         string
-	elevated        map[string]struct{}
-	toolGroups      map[string][]string
-	allowOnEvalFail bool
-	hardenSchemas   bool
+	version             string
+	elevated            []string
+	toolGroups          map[string][]string
+	allowOnRARParseFail bool
+	allowOpenSchemas    bool
 }
 
 type EngineInput struct {
-	Version            string
-	ElevatedTools      []string
-	ToolGroups         map[string][]string
-	AllowOnEvalFailure bool
-	HardenSchemas      bool
+	Version                string
+	ElevatedTools          []string
+	ToolGroups             map[string][]string
+	AllowOnRARParseFailure bool
+	AllowOpenSchemas       bool
 }
 
 func NewEngine(s EngineInput) *Engine {
-	e := make(map[string]struct{})
+	e := make([]string, 0, len(s.ElevatedTools))
 	for _, t := range s.ElevatedTools {
 		t = strings.TrimSpace(t)
 		if t != "" {
-			e[t] = struct{}{}
+			e = append(e, t)
 		}
 	}
 	groups := make(map[string][]string, len(s.ToolGroups))
@@ -52,11 +52,11 @@ func NewEngine(s EngineInput) *Engine {
 		ver = "default"
 	}
 	return &Engine{
-		version:         ver,
-		elevated:        e,
-		toolGroups:      groups,
-		allowOnEvalFail: s.AllowOnEvalFailure,
-		hardenSchemas:   s.HardenSchemas,
+		version:             ver,
+		elevated:            e,
+		toolGroups:          groups,
+		allowOnRARParseFail: s.AllowOnRARParseFailure,
+		allowOpenSchemas:    s.AllowOpenSchemas,
 	}
 }
 
@@ -68,7 +68,7 @@ func (e *Engine) Version() string {
 }
 
 func (e *Engine) HardenSchemas() bool {
-	return e != nil && e.hardenSchemas
+	return e == nil || !e.allowOpenSchemas
 }
 
 // Elevated tools must have a compiled input schema.
@@ -76,14 +76,18 @@ func (e *Engine) RequiresStrictSchema(namespacedTool string) bool {
 	if e == nil || namespacedTool == "" {
 		return false
 	}
-	_, ok := e.elevated[namespacedTool]
+	ok, err := anyEntryMatchesTool(namespacedTool, e.elevated)
+	if err != nil {
+		return true
+	}
 	return ok
 }
 
-// Merged JWT and RAR allow list; empty -> no restriction (full catalog for that principal).
+// Merged JWT and RAR allow list, never nil: a principal that authorizes nothing gets deny-all.
+// The full catalog is requested explicitly, with an "*" entry.
 func (e *Engine) EffectiveAllowList(c ClaimsInput) ([]string, error) {
 	if c == nil {
-		return nil, nil
+		return []string{}, nil
 	}
 	eng := e
 	if eng == nil {
@@ -95,11 +99,11 @@ func (e *Engine) EffectiveAllowList(c ClaimsInput) ([]string, error) {
 	}
 	rarEntries, err := expandAuthorizationDetails(c.RawAuthorizationDetails())
 	if err != nil {
-		if !eng.allowOnEvalFail {
+		if !eng.allowOnRARParseFail {
 			return nil, err
 		}
-		slog.Warn("policy: authorization_details parse failed, degraded to JWT allow list only", "err", err)
-		rarEntries = nil
+		slog.Warn("policy: authorization_details parse failed, degraded to deny-all", "err", err)
+		return []string{}, nil
 	}
 	switch {
 	case len(base) > 0 && len(rarEntries) > 0:
@@ -109,7 +113,7 @@ func (e *Engine) EffectiveAllowList(c ClaimsInput) ([]string, error) {
 	case len(base) > 0:
 		return base, nil
 	default:
-		return nil, nil
+		return []string{}, nil
 	}
 }
 

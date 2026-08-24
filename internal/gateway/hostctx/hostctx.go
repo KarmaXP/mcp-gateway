@@ -46,16 +46,6 @@ type allowListState struct {
 	names []string
 }
 
-func AttachPolicyAllowList(parent context.Context, toolNames []string) context.Context {
-	if parent == nil {
-		parent = context.Background()
-	}
-	if toolNames == nil {
-		return context.WithValue(parent, allowedToolNamesKey{}, allowListState{mode: AllowListUnrestricted})
-	}
-	return WithAllowedToolNames(parent, toolNames)
-}
-
 func WithAllowedToolNames(parent context.Context, toolNames []string) context.Context {
 	if parent == nil {
 		parent = context.Background()

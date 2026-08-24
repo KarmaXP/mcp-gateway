@@ -100,7 +100,7 @@ func TestHTTPMiddlewareJWTAcceptsValidToken(t *testing.T) {
 func TestHTTPMiddlewareRejectsMissingBearer(t *testing.T) {
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	cfg := JWTAuthConfig{Mode: "jwt", PublicKeyPEM: rsaPublicPEM(t, &priv.PublicKey)}
+	cfg := JWTAuthConfig{Mode: "jwt", Issuer: "iss", Audience: "aud", PublicKeyPEM: rsaPublicPEM(t, &priv.PublicKey)}
 	v, err := NewValidator(cfg)
 	require.NoError(t, err)
 
@@ -135,6 +135,8 @@ func TestHTTPMiddlewareSkipsConfiguredPrefixes(t *testing.T) {
 	require.NoError(t, err)
 	cfg := JWTAuthConfig{
 		Mode:             "jwt",
+		Issuer:           "iss",
+		Audience:         "aud",
 		PublicKeyPEM:     rsaPublicPEM(t, &priv.PublicKey),
 		SkipPathPrefixes: []string{mcpwire.PathHealthz, "/metrics"},
 	}
@@ -155,7 +157,7 @@ func TestHTTPMiddlewareSkipsConfiguredPrefixes(t *testing.T) {
 func TestHTTPMiddlewareRejectsNonBearerScheme(t *testing.T) {
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	cfg := JWTAuthConfig{Mode: "jwt", PublicKeyPEM: rsaPublicPEM(t, &priv.PublicKey)}
+	cfg := JWTAuthConfig{Mode: "jwt", Issuer: "iss", Audience: "aud", PublicKeyPEM: rsaPublicPEM(t, &priv.PublicKey)}
 	v, err := NewValidator(cfg)
 	require.NoError(t, err)
 	h := HTTPMiddleware(cfg, v, nil)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
@@ -175,7 +177,7 @@ func TestHTTPMiddlewareRejectsNonBearerScheme(t *testing.T) {
 func TestHTTPMiddlewareRejectsEmptyBearerToken(t *testing.T) {
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	cfg := JWTAuthConfig{Mode: "jwt", PublicKeyPEM: rsaPublicPEM(t, &priv.PublicKey)}
+	cfg := JWTAuthConfig{Mode: "jwt", Issuer: "iss", Audience: "aud", PublicKeyPEM: rsaPublicPEM(t, &priv.PublicKey)}
 	v, err := NewValidator(cfg)
 	require.NoError(t, err)
 	h := HTTPMiddleware(cfg, v, nil)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {

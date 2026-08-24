@@ -16,7 +16,7 @@ Usage: $(basename "$0") [keys|admin|full|restricted|env|verify]
 
   keys       Ensure RSA key pair at $KEY and $PUB (default).
   admin      Print a signed admin JWT (smoke allow-list: 3 tools).
-  full       Print a JWT with no mcp_tools claim (full merged catalog).
+  full       Print a JWT with mcp_tools ["*"] (full merged catalog).
   restricted Print a restricted JWT (prom__read_text_file only).
   env        Print export lines for JWT_PUBLIC_KEY_FILE, JWT_ADMIN, JWT_ADMIN_FULL, JWT_RESTRICTED.
   verify     Run crypto check: sign with private key, validate with gateway auth.
@@ -62,7 +62,7 @@ case "$cmd" in
     ;;
   full)
     ensure_keys
-    gen_jwt lab-admin-full ""
+    gen_jwt lab-admin-full "*"
     ;;
   restricted)
     ensure_keys
@@ -74,7 +74,7 @@ case "$cmd" in
     printf 'export JWT_ISS=%q\n' "$ISS"
     printf 'export JWT_AUD=%q\n' "$AUD"
     printf 'export JWT_ADMIN=%q\n' "$(gen_jwt lab-admin "$ADMIN_TOOLS")"
-    printf 'export JWT_ADMIN_FULL=%q\n' "$(gen_jwt lab-admin-full "")"
+    printf 'export JWT_ADMIN_FULL=%q\n' "$(gen_jwt lab-admin-full "*")"
     printf 'export JWT_RESTRICTED=%q\n' "$(gen_jwt lab-restricted "prom__read_text_file")"
     ;;
   verify)
