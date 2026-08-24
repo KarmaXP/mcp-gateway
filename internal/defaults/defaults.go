@@ -15,6 +15,8 @@ const (
 	SessionBroadcastMaxConcurrency = 32
 	// SessionBroadcastWorkQueueSize bounds pending broadcast tasks before best-effort drop.
 	SessionBroadcastWorkQueueSize = 256
+	// MaxConcurrentSSESessions caps live SSE sessions: an unauthenticated GET creates one.
+	MaxConcurrentSSESessions = 1024
 	// SessionToolHistoryMax is the maximum successful tools/call names kept per SSE session for router context.
 	SessionToolHistoryMax = 8
 
@@ -74,6 +76,10 @@ var (
 	EmbedTCPKeepAlive = 30 * time.Second
 
 	DefaultJWKSCacheTTL = 5 * time.Minute
+	// JWTClockSkewLeeway tolerates normal IdP clock drift on exp, nbf and iat.
+	JWTClockSkewLeeway = 60 * time.Second
+	// MinRSAPublicKeyBits is the smallest modulus accepted for a token signing key.
+	MinRSAPublicKeyBits = 2048
 	JWKSStartupWarmupTimeout = 15 * time.Second
 
 	OTLPMetricExportInterval = 15 * time.Second
@@ -83,4 +89,7 @@ var (
 	DefaultRateLimitRPS = 100
 	DefaultRateLimitBurst = 200
 	RateLimitBucketIdleTTL = 30 * time.Minute
+	// AuthFailureBudget bounds verification forced by tokens that do not verify.
+	AuthFailureBudgetRPS = 1
+	AuthFailureBudgetBurst = 10
 )

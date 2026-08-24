@@ -52,7 +52,7 @@ info:
     | YAML key | Env var(s) | Type | Behavior / notes |
     |---|---|---|---|
     | `gateway.allowed_origins` | `GATEWAY_ALLOWED_ORIGINS` (comma-separated) | `[]string` | Optional exact-match allow list for non-empty `Origin` request header. Empty/unset disables Origin checks. If configured and `Origin` does not match any allowed value, ingress rejects with **403**. Requests without `Origin` remain allowed. |
-    | `rate_limit.enabled` | `RATE_LIMIT_ENABLED` | `bool` | Enables per-subject token-bucket limiting on `POST /mcp/rpc`. Rejections return **429**. |
+    | `rate_limit.enabled` | `RATE_LIMIT_ENABLED` | `bool` | Enables per-subject token-bucket limiting on `POST /mcp/rpc`. Rejections return **429**. A per-IP budget of failed authentications is always enforced, whatever this is set to. |
     | `rate_limit.rps` | `RATE_LIMIT_RPS` | `float` | Sustained token refill rate used when rate limiting is enabled. |
     | `rate_limit.burst` | `RATE_LIMIT_BURST` | `int` | Token bucket burst size used when rate limiting is enabled. |
 
@@ -95,7 +95,7 @@ info:
     | **403** | `Origin` rejected by configured allow list, or JWT session subject mismatch on `POST /mcp/rpc`. |
     | **404** | Unknown `Mcp-Session-Id`. |
     | **413** | Request body over gateway limit. |
-    | **429** | Rate limited (when enabled). |
+    | **429** | Rate limited (when enabled), or too many failed authentications from one IP. |
     | **500** | Dispatch or streaming failure. |
 
     ### JSON-RPC error codes (gateway contract)
@@ -210,8 +210,12 @@ paths:
                     data: {"jsonrpc":"2.0","id":4,"error":{"code":-32001,"message":"handshake incomplete: send initialize then notifications/initialized"}}
         "401":
           description: Missing or invalid JWT (when AUTH_MODE=jwt)
+        "429":
+          description: Too many failed authentications from this client IP
         "500":
           description: Streaming not supported by server
+        "503":
+          description: Concurrent SSE session cap reached
 
   /mcp/rpc:
     post:

@@ -84,7 +84,7 @@ func TestIntegrationJWTPermissionDeniedSkipsBackend(t *testing.T) {
 	v, err := auth.NewValidator(authCfg)
 	require.NoError(t, err)
 
-	opts := orchestrator.HTTPServerOptions("mcp-gateway-it", authCfg, v, policy.NewHolder(policy.NewEngine(policy.EngineInput{})), ratelimit.Config{})
+	opts := orchestrator.HTTPServerOptions("mcp-gateway-it", authCfg, v, policy.NewHolder(policy.NewEngine(policy.EngineInput{})), ratelimit.New(context.Background(), ratelimit.Config{}))
 	srv := httpserver.New(agg, "", opts...)
 	ts := httptest.NewServer(srv.AsHandler())
 	defer ts.Close()
@@ -204,7 +204,7 @@ func TestIntegrationJWTEmptyIntersectionDenyAll(t *testing.T) {
 	v, err := auth.NewValidator(authCfg)
 	require.NoError(t, err)
 
-	opts := orchestrator.HTTPServerOptions("mcp-gateway-denyall-it", authCfg, v, policy.NewHolder(policy.NewEngine(policy.EngineInput{})), ratelimit.Config{})
+	opts := orchestrator.HTTPServerOptions("mcp-gateway-denyall-it", authCfg, v, policy.NewHolder(policy.NewEngine(policy.EngineInput{})), ratelimit.New(context.Background(), ratelimit.Config{}))
 	srv := httpserver.New(agg, "", opts...)
 	ts := httptest.NewServer(srv.AsHandler())
 	defer ts.Close()

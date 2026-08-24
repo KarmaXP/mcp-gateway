@@ -24,8 +24,10 @@ func TestSessionManagerBroadcastNotification(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	s1 := sm.Create(ctx)
-	s2 := sm.Create(ctx)
+	s1, err := sm.Create(ctx)
+	require.NoError(t, err)
+	s2, err := sm.Create(ctx)
+	require.NoError(t, err)
 
 	notify := &rpc.Request{
 		JSONRPC: rpc.JSONRPCVersion,

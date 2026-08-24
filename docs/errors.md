@@ -16,7 +16,8 @@ Authoritative HTTP details: [OpenAPI](artifacts/openapi/openapi.yaml). Source co
 | **403 Forbidden** | `Origin` header present and not in `gateway.allowed_origins` / `GATEWAY_ALLOWED_ORIGINS`; or JWT `sub` does not match the SSE session owner (`Mcp-Session-Id` binding). |
 | **404 Not Found** | Unknown or expired session id. |
 | **413 Payload Too Large** | Body exceeds gateway limit (`MaxBytesReader`). |
-| **429 Too Many Requests** | Rate limit exhausted (`rate_limit` / `RATE_LIMIT_*`). |
+| **429 Too Many Requests** | Rate limit exhausted (`rate_limit` / `RATE_LIMIT_*`), or too many failed authentications from one IP. |
+| **503 Service Unavailable** | On `GET /mcp/sse`, the concurrent session cap is reached. |
 | **500 Internal Server Error** | Session dispatch or streaming failure after the request was accepted at the HTTP layer. |
 | **503 Service Unavailable** | `/readyz` only, dependency unhealthy when router requires Qdrant/embed. |
 

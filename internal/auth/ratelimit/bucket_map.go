@@ -8,6 +8,11 @@ import (
 	"golang.org/x/time/rate"
 )
 
+type bucketEntry struct {
+	lim      *rate.Limiter
+	lastSeen time.Time
+}
+
 type bucketMap struct {
 	mu         sync.Mutex
 	maxBuckets int
@@ -55,6 +60,21 @@ func (m *bucketMap) allow(key string, lim rate.Limit, burst int, now time.Time) 
 		m.touchLocked(key)
 	}
 	return e.lim.Allow()
+}
+
+// hasTokens reports whether the next allow would succeed, without spending a token.
+func (m *bucketMap) hasTokens(key string, now time.Time) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.evictStaleLocked(now)
+	e, ok := m.byKey[key]
+	if !ok {
+		return true
+	}
+	e.lastSeen = now
+	m.touchLocked(key)
+	return e.lim.Tokens() >= 1
 }
 
 func (m *bucketMap) evictStaleLocked(now time.Time) {

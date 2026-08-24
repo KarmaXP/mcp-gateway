@@ -17,7 +17,13 @@ import (
 
 const bearerAuthSchemeLowerLen = 7 // len("bearer ") after strings.ToLower on Authorization
 
-func HTTPMiddleware(cfg JWTAuthConfig, v *Validator, pol *policy.Holder) func(http.Handler) http.Handler {
+// AuthAttemptLimiter bounds signature verification per client: only a failure spends budget.
+type AuthAttemptLimiter interface {
+	AllowAuthAttempt(r *http.Request) bool
+	RecordAuthFailure(r *http.Request)
+}
+
+func HTTPMiddleware(cfg JWTAuthConfig, v *Validator, pol *policy.Holder, limiter AuthAttemptLimiter) func(http.Handler) http.Handler {
 	if cfg.Mode == "" || cfg.Mode == "none" {
 		return func(next http.Handler) http.Handler { return next }
 	}
@@ -60,9 +66,19 @@ func HTTPMiddleware(cfg JWTAuthConfig, v *Validator, pol *policy.Holder) func(ht
 				return
 			}
 
+			if limiter != nil && !limiter.AllowAuthAttempt(r) {
+				telemetry.RecordInternalPhase(ctx, defaults.MetricInternalMethodUnknown, defaults.MetricInternalPhaseSecurity, time.Since(secStart))
+				endHostErr("too many failed authentications")
+				http.Error(w, "too many failed authentications", http.StatusTooManyRequests)
+				return
+			}
+
 			actx, authnSpan := telemetry.StartSpan(ctx, telemetry.SpanSecurityAuthn)
 			claims, err := v.ParseTokenClaims(actx, tok)
 			if err != nil {
+				if limiter != nil {
+					limiter.RecordAuthFailure(r)
+				}
 				authnSpan.RecordError(err)
 				authnSpan.SetStatus(codes.Error, "invalid token")
 				authnSpan.End()

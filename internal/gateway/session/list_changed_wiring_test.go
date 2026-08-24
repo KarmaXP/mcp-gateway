@@ -57,7 +57,8 @@ func TestListChangedHandlerWiringInvalidatesCacheAndBroadcasts(t *testing.T) {
 	sm := NewSessionManager(mpx)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	sess := sm.Create(ctx)
+	sess, err := sm.Create(ctx)
+	require.NoError(t, err)
 
 	backend.RegisterNotificationHandlers([]backend.Upstream{up}, func(req *rpc.Request) {
 		if req == nil || !mcpwire.IsCatalogListChangedNotification(req.Method) {

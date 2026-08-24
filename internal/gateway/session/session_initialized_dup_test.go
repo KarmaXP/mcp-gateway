@@ -18,7 +18,8 @@ func TestDuplicateInitializedNotificationNotifiesUpstreamOnce(t *testing.T) {
 	mpx, err := multiplex.New([]backend.Upstream{rec}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	sm := NewSessionManager(mpx)
-	sess := sm.Create(context.Background())
+	sess, err := sm.Create(context.Background())
+	require.NoError(t, err)
 
 	initReq := &rpc.Request{
 		JSONRPC: rpc.JSONRPCVersion,

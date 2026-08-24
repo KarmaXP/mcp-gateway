@@ -55,7 +55,7 @@ func TestHTTPServerOptionsJWTAndOTelProduceSpans(t *testing.T) {
 	agg, err := multiplex.New([]backend.Upstream{b1, b2}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
-	opts := HTTPServerOptions("mcp-gateway-test", cfg, v, nil, ratelimit.Config{})
+	opts := HTTPServerOptions("mcp-gateway-test", cfg, v, nil, ratelimit.New(context.Background(), ratelimit.Config{}))
 	srv := httpserver.New(agg, "", opts...)
 	ts := httptest.NewServer(srv)
 	defer ts.Close()

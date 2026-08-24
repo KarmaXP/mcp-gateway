@@ -61,8 +61,14 @@ func compileToolValidator(namespacedName string, schemaJSON json.RawMessage) (*j
 	return c.Compile(loc)
 }
 
+// A schema enumerating no properties constrains no argument, so it fails the elevated rule.
+type toolSchema struct {
+	validator            *jsonschema.Schema
+	enumeratesProperties bool
+}
+
 func (a *Multiplexer) replaceToolSchemasFromMerged(merged []map[string]any) {
-	out := make(map[string]*jsonschema.Schema)
+	out := make(map[string]toolSchema)
 	var pol *policy.Engine
 	if a.policyHolder != nil {
 		pol = a.policyHolder.Load()
@@ -88,7 +94,7 @@ func (a *Multiplexer) replaceToolSchemasFromMerged(merged []map[string]any) {
 			slog.Warn("tool inputSchema compile skipped", "tool", name, "err", err)
 			continue
 		}
-		out[name] = v
+		out[name] = toolSchema{validator: v, enumeratesProperties: enumeratesProperties(sch)}
 	}
 	a.schemaMu.Lock()
 	a.toolValidators = out
@@ -170,6 +176,14 @@ func hardenObjectSchemaMap(doc map[string]any) {
 
 // Closing a schema that enumerates no properties would leave a tool accepting nothing,
 // so only an enumerated shape is completed with additionalProperties: false.
+func enumeratesProperties(v any) bool {
+	doc, ok := v.(map[string]any)
+	if !ok {
+		return false
+	}
+	return isObjectSchema(doc)
+}
+
 func isObjectSchema(doc map[string]any) bool {
 	if _, ok := doc["properties"]; ok {
 		return true
@@ -223,14 +237,14 @@ func (a *Multiplexer) validateToolArgsWithSpan(ctx context.Context, hostID json.
 	if a.policyHolder != nil {
 		pol = a.policyHolder.Load()
 	}
-	if pol != nil && pol.RequiresStrictSchema(namespacedTool) && sch == nil {
-		err := fmt.Errorf("tool %q requires input schema (elevated policy)", namespacedTool)
+	if pol != nil && pol.RequiresStrictSchema(namespacedTool) && !sch.enumeratesProperties {
+		err := fmt.Errorf("tool %q requires an input schema that declares its properties (elevated policy)", namespacedTool)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "elevated schema required")
 		telemetry.RecordToolArgsValidation(ctx, defaults.MetricArgsStageSchema, defaults.MetricArgsResultFail)
 		return rpc.NewError(hostID, errcodes.InvalidParams, err.Error(), nil)
 	}
-	if sch == nil {
+	if sch.validator == nil {
 		span.SetStatus(codes.Ok, "")
 		return nil
 	}
@@ -241,7 +255,7 @@ func (a *Multiplexer) validateToolArgsWithSpan(ctx context.Context, hostID json.
 		telemetry.RecordToolArgsValidation(ctx, defaults.MetricArgsStageSchema, defaults.MetricArgsResultFail)
 		return rpc.NewError(hostID, errcodes.InvalidParams, "invalid JSON arguments", nil)
 	}
-	if err := sch.Validate(inst); err != nil {
+	if err := sch.validator.Validate(inst); err != nil {
 		span.RecordError(errors.New(hostVisibleJSONSchemaError(err)))
 		span.SetStatus(codes.Error, "json schema")
 		telemetry.RecordToolArgsValidation(ctx, defaults.MetricArgsStageSchema, defaults.MetricArgsResultFail)

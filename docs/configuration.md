@@ -70,10 +70,12 @@ Exact tool names skip vector search. See [Connecting agents — Semantic routing
 | `AUTH_MODE` | `none` | `none` or `jwt` |
 | `JWT_PUBLIC_KEY_PEM` | n/a | RS256 public key (PEM) for static verification |
 | `JWT_PUBLIC_KEY_FILE` | n/a | Path to PEM file (preferred in CI/scripts; overrides inline PEM when set) |
-| `JWT_JWKS_URL` | n/a | JWKS endpoint (requires `kid` on tokens) |
-| `JWT_JWKS_CACHE_TTL` | `5m` | JWKS cache duration |
+| `JWT_JWKS_URL` | n/a | JWKS endpoint (requires `kid` on tokens). Must be `https`, except on a loopback host |
+| `JWT_JWKS_CACHE_TTL` | `5m` | JWKS cache duration. A value of zero or less falls back to the default rather than refetching per request |
 | `JWT_ISS` | n/a | Expected `iss`. Required when `AUTH_MODE=jwt` |
 | `JWT_AUD` | n/a | Expected `aud`. Required when `AUTH_MODE=jwt` |
+
+Signing keys must be RSA with a modulus of at least 2048 bits, whether they come from a PEM or from JWKS. `exp`, `nbf` and `iat` are checked with 60 seconds of leeway, so normal IdP clock drift does not produce a 401.
 
 JWT claims used by the gateway:
 
@@ -125,6 +127,8 @@ JWKS or signature failure → **401** (fail-closed). There is no bypass when JWK
 | `burst` / `RATE_LIMIT_BURST` | `200` | Burst size |
 
 Health paths are excluded. Subject = JWT `sub` when present, else client IP.
+
+**Always on, independent of `enabled`:** a per-IP budget of 10 failed authentications, refilling at 1 per second, bounds the signature verification and JWKS traffic one client can force. Only a failure spends it, so a valid token never touches it; exceeding it returns **429** instead of 401. Live SSE sessions are capped at 1024, and a `GET /mcp/sse` beyond that returns **503**.
 
 ---
 

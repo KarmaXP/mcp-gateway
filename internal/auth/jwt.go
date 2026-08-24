@@ -7,6 +7,8 @@ import (
 	"encoding/pem"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -44,6 +46,14 @@ func NewValidator(cfg JWTAuthConfig) (*Validator, error) {
 	if strings.TrimSpace(cfg.PublicKeyPEM) != "" && strings.TrimSpace(cfg.JWKSURL) != "" {
 		slog.Warn("auth: jwt: both JWT_PUBLIC_KEY_PEM and JWKS URL set; static PEM takes precedence")
 	}
+	if jwksURL := strings.TrimSpace(cfg.JWKSURL); jwksURL != "" {
+		if err := checkJWKSURLScheme(jwksURL); err != nil {
+			return nil, err
+		}
+	}
+	if cfg.JWKSCacheTTL <= 0 {
+		cfg.JWKSCacheTTL = defaults.DefaultJWKSCacheTTL
+	}
 	v := &Validator{
 		cfg: cfg,
 		parser: jwt.NewParser(
@@ -52,6 +62,7 @@ func NewValidator(cfg JWTAuthConfig) (*Validator, error) {
 			jwt.WithExpirationRequired(),
 			jwt.WithIssuer(cfg.Issuer),
 			jwt.WithAudience(cfg.Audience),
+			jwt.WithLeeway(defaults.JWTClockSkewLeeway),
 		),
 	}
 	if cfg.PublicKeyPEM != "" {
@@ -87,6 +98,30 @@ func checkRequiredJWTSettings(cfg JWTAuthConfig) error {
 	return fmt.Errorf("auth: jwt: %s required", strings.Join(missing, " and "))
 }
 
+// Plaintext JWKS lets a MITM supply the signing keys, so only a loopback host is excused.
+func checkJWKSURLScheme(raw string) error {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("auth: jwt: JWKS URL %q: %w", raw, err)
+	}
+	switch {
+	case parsed.Scheme == "https":
+		return nil
+	case parsed.Scheme == "http" && isLoopbackHost(parsed.Hostname()):
+		return nil
+	default:
+		return fmt.Errorf("auth: jwt: JWKS URL must use https, got scheme %q", parsed.Scheme)
+	}
+}
+
+func isLoopbackHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 func parseRSAPublicKey(pemStr string) (*rsa.PublicKey, error) {
 	block, _ := pem.Decode([]byte(pemStr))
 	if block == nil {
@@ -100,7 +135,17 @@ func parseRSAPublicKey(pemStr string) (*rsa.PublicKey, error) {
 	if !ok {
 		return nil, fmt.Errorf("auth: jwt: expected RSA public key")
 	}
+	if err := checkRSAKeySize(rsaKey); err != nil {
+		return nil, err
+	}
 	return rsaKey, nil
+}
+
+func checkRSAKeySize(key *rsa.PublicKey) error {
+	if bits := key.N.BitLen(); bits < defaults.MinRSAPublicKeyBits {
+		return fmt.Errorf("auth: jwt: RSA key is %d bits, minimum is %d", bits, defaults.MinRSAPublicKeyBits)
+	}
+	return nil
 }
 
 func (v *Validator) keyFunc(ctx context.Context) jwt.Keyfunc {
@@ -153,10 +198,11 @@ func normalizeMcpToolNames(in []string) []string {
 }
 
 func (v *Validator) keyFromJWKS(ctx context.Context, t *jwt.Token) (interface{}, error) {
-	if v.cfg.JWKSURL == "" {
-		return nil, fmt.Errorf("auth: jwt: JWKS URL or JWT_PUBLIC_KEY_PEM required")
-	}
 	kid, _ := t.Header["kid"].(string)
+	if kid == "" {
+		telemetry.RecordJWKSLookup(ctx, defaults.MetricJWKSResultErrorMissingKid)
+		return nil, fmt.Errorf("auth: jwt: missing kid (required for JWKS)")
+	}
 
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -166,10 +212,6 @@ func (v *Validator) keyFromJWKS(ctx context.Context, t *jwt.Token) (interface{},
 		if err := v.fetchJWKSLocked(ctx); err != nil {
 			return nil, err
 		}
-	}
-	if kid == "" {
-		telemetry.RecordJWKSLookup(ctx, defaults.MetricJWKSResultErrorMissingKid)
-		return nil, fmt.Errorf("auth: jwt: missing kid (required for JWKS)")
 	}
 
 	key, ok := v.jwksSet.LookupKeyID(kid)
@@ -213,5 +255,12 @@ func publicKeyFromJWK(key jwk.Key) (interface{}, error) {
 	if err := key.Raw(&raw); err != nil {
 		return nil, fmt.Errorf("auth: jwk raw: %w", err)
 	}
-	return raw, nil
+	pub, ok := raw.(*rsa.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("auth: jwks: expected RSA public key, got %T", raw)
+	}
+	if err := checkRSAKeySize(pub); err != nil {
+		return nil, err
+	}
+	return pub, nil
 }

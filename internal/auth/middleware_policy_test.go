@@ -44,7 +44,7 @@ func TestHTTPMiddlewarePolicyIntersectsRARAndMcpTools(t *testing.T) {
 	eng := policy.NewEngine(policy.EngineInput{Version: "v-test"})
 	holder := policy.NewHolder(eng)
 	var got []string
-	h := HTTPMiddleware(cfg, v, holder)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := HTTPMiddleware(cfg, v, holder, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got = hostctx.AllowedToolNamesFromContext(r.Context())
 		require.Equal(t, "user-1", hostctx.SubjectIDFromContext(r.Context()))
 		require.Equal(t, "v-test", hostctx.PolicyVersionFromContext(r.Context()))
@@ -84,7 +84,7 @@ func TestHTTPMiddlewarePolicyVersionAfterHolderReload(t *testing.T) {
 
 	holder := policy.NewHolder(policy.NewEngine(policy.EngineInput{Version: "before"}))
 	var versions []string
-	h := HTTPMiddleware(cfg, v, holder)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := HTTPMiddleware(cfg, v, holder, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		versions = append(versions, hostctx.PolicyVersionFromContext(r.Context()))
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -169,7 +169,7 @@ func TestHTTPMiddlewarePolicyMalformedRARNeverWidensTheAllowList(t *testing.T) {
 			}))
 			var got []string
 			var mode hostctx.AllowListMode
-			h := HTTPMiddleware(cfg, v, holder)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			h := HTTPMiddleware(cfg, v, holder, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				mode, got = hostctx.AllowListModeFromContext(r.Context())
 				w.WriteHeader(http.StatusOK)
 			}))

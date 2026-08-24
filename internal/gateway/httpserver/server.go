@@ -134,14 +134,18 @@ func (s *Server) handleMCPSSE(w http.ResponseWriter, r *http.Request) {
 
 	r = r.WithContext(telemetry.ContextWithExtractedW3CTrace(r.Context(), r.Header))
 
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
 	connCtx, stopConn := mergeWithShutdown(r.Context(), s.shutdownCtx)
 	defer stopConn()
 
-	sess := s.sessions.Create(connCtx)
+	sess, err := s.sessions.Create(connCtx)
+	if err != nil {
+		http.Error(w, "too many sessions", http.StatusServiceUnavailable)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
 	telemetry.ActiveSessions.Add(1)
 	defer telemetry.ActiveSessions.Add(-1)
 
