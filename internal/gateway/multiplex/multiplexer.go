@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -46,10 +45,7 @@ type Multiplexer struct {
 	listTimeout time.Duration
 	callTimeout time.Duration
 
-	mu         sync.RWMutex
-	cachedList json.RawMessage
-	cachedAt   time.Time
-	listTTL    time.Duration
+	listCache listCache
 
 	semantic *router.SemanticRouter
 
@@ -57,12 +53,9 @@ type Multiplexer struct {
 	auditor      *policy.Auditor
 	argLimits    validate.Limits
 
-	catMu         sync.RWMutex
-	catVer        string
-	catRefreshGen atomic.Uint64
+	catalogVersion catalogVersion
 
-	schemaMu       sync.RWMutex
-	toolValidators map[string]toolSchema
+	schemaRegistry schemaRegistry
 
 	strictInit            bool
 	strictList            bool
@@ -71,15 +64,9 @@ type Multiplexer struct {
 
 	lifecycleCtx context.Context
 
-	initMu     sync.Mutex
-	initDone   bool
-	initResult json.RawMessage
+	initializeOnce initializeOnce
 
-	listChangedMu         sync.Mutex
-	listChangedDebounce   time.Duration
-	listChangedTimer      *time.Timer
-	listChangedPendingCtx context.Context
-	listChangedGeneration uint64
+	listChangedDebouncer listChangedDebouncer
 }
 
 type Option func(*Multiplexer)
@@ -97,7 +84,7 @@ func WithCallTimeout(d time.Duration) Option {
 }
 
 func WithListTTL(d time.Duration) Option {
-	return func(a *Multiplexer) { a.listTTL = d }
+	return func(a *Multiplexer) { a.listCache.ttl = d }
 }
 
 func WithSemanticRouter(sr *router.SemanticRouter) Option {
@@ -155,7 +142,7 @@ func WithLifecycleContext(ctx context.Context) Option {
 
 // WithToolsListChangedDebounce coalesces upstream list_changed refresh work (0 disables debounce).
 func WithToolsListChangedDebounce(d time.Duration) Option {
-	return func(a *Multiplexer) { a.listChangedDebounce = d }
+	return func(a *Multiplexer) { a.listChangedDebouncer.delay = d }
 }
 
 func (a *Multiplexer) lifecycleContext(fallback context.Context) context.Context {
@@ -181,13 +168,13 @@ func New(upstreams []backend.Upstream, opts ...Option) (*Multiplexer, error) {
 		byPrefix[p] = b
 	}
 	a := &Multiplexer{
-		upstreams:           append([]backend.Upstream(nil), upstreams...),
-		byPrefix:            byPrefix,
-		initTimeout:         defaults.MultiplexInitTimeout,
-		listTimeout:         defaults.MultiplexListTimeout,
-		callTimeout:         defaults.MultiplexCallTimeout,
-		listTTL:             defaults.MultiplexListCacheTTL,
-		listChangedDebounce: defaultToolsListChangedDelay,
+		upstreams:            append([]backend.Upstream(nil), upstreams...),
+		byPrefix:             byPrefix,
+		initTimeout:          defaults.MultiplexInitTimeout,
+		listTimeout:          defaults.MultiplexListTimeout,
+		callTimeout:          defaults.MultiplexCallTimeout,
+		listCache:            listCache{ttl: defaults.MultiplexListCacheTTL},
+		listChangedDebouncer: listChangedDebouncer{delay: defaultToolsListChangedDelay},
 	}
 	for _, o := range opts {
 		o(a)
@@ -221,14 +208,10 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 		telemetry.AttrJSONRPCID(hostID),
 	)
 
-	a.initMu.Lock()
-	if a.initDone {
-		cached := append(json.RawMessage(nil), a.initResult...)
-		a.initMu.Unlock()
+	if cached, ok := a.initializeOnce.load(); ok {
 		span.SetStatus(codes.Ok, "")
 		return rpc.NewResult(hostID, cached), nil
 	}
-	a.initMu.Unlock()
 
 	results := make([]json.RawMessage, len(a.upstreams))
 	var mu sync.Mutex
@@ -347,10 +330,7 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 	}
 	everyUpstreamInitialized := len(initFailures) == 0
 	if everyUpstreamInitialized {
-		a.initMu.Lock()
-		a.initDone = true
-		a.initResult = append(json.RawMessage(nil), raw...)
-		a.initMu.Unlock()
+		a.initializeOnce.store(raw)
 	}
 	a.invalidateToolCache()
 	span.SetStatus(codes.Ok, "")
@@ -503,12 +483,8 @@ func (a *Multiplexer) InvalidateToolCache() {
 }
 
 func (a *Multiplexer) invalidateToolCache() {
-	a.mu.Lock()
-	a.cachedList = nil
-	a.mu.Unlock()
-	a.schemaMu.Lock()
-	a.toolValidators = nil
-	a.schemaMu.Unlock()
+	a.listCache.invalidate()
+	a.schemaRegistry.replace(nil)
 }
 
 func coalesceArgs(a json.RawMessage) json.RawMessage {
@@ -519,9 +495,7 @@ func coalesceArgs(a json.RawMessage) json.RawMessage {
 }
 
 func (a *Multiplexer) semanticRoutingSignal(ctx context.Context, toolName string, args json.RawMessage) router.RoutingSignal {
-	a.catMu.RLock()
-	ver := a.catVer
-	a.catMu.RUnlock()
+	ver := a.catalogVersion.load()
 	allowMode, allowedList := hostctx.AllowListModeFromContext(ctx)
 	return router.RoutingSignal{
 		SessionID:       hostctx.MCPSessionIDFromContext(ctx),

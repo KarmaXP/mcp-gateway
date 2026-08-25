@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"time"
 )
 
 func (a *Multiplexer) HandleToolsListChanged(ctx context.Context) {
@@ -12,37 +11,7 @@ func (a *Multiplexer) HandleToolsListChanged(ctx context.Context) {
 	if a.semantic == nil || !a.semantic.Enabled() {
 		return
 	}
-	a.scheduleToolsListChangedRefresh(ctx)
-}
-
-func (a *Multiplexer) scheduleToolsListChangedRefresh(trigger context.Context) {
-	delay := a.listChangedDebounce
-	if delay <= 0 {
-		a.runToolsListChangedRefresh(trigger)
-		return
-	}
-
-	a.listChangedMu.Lock()
-	defer a.listChangedMu.Unlock()
-
-	if a.listChangedTimer != nil {
-		a.listChangedTimer.Stop()
-	}
-	a.listChangedGeneration++
-	generation := a.listChangedGeneration
-	a.listChangedPendingCtx = trigger
-	a.listChangedTimer = time.AfterFunc(delay, func() {
-		a.listChangedMu.Lock()
-		if generation != a.listChangedGeneration {
-			a.listChangedMu.Unlock()
-			return
-		}
-		pending := a.listChangedPendingCtx
-		a.listChangedPendingCtx = nil
-		a.listChangedTimer = nil
-		a.listChangedMu.Unlock()
-		a.runToolsListChangedRefresh(pending)
-	})
+	a.listChangedDebouncer.schedule(func() { a.runToolsListChangedRefresh(ctx) })
 }
 
 func (a *Multiplexer) runToolsListChangedRefresh(trigger context.Context) {

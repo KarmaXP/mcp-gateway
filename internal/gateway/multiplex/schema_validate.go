@@ -102,9 +102,7 @@ func (a *Multiplexer) replaceToolSchemasFromMerged(merged []map[string]any) {
 		}
 		out[name] = toolSchema{validator: v, enumeratesProperties: enumeratesProperties(sch)}
 	}
-	a.schemaMu.Lock()
-	a.toolValidators = out
-	a.schemaMu.Unlock()
+	a.schemaRegistry.replace(out)
 }
 
 func hardenObjectSchemasForValidation(v any) any {
@@ -235,9 +233,7 @@ func (a *Multiplexer) validateToolArgsWithSpan(ctx context.Context, hostID json.
 	}
 	telemetry.RecordToolArgsValidation(ctx, defaults.MetricArgsStageLimits, defaults.MetricArgsResultPass)
 
-	a.schemaMu.RLock()
-	sch := a.toolValidators[namespacedTool]
-	a.schemaMu.RUnlock()
+	sch := a.schemaRegistry.lookup(namespacedTool)
 
 	var pol *policy.Engine
 	if a.policyHolder != nil {

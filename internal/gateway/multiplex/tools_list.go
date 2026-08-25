@@ -69,9 +69,7 @@ func (a *Multiplexer) ToolsList(ctx context.Context, hostID json.RawMessage) (*r
 	mergedForList := merged
 	if a.semantic != nil && a.semantic.FilterListActive() {
 		if intent := hostctx.ClientIntentFromContext(tctx); intent != "" {
-			a.catMu.RLock()
-			ver := a.catVer
-			a.catMu.RUnlock()
+			ver := a.catalogVersion.load()
 			sig := router.RoutingSignal{
 				Method:         "tools/list",
 				IntentText:     intent,
@@ -102,19 +100,13 @@ func (a *Multiplexer) ToolsList(ctx context.Context, hostID json.RawMessage) (*r
 }
 
 func (a *Multiplexer) tryCachedToolsList(ctx context.Context, hostID json.RawMessage, mode hostctx.AllowListMode) (*rpc.Response, bool) {
-	if a.listTTL <= 0 || mode != hostctx.AllowListUnrestricted {
+	if mode != hostctx.AllowListUnrestricted {
 		return nil, false
 	}
 	if a.semantic != nil && a.semantic.FilterListActive() && hostctx.ClientIntentFromContext(ctx) != "" {
 		return nil, false
 	}
-	a.mu.RLock()
-	valid := len(a.cachedList) > 0 && time.Since(a.cachedAt) < a.listTTL
-	var cachedCopy json.RawMessage
-	if valid {
-		cachedCopy = append(json.RawMessage(nil), a.cachedList...)
-	}
-	a.mu.RUnlock()
+	cachedCopy, valid := a.listCache.load()
 	if !valid {
 		return nil, false
 	}
@@ -232,13 +224,10 @@ func mergeNamespacedToolList(upstreams []backend.Upstream, perUpstream [][]map[s
 }
 
 func (a *Multiplexer) storeFullToolsListCache(outFull []byte, mode hostctx.AllowListMode) {
-	if a.listTTL <= 0 || mode != hostctx.AllowListUnrestricted {
+	if mode != hostctx.AllowListUnrestricted {
 		return
 	}
-	a.mu.Lock()
-	a.cachedList = append(json.RawMessage(nil), outFull...)
-	a.cachedAt = time.Now()
-	a.mu.Unlock()
+	a.listCache.store(outFull)
 }
 
 func (a *Multiplexer) maybeReindexSemanticCatalog(ctx context.Context, merged []map[string]any, outFull []byte) {
@@ -246,12 +235,9 @@ func (a *Multiplexer) maybeReindexSemanticCatalog(ctx context.Context, merged []
 		return
 	}
 	ver := fmt.Sprintf("%x", sha256.Sum256(outFull))
-	a.catMu.RLock()
-	if a.catVer == ver {
-		a.catMu.RUnlock()
+	if a.catalogVersion.isCurrent(ver) {
 		return
 	}
-	a.catMu.RUnlock()
 	indexed, err := router.BuildIndexedToolsFromMerged(merged, func(prefix string) (string, error) {
 		b, ok := a.byPrefix[prefix]
 		if !ok {
@@ -263,7 +249,7 @@ func (a *Multiplexer) maybeReindexSemanticCatalog(ctx context.Context, merged []
 		slog.Warn("router catalog build skipped", "err", err)
 		return
 	}
-	refreshGen := a.catRefreshGen.Add(1)
+	refreshGen := a.catalogVersion.beginRefresh()
 	if err := a.semantic.Reindex(ctx, ver, indexed); err != nil {
 		slog.Warn("router reindex failed", "err", err)
 		return
@@ -272,19 +258,12 @@ func (a *Multiplexer) maybeReindexSemanticCatalog(ctx context.Context, merged []
 }
 
 func (a *Multiplexer) commitSemanticCatalogVersion(ctx context.Context, ver string, indexed []router.IndexedTool, refreshGen uint64) {
-	a.catMu.Lock()
-	defer a.catMu.Unlock()
-	if a.catRefreshGen.Load() != refreshGen {
-		return
-	}
-	if a.catVer == ver {
-		return
-	}
-	if a.semantic != nil {
-		a.semantic.ApplyCatalog(ctx, ver, indexed)
-	}
-	a.catVer = ver
-	telemetry.SetIndexedCatalogToolCount(int64(len(indexed)))
+	a.catalogVersion.commitIfCurrent(ver, refreshGen, func() {
+		if a.semantic != nil {
+			a.semantic.ApplyCatalog(ctx, ver, indexed)
+		}
+		telemetry.SetIndexedCatalogToolCount(int64(len(indexed)))
+	})
 }
 
 func (a *Multiplexer) toolsListPayloadForClient(merged []map[string]any, mode hostctx.AllowListMode, allowed []string, failures []PartialFailure) (json.RawMessage, error) {
