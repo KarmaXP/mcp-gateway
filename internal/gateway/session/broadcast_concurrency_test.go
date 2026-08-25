@@ -19,7 +19,7 @@ func TestBroadcastNotificationBoundedWorkerConcurrency(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "p", []string{"echo"})
 	mpx, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
-	sm := NewSessionManager(mpx)
+	sm := NewSessionManager(context.Background(), mpx)
 
 	const n = 80
 	for i := 0; i < n; i++ {

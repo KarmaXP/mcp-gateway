@@ -206,7 +206,7 @@ func TestHandleToolsListChangedReindexesAndInvalidatesCache(t *testing.T) {
 		[]backend.Upstream{up},
 		WithListTTL(time.Minute),
 		WithSemanticRouter(sr),
-		WithToolsListChangedDebounce(0),
+		withToolsListChangedDebounce(0),
 	)
 	require.NoError(t, err)
 

@@ -62,7 +62,6 @@ func (m *bucketMap) allow(key string, lim rate.Limit, burst int, now time.Time) 
 	return e.lim.Allow()
 }
 
-// hasTokens reports whether the next allow would succeed, without spending a token.
 func (m *bucketMap) hasTokens(key string, now time.Time) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()

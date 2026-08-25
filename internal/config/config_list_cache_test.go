@@ -18,18 +18,18 @@ func TestAggregationListCacheTTLUnsetUsesTheDefault(t *testing.T) {
 }
 
 func TestAggregationListCacheTTLExplicitZeroDisablesTheCache(t *testing.T) {
-	c := GatewayConfig{Aggregation: AggregationSettings{ListCacheTTL: "0s"}}
+	c := GatewayConfig{Aggregation: aggregationSettings{ListCacheTTL: "0s"}}
 	require.Equal(t, time.Duration(0), c.AggregationListCacheTTL(),
 		"disabling the cache needs an explicit sentinel, not an absent field")
 }
 
 func TestAggregationListCacheTTLParsePositive(t *testing.T) {
-	c := GatewayConfig{Aggregation: AggregationSettings{ListCacheTTL: "30s"}}
+	c := GatewayConfig{Aggregation: aggregationSettings{ListCacheTTL: "30s"}}
 	require.Equal(t, 30*time.Second, c.AggregationListCacheTTL())
 }
 
 func TestAggregationListCacheTTLInvalidFallsBackToTheDefault(t *testing.T) {
-	c := GatewayConfig{Aggregation: AggregationSettings{ListCacheTTL: "not-a-duration"}}
+	c := GatewayConfig{Aggregation: aggregationSettings{ListCacheTTL: "not-a-duration"}}
 	require.Equal(t, defaults.MultiplexListCacheTTL, c.AggregationListCacheTTL())
 }
 

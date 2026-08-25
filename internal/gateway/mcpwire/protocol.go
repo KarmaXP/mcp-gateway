@@ -30,18 +30,18 @@ func IsToolsListChangedNotification(method string) bool {
 	return method == NotificationToolsListChanged || method == LegacyToolsListChanged
 }
 
-func IsResourcesListChangedNotification(method string) bool {
+func isResourcesListChangedNotification(method string) bool {
 	return method == NotificationResourcesListChanged || method == LegacyResourcesListChanged
 }
 
-func IsPromptsListChangedNotification(method string) bool {
+func isPromptsListChangedNotification(method string) bool {
 	return method == NotificationPromptsListChanged || method == LegacyPromptsListChanged
 }
 
 func IsCatalogListChangedNotification(method string) bool {
 	return IsToolsListChangedNotification(method) ||
-		IsResourcesListChangedNotification(method) ||
-		IsPromptsListChangedNotification(method)
+		isResourcesListChangedNotification(method) ||
+		isPromptsListChangedNotification(method)
 }
 
 func IsReplayableMethod(method string) bool {

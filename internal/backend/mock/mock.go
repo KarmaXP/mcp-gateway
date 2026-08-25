@@ -84,19 +84,19 @@ func (b *MockUpstream) ToolsListInvocationCount() uint64 {
 
 func (b *MockUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
 	switch req.Method {
-	case "initialize":
+	case mcpwire.MethodInitialize:
 		return b.initialize(ctx, req)
-	case "tools/list":
+	case mcpwire.MethodToolsList:
 		return b.toolsList(ctx, req)
-	case "tools/call":
+	case mcpwire.MethodToolsCall:
 		return b.toolsCall(ctx, req)
-	case "resources/list":
+	case mcpwire.MethodResourcesList:
 		return b.resourcesList(ctx, req)
-	case "resources/read":
+	case mcpwire.MethodResourcesRead:
 		return b.resourcesRead(ctx, req)
-	case "prompts/list":
+	case mcpwire.MethodPromptsList:
 		return b.promptsList(ctx, req)
-	case "prompts/get":
+	case mcpwire.MethodPromptsGet:
 		return b.promptsGet(ctx, req)
 	default:
 		return rpc.NewError(req.ID, errcodes.MethodNotFound, fmt.Sprintf("method not found: %s", req.Method), nil), nil

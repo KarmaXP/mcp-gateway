@@ -69,7 +69,7 @@ func run() error {
 	if err := postRPC(client, baseURL+"/mcp/rpc", sid, bearer, map[string]any{
 		"jsonrpc": rpc.JSONRPCVersion,
 		"id":      initializeID,
-		"method":  "initialize",
+		"method":  mcpwire.MethodInitialize,
 		"params": map[string]any{
 			"protocolVersion": mcpwire.MCPProtocolVersion,
 			"capabilities":    map[string]any{},
@@ -99,7 +99,7 @@ func run() error {
 	if err := postRPC(client, baseURL+"/mcp/rpc", sid, bearer, map[string]any{
 		"jsonrpc": rpc.JSONRPCVersion,
 		"id":      toolsListID,
-		"method":  "tools/list",
+		"method":  mcpwire.MethodToolsList,
 	}); err != nil {
 		return fmt.Errorf("tools/list post: %w", err)
 	}
@@ -119,7 +119,7 @@ func run() error {
 	if err := postRPC(client, baseURL+"/mcp/rpc", sid, bearer, map[string]any{
 		"jsonrpc": rpc.JSONRPCVersion,
 		"id":      toolsCallID,
-		"method":  "tools/call",
+		"method":  mcpwire.MethodToolsCall,
 		"params": map[string]any{
 			"name":      toolName,
 			"arguments": toolArgs,
@@ -136,7 +136,6 @@ func run() error {
 	return nil
 }
 
-// nextID stays below 2^53 so Node MCP servers do not round JSON-RPC ids as float64.
 func nextID() int64 {
 	return idSeq.Add(1)
 }

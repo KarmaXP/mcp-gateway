@@ -206,7 +206,6 @@ func (sr *SemanticRouter) maybeHybridRerank(qtext string, results []store.Vector
 	return results
 }
 
-// tieBreakAmbiguousPair prefers the top-two vector candidate that appears most recently in session tool history.
 func tieBreakAmbiguousPair(top, second store.VectorSearchHit, recent []string) (store.VectorSearchHit, store.VectorSearchHit, bool) {
 	for i := len(recent) - 1; i >= 0; i-- {
 		name := recent[i]

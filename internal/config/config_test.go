@@ -129,7 +129,7 @@ func TestAggregationTimeoutsDefault(t *testing.T) {
 }
 
 func TestAggregationTimeoutsIgnoreInvalid(t *testing.T) {
-	c := GatewayConfig{Aggregation: AggregationSettings{
+	c := GatewayConfig{Aggregation: aggregationSettings{
 		InitTimeout: "not-a-duration",
 		ListTimeout: "0s",
 		CallTimeout: "",
@@ -169,7 +169,7 @@ func TestApplyEnvOverridesPolicyAllowOnEvalFailureFalse(t *testing.T) {
 
 func TestApplyEnvOverridesAggregationMaxInFlight(t *testing.T) {
 	cfg := GatewayConfig{
-		Aggregation: AggregationSettings{
+		Aggregation: aggregationSettings{
 			MaxInFlight: 2,
 		},
 	}

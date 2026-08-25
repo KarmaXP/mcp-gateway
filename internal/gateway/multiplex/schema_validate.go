@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
 	"log/slog"
 	"net/url"
 
@@ -219,7 +220,7 @@ func (a *Multiplexer) validateToolArgsWithSpan(ctx context.Context, hostID json.
 	defer span.End()
 	span.SetAttributes(
 		attribute.String(telemetry.AttrMCPToolName, namespacedTool),
-		attribute.String(telemetry.AttrMCPMethod, "tools/call"),
+		attribute.String(telemetry.AttrMCPMethod, mcpwire.MethodToolsCall),
 	)
 
 	if err := validate.CheckArgumentJSON(argsJSON, a.argLimits); err != nil {

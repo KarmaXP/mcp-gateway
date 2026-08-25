@@ -22,7 +22,7 @@ func TestConcurrentToolsListSameSession(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
-	srv := New(agg, "")
+	srv := New(context.Background(), agg, "")
 	ts := httptest.NewServer(srv)
 	defer ts.Close()
 
@@ -75,7 +75,7 @@ func TestPostRPCClosesBodyOnAllPaths(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
-	srv := New(agg, "")
+	srv := New(context.Background(), agg, "")
 	ts := httptest.NewServer(srv)
 	defer ts.Close()
 
@@ -94,7 +94,7 @@ func TestToolsCallAbortsWhenPostContextCancelled(t *testing.T) {
 	b1.ToolsCallDelay = 400 * time.Millisecond
 	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0), multiplex.WithCallTimeout(2*time.Second))
 	require.NoError(t, err)
-	srv := New(agg, "")
+	srv := New(context.Background(), agg, "")
 	ts := httptest.NewServer(srv)
 	defer ts.Close()
 

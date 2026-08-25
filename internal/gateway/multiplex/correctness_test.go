@@ -77,7 +77,7 @@ func TestHostCapabilitiesAreNotForwardedUpstream(t *testing.T) {
 	require.NoError(t, err)
 
 	hostInit := json.RawMessage(`{"protocolVersion":"2025-06-18","capabilities":{"sampling":{},"roots":{"listChanged":true}},"clientInfo":{"name":"h","version":"1"}}`)
-	ctx := WithHostInitializeParams(context.Background(), hostInit)
+	ctx := hostctx.WithHostInitializeParams(context.Background(), hostInit)
 	_, err = a.Initialize(ctx, json.RawMessage(`1`))
 	require.NoError(t, err)
 

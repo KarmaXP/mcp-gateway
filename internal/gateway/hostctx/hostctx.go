@@ -4,6 +4,7 @@ package hostctx
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 )
 
@@ -173,4 +174,29 @@ func normalizeAllowedToolNames(in []string) []string {
 		return nil
 	}
 	return out
+}
+
+const jsonNullLiteral = "null"
+
+type hostInitializeParamsKey struct{}
+
+func WithHostInitializeParams(ctx context.Context, params json.RawMessage) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if len(params) == 0 || string(params) == jsonNullLiteral {
+		return ctx
+	}
+	return context.WithValue(ctx, hostInitializeParamsKey{}, append(json.RawMessage(nil), params...))
+}
+
+func HostInitializeParams(ctx context.Context) json.RawMessage {
+	if ctx == nil {
+		return nil
+	}
+	raw, _ := ctx.Value(hostInitializeParamsKey{}).(json.RawMessage)
+	if len(raw) == 0 {
+		return nil
+	}
+	return append(json.RawMessage(nil), raw...)
 }

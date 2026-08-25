@@ -161,7 +161,7 @@ func oneIteration(client *http.Client, base, mode string, cfg callConfig) (callL
 
 	id := nextID()
 	if err := postRPC(client, base+"/mcp/rpc", sid, cfg.bearer, fmt.Sprintf(
-		`{"jsonrpc":"%s","id":%d,"method":"initialize","params":{"protocolVersion":"%s","capabilities":{},"clientInfo":{"name":"loadtest","version":"0"}}}`,
+		`{"jsonrpc":"%s","id":%d,"method":mcpwire.MethodInitialize,"params":{"protocolVersion":"%s","capabilities":{},"clientInfo":{"name":"loadtest","version":"0"}}}`,
 		rpc.JSONRPCVersion, id, mcpwire.MCPProtocolVersion)); err != nil {
 		return 0, err
 	}
@@ -174,7 +174,7 @@ func oneIteration(client *http.Client, base, mode string, cfg callConfig) (callL
 	}
 
 	id = nextID()
-	if err := postRPC(client, base+"/mcp/rpc", sid, cfg.bearer, fmt.Sprintf(`{"jsonrpc":"%s","id":%d,"method":"tools/list"}`, rpc.JSONRPCVersion, id)); err != nil {
+	if err := postRPC(client, base+"/mcp/rpc", sid, cfg.bearer, fmt.Sprintf(`{"jsonrpc":"%s","id":%d,"method":mcpwire.MethodToolsList}`, rpc.JSONRPCVersion, id)); err != nil {
 		return 0, err
 	}
 	if _, err := waitDataJSON(events, id, loadtestToolsListTimeout); err != nil {
@@ -188,7 +188,7 @@ func oneIteration(client *http.Client, base, mode string, cfg callConfig) (callL
 		callArgs = "{}"
 	}
 	id = nextID()
-	callBody := fmt.Sprintf(`{"jsonrpc":"%s","id":%d,"method":"tools/call","params":{"name":%q,"arguments":%s}}`, rpc.JSONRPCVersion, id, toolName, callArgs)
+	callBody := fmt.Sprintf(`{"jsonrpc":"%s","id":%d,"method":mcpwire.MethodToolsCall,"params":{"name":%q,"arguments":%s}}`, rpc.JSONRPCVersion, id, toolName, callArgs)
 
 	t0 := time.Now()
 	if err := postRPC(client, base+"/mcp/rpc", sid, cfg.bearer, callBody); err != nil {
@@ -217,7 +217,6 @@ func oneIteration(client *http.Client, base, mode string, cfg callConfig) (callL
 
 var idSeq atomic.Int64
 
-// nextID stays below 2^53 so Node MCP servers do not round JSON-RPC ids as float64.
 func nextID() int64 {
 	return idSeq.Add(1)
 }

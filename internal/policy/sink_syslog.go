@@ -14,12 +14,12 @@ type syslogWriter interface {
 	Close() error
 }
 
-type SyslogAuditSink struct {
+type syslogAuditSink struct {
 	mu     sync.Mutex
 	writer syslogWriter
 }
 
-func NewSyslogAuditSink(network, address string) (*SyslogAuditSink, error) {
+func NewSyslogAuditSink(network, address string) (*syslogAuditSink, error) {
 	network = strings.ToLower(strings.TrimSpace(network))
 	if network == "" {
 		network = "udp"
@@ -32,10 +32,10 @@ func NewSyslogAuditSink(network, address string) (*SyslogAuditSink, error) {
 	if err != nil {
 		return nil, fmt.Errorf("policy: create syslog writer: %w", err)
 	}
-	return &SyslogAuditSink{writer: w}, nil
+	return &syslogAuditSink{writer: w}, nil
 }
 
-func (s *SyslogAuditSink) Emit(_ context.Context, rec AuditRecord) error {
+func (s *syslogAuditSink) Emit(_ context.Context, rec AuditRecord) error {
 	payload, err := marshalAuditRecord(rec)
 	if err != nil {
 		return err
@@ -51,7 +51,7 @@ func (s *SyslogAuditSink) Emit(_ context.Context, rec AuditRecord) error {
 	return writeErr
 }
 
-func (s *SyslogAuditSink) Close() error {
+func (s *syslogAuditSink) Close() error {
 	if s == nil || s.writer == nil {
 		return nil
 	}

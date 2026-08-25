@@ -22,7 +22,7 @@ func TestEnqueueResponseTimesOutWhenOutboundFull(t *testing.T) {
 	for i := 0; i < defaults.SessionOutboundChannelSize; i++ {
 		s.out <- []byte("blocked")
 	}
-	err := s.EnqueueResponse(rpc.NewResult(json.RawMessage(`1`), json.RawMessage(`{}`)))
+	err := s.enqueueResponse(rpc.NewResult(json.RawMessage(`1`), json.RawMessage(`{}`)))
 	require.Error(t, err)
 	require.True(t, errors.Is(err, errOutboundBufferFull))
 	require.Equal(t, uint64(1), s.DroppedOutbound())
@@ -78,7 +78,7 @@ func TestBroadcastNotificationReturnsWithoutWaitingForSlowConsumer(t *testing.T)
 	b1 := mock.NewMockUpstream("b1", "p", []string{"echo"})
 	mpx, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
-	sm := NewSessionManager(mpx)
+	sm := NewSessionManager(context.Background(), mpx)
 
 	slow := NewSession(context.Background(), "slow", mpx, nil)
 	for i := 0; i < defaults.SessionOutboundChannelSize; i++ {

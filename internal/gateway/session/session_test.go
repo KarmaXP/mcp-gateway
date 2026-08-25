@@ -122,7 +122,7 @@ func TestSessionManagerGetRemove(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
-	m := NewSessionManager(agg)
+	m := NewSessionManager(context.Background(), agg)
 	s, err := m.Create(context.Background())
 	require.NoError(t, err)
 	got, err := m.Get(s.ID())

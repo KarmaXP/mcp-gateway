@@ -3,6 +3,7 @@ package multiplex
 import (
 	"context"
 	"encoding/json"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -130,7 +131,7 @@ func TestInitializeForwardsHostParamsToUpstream(t *testing.T) {
 		"capabilities":    map[string]any{"experimental": map[string]any{}},
 		"clientInfo":      map[string]any{"name": "custom-host", "version": "9.9.9"},
 	})
-	ctx := WithHostInitializeParams(context.Background(), hostParams)
+	ctx := hostctx.WithHostInitializeParams(context.Background(), hostParams)
 	_, err = mpx.Initialize(ctx, json.RawMessage([]byte("1")))
 	require.NoError(t, err)
 	rec.mu.Lock()
@@ -152,7 +153,7 @@ func TestPolicyHardenSchemasInsideAllOf(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b1.InputSchemaByTool = map[string]map[string]any{"echo": inputSchema}
 	pol := policy.NewEngine(policy.EngineInput{Version: "t", ElevatedTools: []string{"alpha__echo"}})
-	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), WithPolicyEngine(pol))
+	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), withPolicyEngine(pol))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage([]byte("1")))
 	_, _ = a.ToolsList(context.Background(), json.RawMessage([]byte("2")))

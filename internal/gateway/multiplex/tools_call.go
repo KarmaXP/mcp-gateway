@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
 	"strings"
 	"time"
 
@@ -64,7 +65,7 @@ func (a *Multiplexer) ToolsCall(ctx context.Context, hostID json.RawMessage, par
 	muxStart := time.Now()
 	b, native, err := a.resolveBackendForTool(p.Name)
 	if err != nil {
-		telemetry.RecordInternalPhase(ctx, "tools/call", defaults.MetricInternalPhaseMux, time.Since(muxStart))
+		telemetry.RecordInternalPhase(ctx, mcpwire.MethodToolsCall, defaults.MetricInternalPhaseMux, time.Since(muxStart))
 		return rpc.NewError(hostID, errcodes.InvalidParams, err.Error(), nil), nil
 	}
 
@@ -74,7 +75,7 @@ func (a *Multiplexer) ToolsCall(ctx context.Context, hostID json.RawMessage, par
 func (a *Multiplexer) enforceHostToolAuthz(ctx context.Context, hostID json.RawMessage, namespacedTool string) *rpc.Response {
 	secStart := time.Now()
 	defer func() {
-		telemetry.RecordInternalPhase(ctx, "tools/call", defaults.MetricInternalPhaseSecurity, time.Since(secStart))
+		telemetry.RecordInternalPhase(ctx, mcpwire.MethodToolsCall, defaults.MetricInternalPhaseSecurity, time.Since(secStart))
 	}()
 	actx, span := telemetry.StartSpan(ctx, telemetry.SpanSecurityAuthz)
 	defer span.End()
@@ -152,11 +153,11 @@ func (a *Multiplexer) applySemanticToolRouting(ctx context.Context, hostID json.
 	}
 	routeStart := time.Now()
 	defer func() {
-		telemetry.RecordInternalPhase(ctx, "tools/call", defaults.MetricInternalPhaseRouter, time.Since(routeStart))
+		telemetry.RecordInternalPhase(ctx, mcpwire.MethodToolsCall, defaults.MetricInternalPhaseRouter, time.Since(routeStart))
 	}()
 	rctx, span := telemetry.StartSpan(ctx, telemetry.SpanSemanticRouter)
 	defer span.End()
-	span.SetAttributes(attribute.String(telemetry.AttrMCPMethod, "tools/call"))
+	span.SetAttributes(attribute.String(telemetry.AttrMCPMethod, mcpwire.MethodToolsCall))
 	sig := a.semanticRoutingSignal(ctx, p.Name, p.Arguments)
 	resolved, dec, err := a.semantic.ResolveToolsCall(rctx, sig)
 	if dec != nil {
@@ -201,7 +202,7 @@ func (a *Multiplexer) invokeUpstreamToolsCall(ctx context.Context, hostID json.R
 	if err != nil {
 		return nil, fmt.Errorf("multiplex: marshal tools/call forward params: %w", err)
 	}
-	telemetry.RecordInternalPhase(ctx, "tools/call", defaults.MetricInternalPhaseMux, time.Since(muxStart))
+	telemetry.RecordInternalPhase(ctx, mcpwire.MethodToolsCall, defaults.MetricInternalPhaseMux, time.Since(muxStart))
 	callCtx, cancel := context.WithTimeout(ctx, a.callTimeout)
 	defer cancel()
 	release, err := a.acquireGlobalCallSlot(callCtx)
@@ -213,11 +214,11 @@ func (a *Multiplexer) invokeUpstreamToolsCall(ctx context.Context, hostID json.R
 	defer bspan.End()
 	bspan.SetAttributes(
 		attribute.String(telemetry.AttrMCPBackendID, b.ID()),
-		attribute.String(telemetry.AttrMCPMethod, "tools/call"),
+		attribute.String(telemetry.AttrMCPMethod, mcpwire.MethodToolsCall),
 	)
 	req := &rpc.Request{
 		JSONRPC: rpc.JSONRPCVersion,
-		Method:  "tools/call",
+		Method:  mcpwire.MethodToolsCall,
 		ID:      hostID,
 		Params:  forwardParams,
 	}

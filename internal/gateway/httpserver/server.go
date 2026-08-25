@@ -18,7 +18,6 @@ import (
 
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
-	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/session"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
@@ -59,7 +58,7 @@ func WithShutdownContext(ctx context.Context) Option {
 	}
 }
 
-func WithSSEHeartbeatInterval(d time.Duration) Option {
+func withSSEHeartbeatInterval(d time.Duration) Option {
 	return func(s *Server) {
 		s.sseHeartbeat = d
 	}
@@ -71,9 +70,9 @@ func WithReadinessChecker(checker ReadinessChecker) Option {
 	}
 }
 
-func New(mpx *multiplex.Multiplexer, addr string, opts ...Option) *Server {
+func New(lifecycle context.Context, mpx session.Multiplexer, addr string, opts ...Option) *Server {
 	s := &Server{
-		sessions: session.NewSessionManager(mpx),
+		sessions: session.NewSessionManager(lifecycle, mpx),
 		mux:      http.NewServeMux(),
 		addr:     addr,
 	}

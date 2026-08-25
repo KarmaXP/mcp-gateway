@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
 	"log/slog"
 	"strings"
 	"sync"
@@ -17,7 +18,6 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
-	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
 )
@@ -35,10 +35,21 @@ type broadcastTask struct {
 	req  *rpc.Request
 }
 
+type Multiplexer interface {
+	Initialize(ctx context.Context, hostID json.RawMessage) (*rpc.Response, error)
+	NotifyHostInitialized(ctx context.Context)
+	ToolsList(ctx context.Context, hostID json.RawMessage) (*rpc.Response, error)
+	ToolsCall(ctx context.Context, hostID json.RawMessage, params json.RawMessage) (*rpc.Response, error)
+	ResourcesList(ctx context.Context, hostID json.RawMessage) (*rpc.Response, error)
+	ResourcesRead(ctx context.Context, hostID json.RawMessage, params json.RawMessage) (*rpc.Response, error)
+	PromptsList(ctx context.Context, hostID json.RawMessage) (*rpc.Response, error)
+	PromptsGet(ctx context.Context, hostID json.RawMessage, params json.RawMessage) (*rpc.Response, error)
+}
+
 type SessionManager struct {
 	mu          sync.RWMutex
 	sessions    map[string]*Session
-	multiplexer *multiplex.Multiplexer
+	multiplexer Multiplexer
 	middlewares []Middleware
 
 	broadcastOnce         sync.Once
@@ -48,13 +59,16 @@ type SessionManager struct {
 	broadcastTasksDropped atomic.Uint64
 }
 
-func NewSessionManager(mpx *multiplex.Multiplexer, mws ...Middleware) *SessionManager {
+func NewSessionManager(lifecycle context.Context, mpx Multiplexer, mws ...Middleware) *SessionManager {
+	if lifecycle == nil {
+		lifecycle = context.Background()
+	}
 	sm := &SessionManager{
 		sessions:    make(map[string]*Session),
 		multiplexer: mpx,
 		middlewares: append([]Middleware(nil), mws...),
 	}
-	sm.startBroadcastWorkers()
+	sm.startBroadcastWorkers(lifecycle)
 	return sm
 }
 
@@ -86,17 +100,23 @@ func (sm *SessionManager) Remove(id string) {
 	sm.mu.Unlock()
 }
 
-func (sm *SessionManager) startBroadcastWorkers() {
+func (sm *SessionManager) startBroadcastWorkers(lifecycle context.Context) {
 	sm.broadcastOnce.Do(func() {
 		sm.broadcastTasks = make(chan broadcastTask, defaults.SessionBroadcastWorkQueueSize)
-		for i := 0; i < defaults.SessionBroadcastMaxConcurrency; i++ {
-			go sm.broadcastWorker()
+		for range defaults.SessionBroadcastMaxConcurrency {
+			go sm.broadcastWorker(lifecycle)
 		}
 	})
 }
 
-func (sm *SessionManager) broadcastWorker() {
-	for task := range sm.broadcastTasks {
+func (sm *SessionManager) broadcastWorker(lifecycle context.Context) {
+	for {
+		var task broadcastTask
+		select {
+		case <-lifecycle.Done():
+			return
+		case task = <-sm.broadcastTasks:
+		}
 		cur := sm.broadcastInflight.Add(1)
 		for {
 			peak := sm.broadcastPeak.Load()
@@ -107,7 +127,7 @@ func (sm *SessionManager) broadcastWorker() {
 				break
 			}
 		}
-		_ = task.sess.EnqueueNotification(task.req)
+		_ = task.sess.enqueueNotification(task.req)
 		sm.broadcastInflight.Add(-1)
 	}
 }
@@ -116,7 +136,6 @@ func (sm *SessionManager) BroadcastNotification(req *rpc.Request) {
 	if req == nil {
 		return
 	}
-	sm.startBroadcastWorkers()
 	sm.mu.RLock()
 	sessions := make([]*Session, 0, len(sm.sessions))
 	for _, s := range sm.sessions {
@@ -160,7 +179,7 @@ type Session struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 
-	multiplexer *multiplex.Multiplexer
+	multiplexer Multiplexer
 
 	middlewares []Middleware
 
@@ -177,7 +196,7 @@ type Session struct {
 	droppedOutbound atomic.Uint64
 }
 
-func NewSession(parent context.Context, id string, mpx *multiplex.Multiplexer, mws []Middleware) *Session {
+func NewSession(parent context.Context, id string, mpx Multiplexer, mws []Middleware) *Session {
 	ctx, cancel := context.WithCancel(parent)
 	return &Session{
 		id:          id,
@@ -249,7 +268,7 @@ func (s *Session) enqueueOutbound(payload []byte) error {
 	}
 }
 
-func (s *Session) EnqueueResponse(resp *rpc.Response) error {
+func (s *Session) enqueueResponse(resp *rpc.Response) error {
 	b, err := resp.Marshal()
 	if err != nil {
 		return fmt.Errorf("session: marshal response: %w", err)
@@ -322,7 +341,7 @@ func (s *Session) forceEnqueueOutbound(payload []byte) bool {
 	}
 }
 
-func (s *Session) EnqueueNotification(req *rpc.Request) error {
+func (s *Session) enqueueNotification(req *rpc.Request) error {
 	if req == nil {
 		return nil
 	}
@@ -369,21 +388,21 @@ func (s *Session) Dispatch(reqCtx context.Context, req *rpc.Request) error {
 	}
 
 	switch req.Method {
-	case "initialize":
+	case mcpwire.MethodInitialize:
 		return s.handleInitialize(ctx, req)
 	case "ping":
 		return s.handlePing(ctx, req)
-	case "tools/list":
+	case mcpwire.MethodToolsList:
 		return s.handleToolsList(ctx, req)
-	case "tools/call":
+	case mcpwire.MethodToolsCall:
 		return s.handleToolsCall(ctx, req)
-	case "resources/list":
+	case mcpwire.MethodResourcesList:
 		return s.handleResourcesList(ctx, req)
-	case "resources/read":
+	case mcpwire.MethodResourcesRead:
 		return s.handleResourcesRead(ctx, req)
-	case "prompts/list":
+	case mcpwire.MethodPromptsList:
 		return s.handlePromptsList(ctx, req)
-	case "prompts/get":
+	case mcpwire.MethodPromptsGet:
 		return s.handlePromptsGet(ctx, req)
 	default:
 		return s.enqueueDispatchResponse(rpc.NewError(req.ID, errcodes.MethodNotFound, fmt.Sprintf("method not found: %s", req.Method), nil))
@@ -438,7 +457,7 @@ func (s *Session) handleNotification(ctx context.Context, req *rpc.Request) erro
 }
 
 func (s *Session) handleInitialize(ctx context.Context, req *rpc.Request) error {
-	ctx = multiplex.WithHostInitializeParams(ctx, req.Params)
+	ctx = hostctx.WithHostInitializeParams(ctx, req.Params)
 	resp, err := s.multiplexer.Initialize(ctx, req.ID)
 	if err != nil {
 		return s.enqueueDispatchResponse(rpc.NewError(req.ID, errcodes.GatewayInternal, "initialize failed", nil))

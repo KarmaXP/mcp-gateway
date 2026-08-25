@@ -60,7 +60,7 @@ func Split(namespaced string) (prefix, native string, err error) {
 	return prefix, native, nil
 }
 
-func ResolveBackend(prefixToBackend map[string]string, namespaced string) (backendID, nativeName string, err error) {
+func resolveBackend(prefixToBackend map[string]string, namespaced string) (backendID, nativeName string, err error) {
 	prefix, native, err := Split(namespaced)
 	if err != nil {
 		return "", "", err

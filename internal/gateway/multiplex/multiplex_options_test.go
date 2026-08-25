@@ -21,7 +21,7 @@ func TestMultiplexerPrefixMapAndTimeoutOptions(t *testing.T) {
 		WithListTTL(0),
 	)
 	require.NoError(t, err)
-	m := a.PrefixToUpstreamID()
+	m := a.prefixToUpstreamID()
 	require.Equal(t, "id1", m["alpha"])
 	require.Equal(t, "id2", m["beta"])
 }

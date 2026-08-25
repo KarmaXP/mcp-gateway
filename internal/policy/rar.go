@@ -57,7 +57,7 @@ func ValidateToolPattern(pattern string) error {
 	return nil
 }
 
-func MatchTool(namespacedTool, entry string) (bool, error) {
+func matchTool(namespacedTool, entry string) (bool, error) {
 	if namespacedTool == "" || entry == "" {
 		return false, nil
 	}
@@ -99,7 +99,7 @@ func matchToolPattern(name, pattern string) bool {
 
 func anyEntryMatchesTool(tool string, entries []string) (bool, error) {
 	for _, e := range entries {
-		ok, err := MatchTool(tool, e)
+		ok, err := matchTool(tool, e)
 		if err != nil {
 			return false, err
 		}

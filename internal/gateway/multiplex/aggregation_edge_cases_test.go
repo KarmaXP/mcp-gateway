@@ -107,7 +107,7 @@ func TestHandleToolsListChangedRespectsCanceledLifecycleContext(t *testing.T) {
 	mpx, err := New(lifecycle, []backend.Upstream{up},
 		WithListTTL(0),
 		WithSemanticRouter(sr),
-		WithToolsListChangedDebounce(0),
+		withToolsListChangedDebounce(0),
 		WithListTimeout(2*time.Second),
 	)
 	require.NoError(t, err)

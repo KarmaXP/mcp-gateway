@@ -79,7 +79,7 @@ func TestHandleToolsListChangedDebouncesUpstreamRefresh(t *testing.T) {
 		[]backend.Upstream{up},
 		WithListTTL(time.Minute),
 		WithSemanticRouter(sr),
-		WithToolsListChangedDebounce(80*time.Millisecond),
+		withToolsListChangedDebounce(80*time.Millisecond),
 	)
 	require.NoError(t, err)
 
@@ -110,7 +110,7 @@ func TestHandleToolsListChangedTimesOutOnStrictUpstreamFailure(t *testing.T) {
 		WithSemanticRouter(sr),
 		WithListTimeout(20*time.Millisecond),
 		WithAggregationStrict(false, true),
-		WithToolsListChangedDebounce(0),
+		withToolsListChangedDebounce(0),
 	)
 	require.NoError(t, err)
 

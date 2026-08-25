@@ -39,7 +39,7 @@ func TestNewSyslogAuditSink_InvalidAddress(t *testing.T) {
 
 func TestSyslogAuditSink_EmitWritesExpectedFields(t *testing.T) {
 	fw := &fakeSyslogWriter{}
-	sink := &SyslogAuditSink{writer: fw}
+	sink := &syslogAuditSink{writer: fw}
 
 	rec := AuditRecord{
 		Outcome:       "allow",
@@ -63,7 +63,7 @@ func TestSyslogAuditSink_EmitWritesExpectedFields(t *testing.T) {
 
 func TestSyslogAuditSink_EmitPropagatesWriterError(t *testing.T) {
 	fw := &fakeSyslogWriter{writeErr: errors.New("boom")}
-	sink := &SyslogAuditSink{writer: fw}
+	sink := &syslogAuditSink{writer: fw}
 	err := sink.Emit(context.Background(), AuditRecord{
 		Outcome: "deny",
 		Reason:  "not_in_allow_list",
@@ -74,7 +74,7 @@ func TestSyslogAuditSink_EmitPropagatesWriterError(t *testing.T) {
 
 func TestSyslogAuditSink_CloseDelegatesWriter(t *testing.T) {
 	fw := &fakeSyslogWriter{}
-	sink := &SyslogAuditSink{writer: fw}
+	sink := &syslogAuditSink{writer: fw}
 	require.NoError(t, sink.Close())
 	require.True(t, fw.closed)
 }

@@ -5,12 +5,14 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
 	"log/slog"
 	"sort"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
@@ -26,7 +28,7 @@ func (a *Multiplexer) ToolsList(ctx context.Context, hostID json.RawMessage) (*r
 	tctx, span := telemetry.StartSpan(ctx, telemetry.SpanMultiplexToolsList)
 	defer span.End()
 	span.SetAttributes(
-		attribute.String(telemetry.AttrMCPMethod, "tools/list"),
+		attribute.String(telemetry.AttrMCPMethod, mcpwire.MethodToolsList),
 		telemetry.AttrJSONRPCID(hostID),
 	)
 
@@ -36,15 +38,7 @@ func (a *Multiplexer) ToolsList(ctx context.Context, hostID json.RawMessage) (*r
 		return resp, nil
 	}
 	if allowMode == hostctx.AllowListDenyAll {
-		muxStart := time.Now()
-		toReturn, err := a.toolsListPayloadForClient(nil, allowMode, allowed, nil)
-		telemetry.RecordInternalPhase(tctx, "tools/list", defaults.MetricInternalPhaseMux, time.Since(muxStart))
-		if err != nil {
-			span.SetStatus(codes.Error, "tools/list policy")
-			return rpc.NewError(hostID, errcodes.GatewayInternal, "tools/list policy failed", nil), nil
-		}
-		span.SetStatus(codes.Ok, "")
-		return rpc.NewResult(hostID, toReturn), nil
+		return a.respondWithToolsList(tctx, hostID, nil, allowMode, allowed, nil), nil
 	}
 
 	merged, listFailures, err := a.fetchAndMergeUpstreamTools(tctx)
@@ -52,7 +46,6 @@ func (a *Multiplexer) ToolsList(ctx context.Context, hostID json.RawMessage) (*r
 		span.SetStatus(codes.Error, "tools/list upstream strict")
 		return rpc.NewError(hostID, errcodes.StrictAggregationFailed, "tools/list: strict aggregation: one or more upstreams failed", nil), nil
 	}
-
 	a.replaceToolSchemasFromMerged(merged)
 
 	outFull, err := json.Marshal(map[string]any{"tools": merged})
@@ -60,41 +53,50 @@ func (a *Multiplexer) ToolsList(ctx context.Context, hostID json.RawMessage) (*r
 		span.SetStatus(codes.Error, "marshal tools/list")
 		return nil, fmt.Errorf("multiplex: marshal tools/list: %w", err)
 	}
-
 	a.storeFullToolsListCache(outFull, allowMode)
 	a.maybeReindexSemanticCatalog(tctx, merged, outFull)
 
-	mergedForList := merged
-	if a.semantic != nil && a.semantic.FilterListActive() {
-		if intent := hostctx.ClientIntentFromContext(tctx); intent != "" {
-			ver := a.catalogVersion.load()
-			sig := router.RoutingSignal{
-				Method:         "tools/list",
-				IntentText:     intent,
-				AllowedTools:   allowed,
-				AllowListAuthz: routerAllowListAuthz(allowMode),
-				CatalogVersion: ver,
-			}
-			rctx, sp := telemetry.StartSpan(tctx, telemetry.SpanSemanticRouter)
-			routeStart := time.Now()
-			keep, useFull := a.semantic.FilterToolsForList(rctx, sig)
-			telemetry.RecordInternalPhase(rctx, "tools/list", defaults.MetricInternalPhaseRouter, time.Since(routeStart))
-			sp.End()
-			if !useFull && len(keep) > 0 {
-				mergedForList = filterMergedByToolNames(merged, keep)
-			}
-		}
-	}
+	forClient := a.narrowToolsForIntent(tctx, merged, allowMode, allowed)
+	return a.respondWithToolsList(tctx, hostID, forClient, allowMode, allowed, listFailures), nil
+}
 
+func (a *Multiplexer) narrowToolsForIntent(ctx context.Context, merged []map[string]any, allowMode hostctx.AllowListMode, allowed []string) []map[string]any {
+	if a.semantic == nil || !a.semantic.FilterListActive() {
+		return merged
+	}
+	intent := hostctx.ClientIntentFromContext(ctx)
+	if intent == "" {
+		return merged
+	}
+	sig := router.RoutingSignal{
+		Method:         mcpwire.MethodToolsList,
+		IntentText:     intent,
+		AllowedTools:   allowed,
+		AllowListAuthz: routerAllowListAuthz(allowMode),
+		CatalogVersion: a.catalogVersion.load(),
+	}
+	rctx, sp := telemetry.StartSpan(ctx, telemetry.SpanSemanticRouter)
+	defer sp.End()
+	routeStart := time.Now()
+	keep, useFull := a.semantic.FilterToolsForList(rctx, sig)
+	telemetry.RecordInternalPhase(rctx, mcpwire.MethodToolsList, defaults.MetricInternalPhaseRouter, time.Since(routeStart))
+	if useFull || len(keep) == 0 {
+		return merged
+	}
+	return filterMergedByToolNames(merged, keep)
+}
+
+func (a *Multiplexer) respondWithToolsList(ctx context.Context, hostID json.RawMessage, merged []map[string]any, allowMode hostctx.AllowListMode, allowed []string, failures []PartialFailure) *rpc.Response {
+	span := trace.SpanFromContext(ctx)
 	muxStart := time.Now()
-	toReturn, err := a.toolsListPayloadForClient(mergedForList, allowMode, allowed, listFailures)
-	telemetry.RecordInternalPhase(tctx, "tools/list", defaults.MetricInternalPhaseMux, time.Since(muxStart))
+	payload, err := a.toolsListPayloadForClient(merged, allowMode, allowed, failures)
+	telemetry.RecordInternalPhase(ctx, mcpwire.MethodToolsList, defaults.MetricInternalPhaseMux, time.Since(muxStart))
 	if err != nil {
 		span.SetStatus(codes.Error, "tools/list policy")
-		return rpc.NewError(hostID, errcodes.GatewayInternal, "tools/list policy failed", nil), nil
+		return rpc.NewError(hostID, errcodes.GatewayInternal, "tools/list policy failed", nil)
 	}
 	span.SetStatus(codes.Ok, "")
-	return rpc.NewResult(hostID, toReturn), nil
+	return rpc.NewResult(hostID, payload)
 }
 
 func (a *Multiplexer) tryCachedToolsList(ctx context.Context, hostID json.RawMessage, mode hostctx.AllowListMode) (*rpc.Response, bool) {
@@ -113,7 +115,7 @@ func (a *Multiplexer) tryCachedToolsList(ctx context.Context, hostID json.RawMes
 }
 
 func (a *Multiplexer) fetchAndMergeUpstreamTools(ctx context.Context) ([]map[string]any, []PartialFailure, error) {
-	perUpstream, failures, anyFail := a.fanoutListMethod(ctx, "tools/list", a.callUpstreamToolsList)
+	perUpstream, failures, anyFail := a.fanoutListMethod(ctx, mcpwire.MethodToolsList, a.callUpstreamToolsList)
 	if a.strictList && anyFail {
 		return nil, nil, fmt.Errorf("tools/list: upstream failure")
 	}
@@ -130,7 +132,7 @@ func (a *Multiplexer) callUpstreamToolsList(ctx context.Context, b backend.Upstr
 	}
 	defer release()
 	subID := json.RawMessage(fmt.Sprintf(`"gw-list-%s"`, b.ID()))
-	req := &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: "tools/list", ID: subID, Params: nil}
+	req := &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: mcpwire.MethodToolsList, ID: subID, Params: nil}
 	resp, err := b.Call(callCtx, req)
 	if err != nil {
 		slog.Warn("tools/list backend failed", "backend_id", b.ID(), "err", err)

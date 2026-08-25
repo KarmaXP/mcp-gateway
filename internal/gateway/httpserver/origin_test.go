@@ -22,7 +22,7 @@ func newOriginTestServer(t *testing.T, origins []string) *httptest.Server {
 	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
-	srv := New(agg, "", WithOriginAllowList(origins))
+	srv := New(context.Background(), agg, "", WithOriginAllowList(origins))
 	return httptest.NewServer(srv)
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
 	"log/slog"
 	"sort"
 	"sync"
@@ -23,7 +24,7 @@ import (
 func (a *Multiplexer) ResourcesList(ctx context.Context, hostID json.RawMessage) (*rpc.Response, error) {
 	return a.aggregatedList(ctx, hostID, aggregatedListSpec{
 		span:      telemetry.SpanMultiplexResourcesList,
-		method:    "resources/list",
+		method:    mcpwire.MethodResourcesList,
 		arrayKey:  "resources",
 		fetchEach: a.listResourcesFromEachUpstream,
 		merge:     mergeNamespacedResources,
@@ -33,7 +34,7 @@ func (a *Multiplexer) ResourcesList(ctx context.Context, hostID json.RawMessage)
 func (a *Multiplexer) PromptsList(ctx context.Context, hostID json.RawMessage) (*rpc.Response, error) {
 	return a.aggregatedList(ctx, hostID, aggregatedListSpec{
 		span:      telemetry.SpanMultiplexPromptsList,
-		method:    "prompts/list",
+		method:    mcpwire.MethodPromptsList,
 		arrayKey:  "prompts",
 		fetchEach: a.listPromptsFromEachUpstream,
 		merge:     mergeNamespacedPrompts,
@@ -77,7 +78,7 @@ func (a *Multiplexer) ResourcesRead(ctx context.Context, hostID json.RawMessage,
 	tctx, span := telemetry.StartSpan(ctx, telemetry.SpanMultiplexResourcesRead)
 	defer span.End()
 	span.SetAttributes(
-		attribute.String(telemetry.AttrMCPMethod, "resources/read"),
+		attribute.String(telemetry.AttrMCPMethod, mcpwire.MethodResourcesRead),
 		telemetry.AttrJSONRPCID(hostID),
 	)
 	namespacedURI, errResp := parseResourcesReadURI(hostID, params)
@@ -96,14 +97,14 @@ func (a *Multiplexer) ResourcesRead(ctx context.Context, hostID json.RawMessage,
 	if err != nil {
 		return nil, fmt.Errorf("multiplex: marshal resources/read: %w", err)
 	}
-	return a.invokeUpstreamGeneric(tctx, hostID, b, "resources/read", forward, span)
+	return a.invokeUpstreamGeneric(tctx, hostID, b, mcpwire.MethodResourcesRead, forward, span)
 }
 
 func (a *Multiplexer) PromptsGet(ctx context.Context, hostID json.RawMessage, params json.RawMessage) (*rpc.Response, error) {
 	tctx, span := telemetry.StartSpan(ctx, telemetry.SpanMultiplexPromptsGet)
 	defer span.End()
 	span.SetAttributes(
-		attribute.String(telemetry.AttrMCPMethod, "prompts/get"),
+		attribute.String(telemetry.AttrMCPMethod, mcpwire.MethodPromptsGet),
 		telemetry.AttrJSONRPCID(hostID),
 	)
 	namespacedName, args, errResp := parsePromptsGetParams(hostID, params)
@@ -126,7 +127,7 @@ func (a *Multiplexer) PromptsGet(ctx context.Context, hostID json.RawMessage, pa
 	if err != nil {
 		return nil, fmt.Errorf("multiplex: marshal prompts/get: %w", err)
 	}
-	return a.invokeUpstreamGeneric(tctx, hostID, b, "prompts/get", forward, span)
+	return a.invokeUpstreamGeneric(tctx, hostID, b, mcpwire.MethodPromptsGet, forward, span)
 }
 
 func (a *Multiplexer) invokeUpstreamGeneric(ctx context.Context, hostID json.RawMessage, b backendCaller, method string, params json.RawMessage, muxSpan trace.Span) (*rpc.Response, error) {
@@ -194,7 +195,7 @@ func parsePromptsGetParams(hostID, params json.RawMessage) (namespacedName strin
 }
 
 func (a *Multiplexer) listResourcesFromEachUpstream(ctx context.Context) ([][]map[string]any, []PartialFailure, bool) {
-	return a.fanoutListMethod(ctx, "resources/list", a.callUpstreamResourcesList)
+	return a.fanoutListMethod(ctx, mcpwire.MethodResourcesList, a.callUpstreamResourcesList)
 }
 
 func (a *Multiplexer) callUpstreamResourcesList(ctx context.Context, b backend.Upstream) ([]map[string]any, *PartialFailure) {
@@ -207,7 +208,7 @@ func (a *Multiplexer) callUpstreamResourcesList(ctx context.Context, b backend.U
 	}
 	defer release()
 	subID := json.RawMessage(fmt.Sprintf(`"gw-reslist-%s"`, b.ID()))
-	req := &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: "resources/list", ID: subID, Params: nil}
+	req := &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: mcpwire.MethodResourcesList, ID: subID, Params: nil}
 	resp, err := b.Call(callCtx, req)
 	if err != nil {
 		slog.Warn("resources/list backend failed", "backend_id", b.ID(), "err", err)
@@ -235,7 +236,7 @@ func (a *Multiplexer) callUpstreamResourcesList(ctx context.Context, b backend.U
 }
 
 func (a *Multiplexer) listPromptsFromEachUpstream(ctx context.Context) ([][]map[string]any, []PartialFailure, bool) {
-	return a.fanoutListMethod(ctx, "prompts/list", a.callUpstreamPromptsList)
+	return a.fanoutListMethod(ctx, mcpwire.MethodPromptsList, a.callUpstreamPromptsList)
 }
 
 func (a *Multiplexer) callUpstreamPromptsList(ctx context.Context, b backend.Upstream) ([]map[string]any, *PartialFailure) {
@@ -248,7 +249,7 @@ func (a *Multiplexer) callUpstreamPromptsList(ctx context.Context, b backend.Ups
 	}
 	defer release()
 	subID := json.RawMessage(fmt.Sprintf(`"gw-prlist-%s"`, b.ID()))
-	req := &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: "prompts/list", ID: subID, Params: nil}
+	req := &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: mcpwire.MethodPromptsList, ID: subID, Params: nil}
 	resp, err := b.Call(callCtx, req)
 	if err != nil {
 		slog.Warn("prompts/list backend failed", "backend_id", b.ID(), "err", err)
