@@ -17,9 +17,7 @@ func TestSemanticRoutingSignalIncludesIntentAndCatalogVersion(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "p", []string{"echo"})
 	a, err := New([]backend.Upstream{b1})
 	require.NoError(t, err)
-	a.catMu.Lock()
-	a.catVer = "catalog-ver-xyz"
-	a.catMu.Unlock()
+	a.catalogVersion.version = "catalog-ver-xyz"
 
 	ctx := hostctx.WithClientIntent(context.Background(), "operator wants pod logs")
 	ctx = hostctx.WithAllowedToolNames(ctx, []string{"p__echo", "other__tool"})

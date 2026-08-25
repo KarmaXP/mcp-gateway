@@ -27,15 +27,11 @@ func TestInvalidateToolCachePreservesCatalogVersion(t *testing.T) {
 	_, err = a.ToolsList(context.Background(), json.RawMessage(`1`))
 	require.NoError(t, err)
 
-	a.catMu.RLock()
-	ver := a.catVer
-	a.catMu.RUnlock()
+	ver := a.catalogVersion.load()
 	require.NotEmpty(t, ver)
 	require.Equal(t, ver, sr.CatalogVersion())
 
 	a.InvalidateToolCache()
 
-	a.catMu.RLock()
-	defer a.catMu.RUnlock()
-	require.Equal(t, ver, a.catVer, "invalidate must keep catalog version until reindex succeeds")
+	require.Equal(t, ver, a.catalogVersion.load(), "invalidate must keep catalog version until reindex succeeds")
 }

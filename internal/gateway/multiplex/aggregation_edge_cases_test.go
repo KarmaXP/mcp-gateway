@@ -11,6 +11,9 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
+	"github.com/KarmaXP/mcp-gateway/internal/router"
+	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
+	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
 
@@ -79,11 +82,35 @@ func TestInvokeUpstreamGenericNilResponse(t *testing.T) {
 	require.Equal(t, errcodes.GatewayInternal, resp.Error.Code)
 }
 
+type contextAwareUpstream struct {
+	inner *dynamicToolsUpstream
+}
+
+func (u *contextAwareUpstream) ID() string     { return u.inner.ID() }
+func (u *contextAwareUpstream) Prefix() string { return u.inner.Prefix() }
+
+func (u *contextAwareUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return u.inner.Call(ctx, req)
+}
+
 func TestHandleToolsListChangedRespectsCanceledLifecycleContext(t *testing.T) {
-	b := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
+	up := &contextAwareUpstream{inner: newDynamicToolsUpstream("b1", "alpha", []string{"echo"})}
+	rcfg := router.DefaultSemanticRouterRuntimeConfig()
+	rcfg.Mode = mode.AssistList
+	sr := router.NewSemanticRouter(rcfg, &countingEmbed{dim: 4}, store.NewInMemoryVectorStore(4), 4)
+
 	lifecycle, cancel := context.WithCancel(context.Background())
 	cancel()
-	mpx, err := New([]backend.Upstream{b}, WithListTTL(0), WithLifecycleContext(lifecycle), WithListTimeout(2*time.Second))
+	mpx, err := New([]backend.Upstream{up},
+		WithListTTL(0),
+		WithSemanticRouter(sr),
+		WithToolsListChangedDebounce(0),
+		WithLifecycleContext(lifecycle),
+		WithListTimeout(2*time.Second),
+	)
 	require.NoError(t, err)
 
 	done := make(chan struct{})
@@ -96,4 +123,6 @@ func TestHandleToolsListChangedRespectsCanceledLifecycleContext(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("HandleToolsListChanged blocked after lifecycle cancel")
 	}
+	require.Zero(t, up.inner.calls.Load(),
+		"the refresh runs on the lifecycle context, so a canceled one must stop it before it reaches an upstream")
 }
