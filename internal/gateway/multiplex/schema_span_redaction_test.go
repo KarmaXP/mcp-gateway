@@ -49,7 +49,7 @@ func TestToolCallSpansNeverCarryArgumentValues(t *testing.T) {
 				_ = tp.Shutdown(context.Background())
 			})
 
-			a, err := New([]backend.Upstream{b1}, WithListTTL(0))
+			a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0))
 			require.NoError(t, err)
 			_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 			_, _ = a.ToolsList(context.Background(), json.RawMessage(`2`))

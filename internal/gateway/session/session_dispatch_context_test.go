@@ -63,7 +63,7 @@ func TestSessionDispatchMergesPOSTIntentForToolsListFilter(t *testing.T) {
 	cfg.QueryTimeout = 5 * time.Second
 	sr := router.NewSemanticRouter(cfg, base, st, 4)
 
-	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0), multiplex.WithSemanticRouter(sr))
+	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0), multiplex.WithSemanticRouter(sr))
 	require.NoError(t, err)
 
 	s := NewSession(context.Background(), "test-session", agg, nil)
@@ -117,7 +117,7 @@ func TestSessionSubjectMatchesBoundOwner(t *testing.T) {
 
 func TestSessionDispatchMergesPOSTAllowListForToolsCall(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo", "list"})
-	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	s := NewSession(context.Background(), "allow-session", agg, nil)
 

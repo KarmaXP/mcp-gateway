@@ -72,7 +72,7 @@ func TestIntegrationJWTPermissionDeniedSkipsBackend(t *testing.T) {
 	token := signTokenClaims(t, priv, claims)
 
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo", "other"})
-	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
 	authCfg := auth.JWTAuthConfig{
@@ -192,7 +192,7 @@ func TestIntegrationJWTEmptyIntersectionDenyAll(t *testing.T) {
 
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo", "other"})
 	b2 := mock.NewMockUpstream("b2", "beta", []string{"other"})
-	agg, err := multiplex.New([]backend.Upstream{b1, b2}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1, b2}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
 	authCfg := auth.JWTAuthConfig{

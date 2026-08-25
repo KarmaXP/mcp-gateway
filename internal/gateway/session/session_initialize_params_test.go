@@ -36,7 +36,7 @@ func (r *initParamsRecorder) Call(ctx context.Context, req *rpc.Request) (*rpc.R
 func TestSessionInitializeForwardsHostParamsToUpstream(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	rec := &initParamsRecorder{inner: inner}
-	mpx, err := multiplex.New([]backend.Upstream{rec}, multiplex.WithListTTL(0))
+	mpx, err := multiplex.New(context.Background(), []backend.Upstream{rec}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
 	s := NewSession(context.Background(), "sess-init-params", mpx, nil)

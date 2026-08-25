@@ -15,7 +15,7 @@ import (
 
 func TestDuplicateInitializedNotificationNotifiesUpstreamOnce(t *testing.T) {
 	rec := newRecordingUpstream(mock.NewMockUpstream("b1", "alpha", []string{"echo"}))
-	mpx, err := multiplex.New([]backend.Upstream{rec}, multiplex.WithListTTL(0))
+	mpx, err := multiplex.New(context.Background(), []backend.Upstream{rec}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	sm := NewSessionManager(mpx)
 	sess, err := sm.Create(context.Background())

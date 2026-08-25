@@ -21,7 +21,7 @@ import (
 
 func TestToolsListEmptyIntersectionReturnsNoTools(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo", "other"})
-	mpx, err := New([]backend.Upstream{b1}, WithListTTL(0))
+	mpx, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0))
 	require.NoError(t, err)
 
 	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{})
@@ -33,7 +33,7 @@ func TestToolsListEmptyIntersectionReturnsNoTools(t *testing.T) {
 
 func TestToolsListDenyAllReturnsEmptyArrayNotNull(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo", "other"})
-	mpx, err := New([]backend.Upstream{b1}, WithListTTL(0))
+	mpx, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0))
 	require.NoError(t, err)
 
 	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{})
@@ -78,7 +78,7 @@ func TestToolsCallDenyAllSkipsSemanticRouter(t *testing.T) {
 	sr := router.NewSemanticRouter(cfg, spy, st, 4)
 
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	mpx, err := New([]backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
+	mpx, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
 	require.NoError(t, err)
 	_, err = mpx.Initialize(context.Background(), json.RawMessage(`0`))
 	require.NoError(t, err)
@@ -98,7 +98,7 @@ func TestToolsCallDenyAllSkipsSemanticRouter(t *testing.T) {
 
 func TestToolsCallEmptyIntersectionPermissionDenied(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	mpx, err := New([]backend.Upstream{b1}, WithListTTL(0))
+	mpx, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0))
 	require.NoError(t, err)
 
 	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{})
@@ -112,7 +112,7 @@ func TestToolsCallEmptyIntersectionPermissionDenied(t *testing.T) {
 func TestToolsListDenyAllSkipsUpstreamFanout(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo", "other"})
 	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
-	mpx, err := New([]backend.Upstream{b1, b2}, WithListTTL(0))
+	mpx, err := New(context.Background(), []backend.Upstream{b1, b2}, WithListTTL(0))
 	require.NoError(t, err)
 
 	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{})
@@ -126,7 +126,7 @@ func TestToolsListDenyAllSkipsUpstreamFanout(t *testing.T) {
 
 func TestToolsListCacheNotUsedForDenyAllPrincipal(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	mpx, err := New([]backend.Upstream{b1}, WithListTTL(time.Minute))
+	mpx, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(time.Minute))
 	require.NoError(t, err)
 
 	openCtx := context.Background()

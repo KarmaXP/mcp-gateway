@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -136,26 +135,16 @@ func WithGlobalMaxInFlight(maxInFlight int) Option {
 }
 
 // WithLifecycleContext bounds background work (e.g. catalog refresh on tools/list_changed).
-func WithLifecycleContext(ctx context.Context) Option {
-	return func(a *Multiplexer) { a.lifecycleCtx = ctx }
-}
 
 // WithToolsListChangedDebounce coalesces upstream list_changed refresh work (0 disables debounce).
 func WithToolsListChangedDebounce(d time.Duration) Option {
 	return func(a *Multiplexer) { a.listChangedDebouncer.delay = d }
 }
 
-func (a *Multiplexer) lifecycleContext(fallback context.Context) context.Context {
-	if a.lifecycleCtx != nil {
-		return a.lifecycleCtx
+func New(lifecycle context.Context, upstreams []backend.Upstream, opts ...Option) (*Multiplexer, error) {
+	if lifecycle == nil {
+		lifecycle = context.Background()
 	}
-	if fallback != nil {
-		return fallback
-	}
-	return context.Background()
-}
-
-func New(upstreams []backend.Upstream, opts ...Option) (*Multiplexer, error) {
 	byPrefix := make(map[string]backend.Upstream, len(upstreams))
 	for _, b := range upstreams {
 		p := b.Prefix()
@@ -168,6 +157,7 @@ func New(upstreams []backend.Upstream, opts ...Option) (*Multiplexer, error) {
 		byPrefix[p] = b
 	}
 	a := &Multiplexer{
+		lifecycleCtx:         lifecycle,
 		upstreams:            append([]backend.Upstream(nil), upstreams...),
 		byPrefix:             byPrefix,
 		initTimeout:          defaults.MultiplexInitTimeout,
@@ -200,6 +190,52 @@ func (a *Multiplexer) PrefixToUpstreamID() map[string]string {
 	return m
 }
 
+func (a *Multiplexer) initializeUpstream(ctx context.Context, index int, b backend.Upstream, outcome *initializeOutcome) {
+	callCtx, cancel := context.WithTimeout(ctx, a.initTimeout)
+	defer cancel()
+	release, err := a.acquireGlobalCallSlot(callCtx)
+	if err != nil {
+		slog.Warn("initialize backend semaphore wait failed", "backend_id", b.ID(), "err", err)
+		outcome.recordFailure(b.ID(), classifyCallFailure(err))
+		return
+	}
+	defer release()
+
+	subID := json.RawMessage(fmt.Sprintf(`"gw-init-%s"`, b.ID()))
+	req := &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: "initialize", ID: subID, Params: upstreamInitParams(ctx)}
+	resp, err := b.Call(callCtx, req)
+	switch {
+	case err != nil:
+		slog.Warn("initialize backend failed", "backend_id", b.ID(), "err", err)
+		outcome.recordFailure(b.ID(), classifyCallFailure(err))
+	case resp == nil:
+		slog.Warn("initialize backend returned nil response", "backend_id", b.ID())
+		outcome.recordFailure(b.ID(), PartialFailureOmitted)
+	case resp.Error != nil:
+		slog.Warn("initialize backend jsonrpc error", "backend_id", b.ID(), "code", resp.Error.Code, "message", resp.Error.Message)
+		outcome.recordFailure(b.ID(), PartialFailureJSONRPC)
+	default:
+		outcome.recordResult(index, resp.Result)
+	}
+}
+
+func (a *Multiplexer) initializeFailures(outcome *initializeOutcome, mergeFailures []PartialFailure) []PartialFailure {
+	return append(append([]PartialFailure(nil), outcome.failures...), mergeFailures...)
+}
+
+func (a *Multiplexer) initializeFailuresOrOmitted(outcome *initializeOutcome, mergeFailures []PartialFailure) []PartialFailure {
+	all := a.initializeFailures(outcome, mergeFailures)
+	if len(all) > 0 {
+		return all
+	}
+	for i, b := range a.upstreams {
+		if len(outcome.results[i]) == 0 {
+			all = append(all, PartialFailure{BackendID: b.ID(), Reason: PartialFailureOmitted})
+		}
+	}
+	return all
+}
+
 func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*rpc.Response, error) {
 	tctx, span := telemetry.StartSpan(ctx, telemetry.SpanMultiplexInit)
 	defer span.End()
@@ -213,77 +249,13 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 		return rpc.NewResult(hostID, cached), nil
 	}
 
-	results := make([]json.RawMessage, len(a.upstreams))
-	var mu sync.Mutex
-	var strictFailed bool
-	var initFailures []PartialFailure
+	outcome := newInitializeOutcome(a.strictInit, len(a.upstreams))
 
 	g, ctx := errgroup.WithContext(tctx)
 	for i, b := range a.upstreams {
 		i, b := i, b
 		g.Go(func() error {
-			callCtx, cancel := context.WithTimeout(ctx, a.initTimeout)
-			defer cancel()
-			release, err := a.acquireGlobalCallSlot(callCtx)
-			if err != nil {
-				slog.Warn("initialize backend semaphore wait failed", "backend_id", b.ID(), "err", err)
-				if a.strictInit {
-					mu.Lock()
-					strictFailed = true
-					mu.Unlock()
-				} else {
-					mu.Lock()
-					initFailures = append(initFailures, PartialFailure{BackendID: b.ID(), Reason: classifyCallFailure(err)})
-					mu.Unlock()
-				}
-				return nil
-			}
-			defer release()
-			subID := json.RawMessage(fmt.Sprintf(`"gw-init-%s"`, b.ID()))
-			req := &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: "initialize", ID: subID, Params: upstreamInitParams(ctx)}
-			resp, err := b.Call(callCtx, req)
-			if err != nil {
-				slog.Warn("initialize backend failed", "backend_id", b.ID(), "err", err)
-				if a.strictInit {
-					mu.Lock()
-					strictFailed = true
-					mu.Unlock()
-				} else {
-					mu.Lock()
-					initFailures = append(initFailures, PartialFailure{BackendID: b.ID(), Reason: classifyCallFailure(err)})
-					mu.Unlock()
-				}
-				return nil
-			}
-			if resp == nil {
-				slog.Warn("initialize backend returned nil response", "backend_id", b.ID())
-				if a.strictInit {
-					mu.Lock()
-					strictFailed = true
-					mu.Unlock()
-				} else {
-					mu.Lock()
-					initFailures = append(initFailures, PartialFailure{BackendID: b.ID(), Reason: PartialFailureOmitted})
-					mu.Unlock()
-				}
-				return nil
-			}
-			if resp.Error != nil {
-				slog.Warn("initialize backend jsonrpc error", "backend_id", b.ID(), "code", resp.Error.Code, "message", resp.Error.Message)
-				if a.strictInit {
-					mu.Lock()
-					strictFailed = true
-					mu.Unlock()
-				} else {
-					mu.Lock()
-					initFailures = append(initFailures, PartialFailure{BackendID: b.ID(), Reason: PartialFailureJSONRPC})
-					mu.Unlock()
-				}
-				return nil
-			}
-			mu.Lock()
-			results[i] = append(json.RawMessage(nil), resp.Result...)
-			mu.Unlock()
+			a.initializeUpstream(ctx, i, b, outcome)
 			return nil
 		})
 	}
@@ -292,23 +264,16 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 		return nil, fmt.Errorf("multiplex: initialize upstreams: %w", err)
 	}
 
-	if a.strictInit && strictFailed {
+	if a.strictInit && outcome.strictFailed {
 		span.SetStatus(codes.Error, "strict initialize aggregation")
 		return rpc.NewError(hostID, errcodes.StrictAggregationFailed, "gateway: strict initialize: one or more upstreams failed", nil), nil
 	}
 
-	merged, mergeFailures, err := mergeInitializeResults(results, a.upstreams)
+	merged, mergeFailures, err := mergeInitializeResults(outcome.results, a.upstreams)
 	if err != nil {
 		span.SetStatus(codes.Error, "all upstreams failed initialize")
 		if a.reportPartialFailures {
-			allFailures := append(append([]PartialFailure(nil), initFailures...), mergeFailures...)
-			if len(allFailures) == 0 {
-				for i, b := range a.upstreams {
-					if len(results[i]) == 0 {
-						allFailures = append(allFailures, PartialFailure{BackendID: b.ID(), Reason: PartialFailureOmitted})
-					}
-				}
-			}
+			allFailures := a.initializeFailuresOrOmitted(outcome, mergeFailures)
 			data, merr := json.Marshal(map[string]any{"partial_failures": partialFailuresToMaps(allFailures)})
 			if merr != nil {
 				return nil, fmt.Errorf("multiplex: marshal initialize partial failures: %w", merr)
@@ -318,8 +283,7 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 		return rpc.NewError(hostID, errcodes.GatewayInternal, "gateway: all upstreams failed initialize", nil), nil
 	}
 	if a.reportPartialFailures {
-		allFailures := append(append([]PartialFailure(nil), initFailures...), mergeFailures...)
-		if len(allFailures) > 0 {
+		if allFailures := a.initializeFailures(outcome, mergeFailures); len(allFailures) > 0 {
 			attachInitPartialFailures(merged, allFailures)
 		}
 	}
@@ -328,11 +292,11 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 		span.SetStatus(codes.Error, "marshal initialize")
 		return nil, fmt.Errorf("multiplex: marshal initialize result: %w", err)
 	}
-	everyUpstreamInitialized := len(initFailures) == 0
+	everyUpstreamInitialized := len(outcome.failures) == 0
 	if everyUpstreamInitialized {
 		a.initializeOnce.store(raw)
 	}
-	a.invalidateToolCache()
+	a.invalidateListCache()
 	span.SetStatus(codes.Ok, "")
 	return rpc.NewResult(hostID, raw), nil
 }
@@ -478,13 +442,14 @@ func cloneMap(m map[string]any) map[string]any {
 	return out
 }
 
+// InvalidateToolCache drops the cached tools/list payload. Compiled schemas survive, so
+// argument validation keeps working until the next successful refresh replaces them.
 func (a *Multiplexer) InvalidateToolCache() {
-	a.invalidateToolCache()
+	a.invalidateListCache()
 }
 
-func (a *Multiplexer) invalidateToolCache() {
+func (a *Multiplexer) invalidateListCache() {
 	a.listCache.invalidate()
-	a.schemaRegistry.replace(nil)
 }
 
 func coalesceArgs(a json.RawMessage) json.RawMessage {

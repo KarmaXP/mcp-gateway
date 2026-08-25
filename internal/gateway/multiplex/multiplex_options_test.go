@@ -1,6 +1,7 @@
 package multiplex
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -13,7 +14,7 @@ import (
 func TestMultiplexerPrefixMapAndTimeoutOptions(t *testing.T) {
 	b1 := mock.NewMockUpstream("id1", "alpha", []string{"echo"})
 	b2 := mock.NewMockUpstream("id2", "beta", []string{"ping"})
-	a, err := New([]backend.Upstream{b1, b2},
+	a, err := New(context.Background(), []backend.Upstream{b1, b2},
 		WithInitTimeout(time.Millisecond),
 		WithListTimeout(2*time.Millisecond),
 		WithCallTimeout(3*time.Millisecond),

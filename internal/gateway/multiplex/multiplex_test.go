@@ -56,7 +56,7 @@ func (e *errReplyBackend) Call(ctx context.Context, req *rpc.Request) (*rpc.Resp
 func TestInitializeMergeTwoBackends(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
-	a, err := New([]backend.Upstream{b1, b2}, WithListTTL(0))
+	a, err := New(context.Background(), []backend.Upstream{b1, b2}, WithListTTL(0))
 	require.NoError(t, err)
 
 	resp, err := a.Initialize(context.Background(), json.RawMessage(`1`))
@@ -73,7 +73,7 @@ func TestInitializeMergeTwoBackends(t *testing.T) {
 func TestInitializeOmitsFailedBackend(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
-	a, err := New([]backend.Upstream{
+	a, err := New(context.Background(), []backend.Upstream{
 		b1,
 		&initFailBackend{inner: b2},
 	}, WithListTTL(0))
@@ -94,7 +94,7 @@ func TestInitializeOmitsFailedBackend(t *testing.T) {
 func TestInitializeAllBackendsFail(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
-	a, err := New([]backend.Upstream{
+	a, err := New(context.Background(), []backend.Upstream{
 		&initFailBackend{inner: b1},
 		&initFailBackend{inner: b2},
 	}, WithListTTL(0))
@@ -110,7 +110,7 @@ func TestInitializeAllBackendsFail(t *testing.T) {
 func TestInitializeAllFailReportsPartialFailuresWhenEnabled(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
-	a, err := New([]backend.Upstream{
+	a, err := New(context.Background(), []backend.Upstream{
 		&initFailBackend{inner: b1},
 		&initFailBackend{inner: b2},
 	}, WithListTTL(0), WithReportPartialFailures(true))
@@ -132,7 +132,7 @@ func TestInitializeAllFailReportsPartialFailuresWhenEnabled(t *testing.T) {
 func TestToolsListOmitsFailedBackend(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
-	a, err := New([]backend.Upstream{
+	a, err := New(context.Background(), []backend.Upstream{
 		b1,
 		&listFailBackend{inner: b2},
 	}, WithListTTL(0))
@@ -155,7 +155,7 @@ func TestToolsListOmitsFailedBackend(t *testing.T) {
 func TestToolsListOrderByConfigThenNative(t *testing.T) {
 	z := mock.NewMockUpstream("z", "zebra", []string{"z2", "z1"})
 	ap := mock.NewMockUpstream("a", "apple", []string{"a1"})
-	a, err := New([]backend.Upstream{z, ap}, WithListTTL(0))
+	a, err := New(context.Background(), []backend.Upstream{z, ap}, WithListTTL(0))
 	require.NoError(t, err)
 
 	resp, err := a.ToolsList(context.Background(), json.RawMessage(`2`))
@@ -178,7 +178,7 @@ func TestToolsListOrderByConfigThenNative(t *testing.T) {
 func TestToolsCallStripsPrefixPreservesID(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "p1", []string{"echo"})
 	b2 := mock.NewMockUpstream("b2", "p2", []string{"ping"})
-	a, err := New([]backend.Upstream{b1, b2}, WithListTTL(0))
+	a, err := New(context.Background(), []backend.Upstream{b1, b2}, WithListTTL(0))
 	require.NoError(t, err)
 
 	params := map[string]any{
@@ -199,7 +199,7 @@ func TestToolsCallStripsPrefixPreservesID(t *testing.T) {
 func TestToolsCallForwardsBackendJSONRPCErrorPreservesID(t *testing.T) {
 	good := mock.NewMockUpstream("b1", "p1", []string{"echo"})
 	errBack := &errReplyBackend{inner: mock.NewMockUpstream("b2", "p2", []string{"ping"})}
-	a, err := New([]backend.Upstream{good, errBack}, WithListTTL(0))
+	a, err := New(context.Background(), []backend.Upstream{good, errBack}, WithListTTL(0))
 	require.NoError(t, err)
 
 	params := map[string]any{"name": "p2__ping", "arguments": map[string]any{}}

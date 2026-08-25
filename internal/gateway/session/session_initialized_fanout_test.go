@@ -43,7 +43,7 @@ func (r *sessionRecordingUpstream) Methods() []string {
 
 func TestSessionHostInitializedFansOutToUpstreams(t *testing.T) {
 	rec := newSessionRecordingUpstream(mock.NewMockUpstream("b1", "alpha", []string{"echo"}))
-	agg, err := multiplex.New([]backend.Upstream{rec}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []backend.Upstream{rec}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
 	s := NewSession(context.Background(), "fanout-session", agg, nil)

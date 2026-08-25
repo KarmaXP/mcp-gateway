@@ -23,7 +23,7 @@ func TestToolsCallDeniedWhenNotInRouterAllowlist(t *testing.T) {
 	base.vecs[tRowEcho] = []float32{0, 1, 0, 0}
 
 	sr, _ := routerTestSemanticRouter(t, base, 0.5, false)
-	a, err := New([]backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
+	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
 	require.NoError(t, err)
 	_, err = a.Initialize(context.Background(), json.RawMessage(`1`))
 	require.NoError(t, err)
