@@ -44,7 +44,6 @@ const (
 	uuidVariantNibble = 0x80 // RFC 4122 variant in byte 8 high bits
 )
 
-// pointID returns a stable UUID derived from key (SHA-256) for Qdrant point ids.
 func pointID(key string) string {
 	sum := sha256.Sum256([]byte(key))
 	var b [16]byte

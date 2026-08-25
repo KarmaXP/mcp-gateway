@@ -98,7 +98,7 @@ func WithAuditor(a *policy.Auditor) Option {
 	return func(m *Multiplexer) { m.auditor = a }
 }
 
-func WithPolicyEngine(p *policy.Engine) Option {
+func withPolicyEngine(p *policy.Engine) Option {
 	return func(a *Multiplexer) {
 		if p == nil {
 			a.policyHolder = nil
@@ -134,10 +134,7 @@ func WithGlobalMaxInFlight(maxInFlight int) Option {
 	}
 }
 
-// WithLifecycleContext bounds background work (e.g. catalog refresh on tools/list_changed).
-
-// WithToolsListChangedDebounce coalesces upstream list_changed refresh work (0 disables debounce).
-func WithToolsListChangedDebounce(d time.Duration) Option {
+func withToolsListChangedDebounce(d time.Duration) Option {
 	return func(a *Multiplexer) { a.listChangedDebouncer.delay = d }
 }
 
@@ -182,7 +179,7 @@ func New(lifecycle context.Context, upstreams []backend.Upstream, opts ...Option
 	return a, nil
 }
 
-func (a *Multiplexer) PrefixToUpstreamID() map[string]string {
+func (a *Multiplexer) prefixToUpstreamID() map[string]string {
 	m := make(map[string]string, len(a.upstreams))
 	for _, b := range a.upstreams {
 		m[b.Prefix()] = b.ID()
@@ -202,7 +199,7 @@ func (a *Multiplexer) initializeUpstream(ctx context.Context, index int, b backe
 	defer release()
 
 	subID := json.RawMessage(fmt.Sprintf(`"gw-init-%s"`, b.ID()))
-	req := &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: "initialize", ID: subID, Params: upstreamInitParams(ctx)}
+	req := &rpc.Request{JSONRPC: rpc.JSONRPCVersion, Method: mcpwire.MethodInitialize, ID: subID, Params: upstreamInitParams(ctx)}
 	resp, err := b.Call(callCtx, req)
 	switch {
 	case err != nil:
@@ -240,7 +237,7 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 	tctx, span := telemetry.StartSpan(ctx, telemetry.SpanMultiplexInit)
 	defer span.End()
 	span.SetAttributes(
-		attribute.String(telemetry.AttrMCPMethod, "initialize"),
+		attribute.String(telemetry.AttrMCPMethod, mcpwire.MethodInitialize),
 		telemetry.AttrJSONRPCID(hostID),
 	)
 
@@ -301,31 +298,8 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 	return rpc.NewResult(hostID, raw), nil
 }
 
-type hostInitParamsKey struct{}
-
-func WithHostInitializeParams(ctx context.Context, params json.RawMessage) context.Context {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if len(params) == 0 || string(params) == jsonNullLiteral {
-		return ctx
-	}
-	return context.WithValue(ctx, hostInitParamsKey{}, append(json.RawMessage(nil), params...))
-}
-
-func hostInitializeParamsFromContext(ctx context.Context) json.RawMessage {
-	if ctx == nil {
-		return nil
-	}
-	raw, _ := ctx.Value(hostInitParamsKey{}).(json.RawMessage)
-	if len(raw) == 0 {
-		return nil
-	}
-	return append(json.RawMessage(nil), raw...)
-}
-
 func upstreamInitParams(ctx context.Context) json.RawMessage {
-	host := hostInitializeParamsFromContext(ctx)
+	host := hostctx.HostInitializeParams(ctx)
 	if len(host) == 0 {
 		return hostParams()
 	}
@@ -464,7 +438,7 @@ func (a *Multiplexer) semanticRoutingSignal(ctx context.Context, toolName string
 	allowMode, allowedList := hostctx.AllowListModeFromContext(ctx)
 	return router.RoutingSignal{
 		SessionID:       hostctx.MCPSessionIDFromContext(ctx),
-		Method:          "tools/call",
+		Method:          mcpwire.MethodToolsCall,
 		ToolName:        toolName,
 		ArgumentsJSON:   args,
 		IntentText:      hostctx.ClientIntentFromContext(ctx),

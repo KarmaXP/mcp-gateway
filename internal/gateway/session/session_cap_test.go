@@ -15,7 +15,7 @@ import (
 func TestCreateRefusesBeyondTheConcurrentSessionCap(t *testing.T) {
 	mpx, err := multiplex.New(context.Background(), []backend.Upstream{mock.NewMockUpstream("b1", "alpha", []string{"echo"})}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
-	sm := NewSessionManager(mpx)
+	sm := NewSessionManager(context.Background(), mpx)
 
 	ctx := context.Background()
 	for range defaults.MaxConcurrentSSESessions {

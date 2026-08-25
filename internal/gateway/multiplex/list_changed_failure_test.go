@@ -39,7 +39,7 @@ func newListChangedMultiplexer(t *testing.T, ups ...backend.Upstream) *Multiplex
 	a, err := New(context.Background(), ups,
 		WithListTTL(0),
 		WithSemanticRouter(sr),
-		WithToolsListChangedDebounce(0),
+		withToolsListChangedDebounce(0),
 	)
 	require.NoError(t, err)
 	return a

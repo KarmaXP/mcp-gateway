@@ -24,11 +24,11 @@ func TestSplitRejectDoubleSeparatorInNative(t *testing.T) {
 
 func TestResolveBackendOrder(t *testing.T) {
 	m := map[string]string{"z": "id-z", "a": "id-a"}
-	bid, native, err := ResolveBackend(m, "z__tool")
+	bid, native, err := resolveBackend(m, "z__tool")
 	require.NoError(t, err)
 	require.Equal(t, "id-z", bid)
 	require.Equal(t, "tool", native)
-	_, _, err = ResolveBackend(m, "unknown__x")
+	_, _, err = resolveBackend(m, "unknown__x")
 	require.Error(t, err)
 }
 

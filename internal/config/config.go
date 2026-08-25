@@ -21,20 +21,20 @@ import (
 
 type GatewayConfig struct {
 	Upstreams      []UpstreamDefinition     `yaml:"backends"`
-	Gateway        GatewaySettings          `yaml:"gateway"`
+	Gateway        gatewaySettings          `yaml:"gateway"`
 	SemanticRouter SemanticRouterSettings   `yaml:"router"`
-	Aggregation    AggregationSettings      `yaml:"aggregation"`
+	Aggregation    aggregationSettings      `yaml:"aggregation"`
 	RateLimitCfg   RateLimitSettings        `yaml:"rate_limit"`
 	Policy         PolicySettings           `yaml:"policy"`
-	Qdrant         QdrantSettings           `yaml:"qdrant"`
-	Embedding      EmbeddingServiceSettings `yaml:"embed"`
+	Qdrant         qdrantSettings           `yaml:"qdrant"`
+	Embedding      embeddingServiceSettings `yaml:"embed"`
 }
 
-type GatewaySettings struct {
+type gatewaySettings struct {
 	AllowedOrigins []string `yaml:"allowed_origins"`
 }
 
-type AggregationSettings struct {
+type aggregationSettings struct {
 	StrictInitialize        bool   `yaml:"strict_initialize"`
 	StrictList              bool   `yaml:"strict_list"`
 	ReportPartialFailures   bool   `yaml:"report_partial_failures"`
@@ -87,20 +87,20 @@ type SemanticRouterSettings struct {
 	EmbedTimeout    string                    `yaml:"embed_timeout"`
 	QueryTimeout    string                    `yaml:"query_timeout"`
 	VectorDim       int                       `yaml:"vector_dim"`
-	Rules           DeterministicRoutingRules `yaml:"rules"`
+	Rules           deterministicRoutingRules `yaml:"rules"`
 }
 
 // Alias map and intent keyword → prefix narrowing before vector search.
-type DeterministicRoutingRules struct {
+type deterministicRoutingRules struct {
 	Aliases      map[string]string `yaml:"aliases"`
 	SiloKeywords map[string]string `yaml:"silo_keywords"`
 }
 
-type QdrantSettings struct {
+type qdrantSettings struct {
 	Collection string `yaml:"collection"`
 }
 
-type EmbeddingServiceSettings struct {
+type embeddingServiceSettings struct {
 	URL string `yaml:"url"`
 }
 
@@ -109,7 +109,7 @@ const (
 	PolicyAuditSinkSyslog = "syslog"
 )
 
-type PolicyAuditSinkConfig struct {
+type policyAuditSinkConfig struct {
 	SinkType      string
 	SyslogNetwork string
 	SyslogAddress string
@@ -201,100 +201,92 @@ func (c *GatewayConfig) Validate() error {
 }
 
 func (c *GatewayConfig) ApplyEnvOverrides() {
+	c.applyGatewayEnv()
+	c.applyRouterEnv()
+	c.applyPolicyEnv()
+	c.applyAggregationEnv()
+	c.applyRateLimitEnv()
+}
+
+func (c *GatewayConfig) applyGatewayEnv() {
 	if raw, ok := os.LookupEnv("GATEWAY_ALLOWED_ORIGINS"); ok {
 		c.Gateway.AllowedOrigins = parseCommaSeparatedList(raw)
 	}
-
-	if v := strings.TrimSpace(os.Getenv("EMBED_URL")); v != "" {
-		c.Embedding.URL = v
-	}
+	envString("EMBED_URL", &c.Embedding.URL)
 	if c.Embedding.URL == "" {
 		c.Embedding.URL = defaults.DefaultEmbedServiceURL
 	}
+	envString("QDRANT_COLLECTION", &c.Qdrant.Collection)
+}
 
+func (c *GatewayConfig) applyRouterEnv() {
 	if v := strings.TrimSpace(os.Getenv("ROUTER_MODE")); v != "" {
-		if mode, ok := mode.Parse(v); ok {
-			c.SemanticRouter.Mode = string(mode)
+		if parsed, ok := mode.Parse(v); ok {
+			c.SemanticRouter.Mode = string(parsed)
 		} else {
 			warnIgnoredEnv("ROUTER_MODE", v)
 		}
 	}
-	if v := os.Getenv("ROUTER_VECTOR_DIM"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n <= 0 {
-			warnIgnoredEnv("ROUTER_VECTOR_DIM", v)
-		} else {
-			c.SemanticRouter.VectorDim = n
-		}
-	}
-	if v := os.Getenv("ROUTER_TOP_K"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 0 {
-			warnIgnoredEnv("ROUTER_TOP_K", v)
-		} else {
-			c.SemanticRouter.TopK = n
-		}
-	}
-	if v := os.Getenv("ROUTER_SCORE_MIN"); v != "" {
-		f, err := strconv.ParseFloat(v, 64)
-		if err != nil {
-			warnIgnoredEnv("ROUTER_SCORE_MIN", v)
-		} else {
-			c.SemanticRouter.ScoreMin = f
-		}
-	}
-	if v := strings.TrimSpace(os.Getenv("ROUTER_HYBRID_ALPHA")); v != "" {
-		f, err := strconv.ParseFloat(v, 64)
-		if err != nil {
-			warnIgnoredEnv("ROUTER_HYBRID_ALPHA", v)
-		} else {
-			c.SemanticRouter.HybridAlpha = f
-		}
-	}
+	envInt("ROUTER_VECTOR_DIM", &c.SemanticRouter.VectorDim, func(n int) bool { return n > 0 })
+	envInt("ROUTER_TOP_K", &c.SemanticRouter.TopK, func(n int) bool { return n >= 0 })
+	envFloat("ROUTER_SCORE_MIN", &c.SemanticRouter.ScoreMin, nil)
+	envFloat("ROUTER_HYBRID_ALPHA", &c.SemanticRouter.HybridAlpha, nil)
 	envBool("ROUTER_ALLOW_AUTO_RENAME", &c.SemanticRouter.AllowAutoRename)
-	if v := strings.TrimSpace(os.Getenv("QDRANT_COLLECTION")); v != "" {
-		c.Qdrant.Collection = v
-	}
-	if v := strings.TrimSpace(os.Getenv("POLICY_VERSION")); v != "" {
-		c.Policy.Version = v
-	}
-	if v := strings.TrimSpace(os.Getenv("POLICY_AUDIT_SINK")); v != "" {
-		c.Policy.AuditSink = v
-	}
-	if v := strings.TrimSpace(os.Getenv("POLICY_AUDIT_SYSLOG_NETWORK")); v != "" {
-		c.Policy.AuditSyslogNetwork = v
-	}
-	if v := strings.TrimSpace(os.Getenv("POLICY_AUDIT_SYSLOG_ADDRESS")); v != "" {
-		c.Policy.AuditSyslogAddress = v
-	}
+}
+
+func (c *GatewayConfig) applyPolicyEnv() {
+	envString("POLICY_VERSION", &c.Policy.Version)
+	envString("POLICY_AUDIT_SINK", &c.Policy.AuditSink)
+	envString("POLICY_AUDIT_SYSLOG_NETWORK", &c.Policy.AuditSyslogNetwork)
+	envString("POLICY_AUDIT_SYSLOG_ADDRESS", &c.Policy.AuditSyslogAddress)
 	envBool("POLICY_ALLOW_ON_EVAL_FAILURE", &c.Policy.AllowOnRARParseFailure)
 	envBoolPointer("POLICY_HARDEN_SCHEMAS", &c.Policy.HardenSchemas)
+}
+
+func (c *GatewayConfig) applyAggregationEnv() {
 	envBool("AGGREGATION_STRICT_INITIALIZE", &c.Aggregation.StrictInitialize)
 	envBool("AGGREGATION_STRICT_LIST", &c.Aggregation.StrictList)
 	envBool("AGGREGATION_FORWARD_TOOLS_LIST_CHANGED", &c.Aggregation.ForwardToolsListChanged)
 	envBool("AGGREGATION_REPORT_PARTIAL_FAILURES", &c.Aggregation.ReportPartialFailures)
-	if v := strings.TrimSpace(os.Getenv("AGGREGATION_MAX_IN_FLIGHT")); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
-			c.Aggregation.MaxInFlight = n
-		}
-	}
+	envInt("AGGREGATION_MAX_IN_FLIGHT", &c.Aggregation.MaxInFlight, func(n int) bool { return n >= 0 })
+}
+
+func (c *GatewayConfig) applyRateLimitEnv() {
 	envBool("RATE_LIMIT_ENABLED", &c.RateLimitCfg.Enabled)
-	if v := strings.TrimSpace(os.Getenv("RATE_LIMIT_RPS")); v != "" {
-		f, err := strconv.ParseFloat(v, 64)
-		if err != nil || f <= 0 {
-			warnIgnoredEnv("RATE_LIMIT_RPS", v)
-		} else {
-			c.RateLimitCfg.RPS = f
-		}
+	envFloat("RATE_LIMIT_RPS", &c.RateLimitCfg.RPS, func(f float64) bool { return f > 0 })
+	envInt("RATE_LIMIT_BURST", &c.RateLimitCfg.Burst, func(n int) bool { return n > 0 })
+}
+
+func envString(key string, target *string) {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		*target = v
 	}
-	if v := strings.TrimSpace(os.Getenv("RATE_LIMIT_BURST")); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n <= 0 {
-			warnIgnoredEnv("RATE_LIMIT_BURST", v)
-		} else {
-			c.RateLimitCfg.Burst = n
-		}
+}
+
+func envInt(key string, target *int, valid func(int) bool) {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return
 	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || (valid != nil && !valid(n)) {
+		warnIgnoredEnv(key, raw)
+		return
+	}
+	*target = n
+}
+
+func envFloat(key string, target *float64, valid func(float64) bool) {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return
+	}
+	f, err := strconv.ParseFloat(raw, 64)
+	if err != nil || (valid != nil && !valid(f)) {
+		warnIgnoredEnv(key, raw)
+		return
+	}
+	*target = f
 }
 
 func warnIgnoredEnv(key, value string) {
@@ -313,8 +305,8 @@ func (c *GatewayConfig) ForwardToolsListChanged() bool {
 	return c != nil && c.Aggregation.ForwardToolsListChanged
 }
 
-func (c *GatewayConfig) ResolvePolicyAuditSink() (PolicyAuditSinkConfig, error) {
-	cfg := PolicyAuditSinkConfig{
+func (c *GatewayConfig) ResolvePolicyAuditSink() (policyAuditSinkConfig, error) {
+	cfg := policyAuditSinkConfig{
 		SinkType:      PolicyAuditSinkSlog,
 		SyslogNetwork: "udp",
 	}

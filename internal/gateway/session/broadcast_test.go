@@ -20,7 +20,7 @@ func TestSessionManagerBroadcastNotification(t *testing.T) {
 	mpx, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
-	sm := NewSessionManager(mpx)
+	sm := NewSessionManager(context.Background(), mpx)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -54,7 +54,7 @@ func TestEnqueueNotificationOmitsID(t *testing.T) {
 	require.NoError(t, err)
 
 	s := NewSession(context.Background(), "s", mpx, nil)
-	require.NoError(t, s.EnqueueNotification(&rpc.Request{
+	require.NoError(t, s.enqueueNotification(&rpc.Request{
 		JSONRPC: rpc.JSONRPCVersion,
 		Method:  mcpwire.LegacyToolsListChanged,
 	}))

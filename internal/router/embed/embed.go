@@ -42,11 +42,6 @@ func NewClient(baseURL string) *Client {
 	}
 }
 
-func (c *Client) WithHTTPClient(h *http.Client) *Client {
-	c.httpClient = h
-	return c
-}
-
 type embedRequest struct {
 	Texts []string `json:"texts"`
 }

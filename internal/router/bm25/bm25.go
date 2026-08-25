@@ -78,7 +78,7 @@ func Score(query, doc string, avgDL float64, docCount int, df map[string]int) fl
 	return sum
 }
 
-func CorpusStats(docs []string) (avgDL float64, docCount int, df map[string]int) {
+func corpusStats(docs []string) (avgDL float64, docCount int, df map[string]int) {
 	docCount = len(docs)
 	if docCount == 0 {
 		return bm25EmptyDocLength, 0, map[string]int{}
@@ -107,7 +107,7 @@ func RerankWeights(query string, docTexts []string, vectorScores []float64, alph
 	if len(docTexts) != len(vectorScores) {
 		return append([]float64(nil), vectorScores...)
 	}
-	avgDL, docCount, df := CorpusStats(docTexts)
+	avgDL, docCount, df := corpusStats(docTexts)
 	raw := make([]float64, len(docTexts))
 	for i, d := range docTexts {
 		raw[i] = Score(query, d, avgDL, docCount, df)

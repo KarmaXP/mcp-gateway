@@ -33,7 +33,7 @@ gateway:
 
 func TestApplyEnvOverridesAllowedOrigins(t *testing.T) {
 	cfg := GatewayConfig{
-		Gateway: GatewaySettings{
+		Gateway: gatewaySettings{
 			AllowedOrigins: []string{"https://yaml.example"},
 		},
 	}
@@ -46,7 +46,7 @@ func TestApplyEnvOverridesAllowedOrigins(t *testing.T) {
 
 func TestApplyEnvOverridesAllowedOriginsCanClear(t *testing.T) {
 	cfg := GatewayConfig{
-		Gateway: GatewaySettings{
+		Gateway: gatewaySettings{
 			AllowedOrigins: []string{"https://yaml.example"},
 		},
 	}

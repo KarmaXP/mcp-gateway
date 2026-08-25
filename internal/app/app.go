@@ -96,7 +96,7 @@ func New(ctx context.Context, opts Options) (app *App, err error) {
 	limiter := ratelimit.New(ctx, rateLimitConfig(opts.Config))
 	httpOpts = append(httpOpts, orchestrator.HTTPServerOptions(serviceName(opts), authCfg, validator, a.policy, limiter)...)
 	httpOpts = append(httpOpts, httpserver.WithShutdownContext(ctx))
-	a.srv = httpserver.New(mpx, a.addr, httpOpts...)
+	a.srv = httpserver.New(context.Background(), mpx, a.addr, httpOpts...)
 
 	if opts.Config.ForwardToolsListChanged() {
 		backend.RegisterNotificationHandlers(upstreams, func(req *rpc.Request) {

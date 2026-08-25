@@ -11,7 +11,7 @@ func AllowedListContains(namespacedTool string, allowed []string) (bool, error) 
 		return false, nil
 	}
 	for _, e := range allowed {
-		ok, err := MatchTool(namespacedTool, e)
+		ok, err := matchTool(namespacedTool, e)
 		if err != nil {
 			return false, fmt.Errorf("policy allow list: %w", err)
 		}

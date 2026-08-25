@@ -129,7 +129,7 @@ func (s *server) handleRPC(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch req.Method {
-	case "initialize":
+	case mcpwire.MethodInitialize:
 		res := map[string]any{
 			"protocolVersion": mcpwire.MCPProtocolVersion,
 			"capabilities":    map[string]any{"tools": map[string]any{}},
@@ -137,7 +137,7 @@ func (s *server) handleRPC(w http.ResponseWriter, r *http.Request) {
 		}
 		raw, _ := json.Marshal(res)
 		s.push(rpc.NewResult(req.ID, raw))
-	case "tools/list":
+	case mcpwire.MethodToolsList:
 		tools := make([]map[string]any, 0, len(s.cfg.Tools))
 		for _, t := range s.cfg.Tools {
 			tools = append(tools, map[string]any{
@@ -152,7 +152,7 @@ func (s *server) handleRPC(w http.ResponseWriter, r *http.Request) {
 		s.push(rpc.NewResult(req.ID, raw))
 	case "notifications/initialized", "initialized":
 		// Host notification; no JSON-RPC response on upstream SSE.
-	case "tools/call":
+	case mcpwire.MethodToolsCall:
 		var callParams struct {
 			Name string `json:"name"`
 		}

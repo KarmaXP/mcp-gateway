@@ -144,7 +144,7 @@ func TestMatchTool(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ok, err := MatchTool(tc.namespacedTool, tc.entry)
+			ok, err := matchTool(tc.namespacedTool, tc.entry)
 			if tc.wantErr != "" {
 				require.Error(t, err)
 				require.True(t, strings.Contains(err.Error(), tc.wantErr))

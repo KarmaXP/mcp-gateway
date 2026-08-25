@@ -24,7 +24,7 @@ func TestMatchToolPatternIsNotPathMatching(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := MatchTool(tc.tool, tc.pattern)
+			got, err := matchTool(tc.tool, tc.pattern)
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
 		})
@@ -36,7 +36,7 @@ func TestMatchToolRejectsUnsupportedPatternSyntax(t *testing.T) {
 	for _, pattern := range []string{"k8s__[a-z]*", "k8s__x]", `k8s__\*`} {
 		t.Run(pattern, func(t *testing.T) {
 			t.Parallel()
-			_, err := MatchTool("k8s__get_pod", pattern)
+			_, err := matchTool("k8s__get_pod", pattern)
 			require.Error(t, err, "character classes and escapes are path syntax, not tool syntax")
 			require.ErrorContains(t, err, "use only * and ?")
 		})

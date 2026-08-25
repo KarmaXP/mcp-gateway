@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-const TemplateVersion = "v1"
+const templateVersion = "v1"
 
 type ToolRow struct {
 	Name        string
@@ -22,7 +22,7 @@ func FormatDocument(t ToolRow) string {
 		params = "(none)"
 	}
 	return fmt.Sprintf("Tool: %s\nDescription: %s\nParameters: %s\nTemplate: %s",
-		t.Name, t.Description, params, TemplateVersion)
+		t.Name, t.Description, params, templateVersion)
 }
 
 func FormatQuery(toolName string, intent string, argumentKeys []string) string {
@@ -51,7 +51,7 @@ func ParseToolsListJSON(raw []byte) ([]ToolRow, error) {
 	}
 	out := make([]ToolRow, 0, len(wrap.Tools))
 	for _, t := range wrap.Tools {
-		keys := InputSchemaPropertyKeys(t.InputSchema)
+		keys := inputSchemaPropertyKeys(t.InputSchema)
 		out = append(out, ToolRow{
 			Name:        t.Name,
 			Description: t.Description,
@@ -61,7 +61,7 @@ func ParseToolsListJSON(raw []byte) ([]ToolRow, error) {
 	return out, nil
 }
 
-func InputSchemaPropertyKeys(schema map[string]any) []string {
+func inputSchemaPropertyKeys(schema map[string]any) []string {
 	if schema == nil {
 		return nil
 	}
@@ -86,7 +86,7 @@ func ToolRowsFromListMaps(tools []map[string]any) []ToolRow {
 		out = append(out, ToolRow{
 			Name:        name,
 			Description: desc,
-			ParamKeys:   InputSchemaPropertyKeys(sch),
+			ParamKeys:   inputSchemaPropertyKeys(sch),
 		})
 	}
 	return out

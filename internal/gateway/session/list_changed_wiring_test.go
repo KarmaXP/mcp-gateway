@@ -54,7 +54,7 @@ func TestListChangedHandlerWiringInvalidatesCacheAndBroadcasts(t *testing.T) {
 	mpx, err := multiplex.New(context.Background(), []backend.Upstream{up}, multiplex.WithListTTL(time.Minute))
 	require.NoError(t, err)
 
-	sm := NewSessionManager(mpx)
+	sm := NewSessionManager(context.Background(), mpx)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	sess, err := sm.Create(ctx)
