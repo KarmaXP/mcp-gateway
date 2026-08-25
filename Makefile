@@ -79,7 +79,7 @@ help:
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "smoke-jwt" "MCP smoke with JWT auth, what the CI smoke-jwt check runs"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "smoke-e2e" "curl MCP handshake/tools flow against an already-running gateway"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "fmt" "gofmt -w . then normalize const/var '=' spacing (gofmt re-aligns)"
-	@printf "  $(CYAN)%-20s$(RESET) %s\n" "lint" "Run golangci-lint + check for column-aligned '=' in Go sources"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "lint" "golangci-lint, the '=' spacing rule, and the no-added-comments gate"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "ci" "Same checks as GitHub Actions lint-and-unit job (lint + vet + race tests, -count=1)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "gen-router-eval-catalog" "Write docs/evaluation/router-eval-catalog.json from SyntheticCatalog()"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "tidy" "Clean up and verify Go modules"
@@ -269,6 +269,7 @@ lint:
 	@go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1 run ./...
 	@chmod +x scripts/check-go-eq-spacing.sh
 	@./scripts/check-go-eq-spacing.sh
+	@bash scripts/check-added-comments.sh
 
 tidy:
 	@echo "Tidying Go modules..."
