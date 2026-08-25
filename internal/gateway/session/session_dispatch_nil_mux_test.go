@@ -38,7 +38,7 @@ func (n *nilCallUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Resp
 
 func TestSessionDispatchInitializeNilMuxResponseNoPanic(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	mpx, err := multiplex.New([]backend.Upstream{&nilInitUpstream{inner: inner}}, multiplex.WithListTTL(0))
+	mpx, err := multiplex.New(context.Background(), []backend.Upstream{&nilInitUpstream{inner: inner}}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	s := NewSession(context.Background(), "init-nil", mpx, nil)
 
@@ -58,7 +58,7 @@ func TestSessionDispatchInitializeNilMuxResponseNoPanic(t *testing.T) {
 
 func TestSessionDispatchToolsCallNilMuxResponseNoPanic(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	mpx, err := multiplex.New([]backend.Upstream{&nilCallUpstream{inner: inner}}, multiplex.WithListTTL(0))
+	mpx, err := multiplex.New(context.Background(), []backend.Upstream{&nilCallUpstream{inner: inner}}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	s := NewSession(context.Background(), "call-nil", mpx, nil)
 	handshake(t, s)

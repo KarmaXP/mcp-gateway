@@ -30,7 +30,7 @@ func TestEnqueueResponseTimesOutWhenOutboundFull(t *testing.T) {
 
 func TestDispatchEmitsJSONRPCErrorWhenOutboundFull(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "p", []string{"echo"})
-	mpx, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
+	mpx, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	s := NewSession(context.Background(), "full-dispatch", mpx, nil)
 	handshake(t, s)
@@ -76,7 +76,7 @@ filled:
 
 func TestBroadcastNotificationReturnsWithoutWaitingForSlowConsumer(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "p", []string{"echo"})
-	mpx, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
+	mpx, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	sm := NewSessionManager(mpx)
 

@@ -33,7 +33,7 @@ func (n *nilUpstreamBackend) Call(ctx context.Context, req *rpc.Request) (*rpc.R
 func TestToolsListNilUpstreamResponseNoPanic(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	up := &nilUpstreamBackend{inner: inner}
-	mpx, err := New([]backend.Upstream{up}, WithListTTL(0))
+	mpx, err := New(context.Background(), []backend.Upstream{up}, WithListTTL(0))
 	require.NoError(t, err)
 	_, err = mpx.Initialize(context.Background(), json.RawMessage([]byte("0")))
 	require.NoError(t, err)
@@ -45,7 +45,7 @@ func TestToolsListNilUpstreamResponseNoPanic(t *testing.T) {
 func TestInitializeNilUpstreamResponseJSONRPCError(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	up := &nilUpstreamBackend{inner: inner}
-	mpx, err := New([]backend.Upstream{up}, WithListTTL(0))
+	mpx, err := New(context.Background(), []backend.Upstream{up}, WithListTTL(0))
 	require.NoError(t, err)
 	resp, err := mpx.Initialize(context.Background(), json.RawMessage([]byte("1")))
 	require.NoError(t, err)
@@ -56,7 +56,7 @@ func TestInitializeNilUpstreamResponseJSONRPCError(t *testing.T) {
 func TestToolsCallNilUpstreamResponseJSONRPCError(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	up := &nilUpstreamBackend{inner: inner}
-	mpx, err := New([]backend.Upstream{up}, WithListTTL(0))
+	mpx, err := New(context.Background(), []backend.Upstream{up}, WithListTTL(0))
 	require.NoError(t, err)
 	_, err = mpx.Initialize(context.Background(), json.RawMessage([]byte("0")))
 	require.NoError(t, err)
@@ -87,7 +87,7 @@ func TestInitializeIdempotentSkipsRepeatUpstreamCall(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	initBack := &countingInitializeBackend{inner: inner}
 	listBack := &countingListBackend{inner: initBack}
-	mpx, err := New([]backend.Upstream{listBack}, WithListTTL(time.Minute))
+	mpx, err := New(context.Background(), []backend.Upstream{listBack}, WithListTTL(time.Minute))
 	require.NoError(t, err)
 	_, err = mpx.Initialize(context.Background(), json.RawMessage([]byte("1")))
 	require.NoError(t, err)
@@ -123,7 +123,7 @@ func (r *initParamsRecorder) Call(ctx context.Context, req *rpc.Request) (*rpc.R
 func TestInitializeForwardsHostParamsToUpstream(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	rec := &initParamsRecorder{inner: inner}
-	mpx, err := New([]backend.Upstream{rec}, WithListTTL(0))
+	mpx, err := New(context.Background(), []backend.Upstream{rec}, WithListTTL(0))
 	require.NoError(t, err)
 	hostParams, _ := json.Marshal(map[string]any{
 		"protocolVersion": "2099-01-01",
@@ -152,7 +152,7 @@ func TestPolicyHardenSchemasInsideAllOf(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b1.InputSchemaByTool = map[string]map[string]any{"echo": inputSchema}
 	pol := policy.NewEngine(policy.EngineInput{Version: "t", ElevatedTools: []string{"alpha__echo"}})
-	a, err := New([]backend.Upstream{b1}, WithListTTL(0), WithPolicyEngine(pol))
+	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), WithPolicyEngine(pol))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage([]byte("1")))
 	_, _ = a.ToolsList(context.Background(), json.RawMessage([]byte("2")))

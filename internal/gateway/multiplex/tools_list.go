@@ -7,12 +7,10 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
-	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
@@ -115,39 +113,11 @@ func (a *Multiplexer) tryCachedToolsList(ctx context.Context, hostID json.RawMes
 }
 
 func (a *Multiplexer) fetchAndMergeUpstreamTools(ctx context.Context) ([]map[string]any, []PartialFailure, error) {
-	perUpstream, failures, anyFail := a.listToolsFromEachUpstream(ctx)
+	perUpstream, failures, anyFail := a.fanoutListMethod(ctx, "tools/list", a.callUpstreamToolsList)
 	if a.strictList && anyFail {
 		return nil, nil, fmt.Errorf("tools/list: upstream failure")
 	}
 	return mergeNamespacedToolList(a.upstreams, perUpstream), failures, nil
-}
-
-func (a *Multiplexer) listToolsFromEachUpstream(ctx context.Context) ([][]map[string]any, []PartialFailure, bool) {
-	n := len(a.upstreams)
-	results := make([][]map[string]any, n)
-	var failures []PartialFailure
-	var anyFail bool
-	g, gctx := errgroup.WithContext(ctx)
-	var mu sync.Mutex
-
-	for i, b := range a.upstreams {
-		i, b := i, b
-		g.Go(func() error {
-			tools, fail := a.callUpstreamToolsList(gctx, b)
-			mu.Lock()
-			if fail != nil {
-				anyFail = true
-				failures = append(failures, *fail)
-			}
-			results[i] = tools
-			mu.Unlock()
-			return nil
-		})
-	}
-	if err := g.Wait(); err != nil {
-		slog.Warn("tools/list upstream group", "err", err)
-	}
-	return results, failures, anyFail
 }
 
 func (a *Multiplexer) callUpstreamToolsList(ctx context.Context, b backend.Upstream) ([]map[string]any, *PartialFailure) {

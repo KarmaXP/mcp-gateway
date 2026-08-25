@@ -47,7 +47,7 @@ func (u *failingToolsListUpstream) Call(ctx context.Context, req *rpc.Request) (
 
 func TestHandleToolsListChangedWithoutSemanticInvalidatesCache(t *testing.T) {
 	up := newDynamicToolsUpstream("b1", "p", []string{"echo"})
-	a, err := New([]backend.Upstream{up}, WithListTTL(time.Minute))
+	a, err := New(context.Background(), []backend.Upstream{up}, WithListTTL(time.Minute))
 	require.NoError(t, err)
 
 	_, err = a.ToolsList(context.Background(), json.RawMessage(`1`))
@@ -57,7 +57,7 @@ func TestHandleToolsListChangedWithoutSemanticInvalidatesCache(t *testing.T) {
 	require.Equal(t, int32(1), up.calls.Load(), "second tools/list should hit cache")
 
 	require.NotPanics(t, func() {
-		a.HandleToolsListChanged(context.Background())
+		a.HandleToolsListChanged()
 	})
 
 	_, err = a.ToolsList(context.Background(), json.RawMessage(`3`))
@@ -75,6 +75,7 @@ func TestHandleToolsListChangedDebouncesUpstreamRefresh(t *testing.T) {
 	sr := router.NewSemanticRouter(rcfg, emb, store.NewInMemoryVectorStore(4), 4)
 
 	a, err := New(
+		context.Background(),
 		[]backend.Upstream{up},
 		WithListTTL(time.Minute),
 		WithSemanticRouter(sr),
@@ -87,7 +88,7 @@ func TestHandleToolsListChangedDebouncesUpstreamRefresh(t *testing.T) {
 	require.Equal(t, int32(1), up.calls.Load())
 
 	for range 5 {
-		a.HandleToolsListChanged(context.Background())
+		a.HandleToolsListChanged()
 	}
 	time.Sleep(200 * time.Millisecond)
 	require.Equal(t, int32(2), up.calls.Load(), "bursts of list_changed should coalesce to one upstream tools/list refresh")
@@ -104,6 +105,7 @@ func TestHandleToolsListChangedTimesOutOnStrictUpstreamFailure(t *testing.T) {
 	sr, _ := routerTestSemanticRouter(t, emb, 0.99, true)
 
 	a, err := New(
+		context.Background(),
 		[]backend.Upstream{good, bad},
 		WithSemanticRouter(sr),
 		WithListTimeout(20*time.Millisecond),
@@ -114,7 +116,7 @@ func TestHandleToolsListChangedTimesOutOnStrictUpstreamFailure(t *testing.T) {
 
 	start := time.Now()
 	require.NotPanics(t, func() {
-		a.HandleToolsListChanged(context.Background())
+		a.HandleToolsListChanged()
 	})
 	elapsed := time.Since(start)
 	require.Less(t, elapsed, 80*time.Millisecond, "list_changed handler should return quickly when debounce is disabled")

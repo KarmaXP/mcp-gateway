@@ -21,26 +21,53 @@ import (
 )
 
 func (a *Multiplexer) ResourcesList(ctx context.Context, hostID json.RawMessage) (*rpc.Response, error) {
-	tctx, span := telemetry.StartSpan(ctx, telemetry.SpanMultiplexResourcesList)
+	return a.aggregatedList(ctx, hostID, aggregatedListSpec{
+		span:      telemetry.SpanMultiplexResourcesList,
+		method:    "resources/list",
+		arrayKey:  "resources",
+		fetchEach: a.listResourcesFromEachUpstream,
+		merge:     mergeNamespacedResources,
+	})
+}
+
+func (a *Multiplexer) PromptsList(ctx context.Context, hostID json.RawMessage) (*rpc.Response, error) {
+	return a.aggregatedList(ctx, hostID, aggregatedListSpec{
+		span:      telemetry.SpanMultiplexPromptsList,
+		method:    "prompts/list",
+		arrayKey:  "prompts",
+		fetchEach: a.listPromptsFromEachUpstream,
+		merge:     mergeNamespacedPrompts,
+	})
+}
+
+type aggregatedListSpec struct {
+	span      string
+	method    string
+	arrayKey  string
+	fetchEach func(context.Context) ([][]map[string]any, []PartialFailure, bool)
+	merge     func([]backend.Upstream, [][]map[string]any) []map[string]any
+}
+
+func (a *Multiplexer) aggregatedList(ctx context.Context, hostID json.RawMessage, spec aggregatedListSpec) (*rpc.Response, error) {
+	tctx, span := telemetry.StartSpan(ctx, spec.span)
 	defer span.End()
 	span.SetAttributes(
-		attribute.String(telemetry.AttrMCPMethod, "resources/list"),
+		attribute.String(telemetry.AttrMCPMethod, spec.method),
 		telemetry.AttrJSONRPCID(hostID),
 	)
-	per, failures, anyFail := a.listResourcesFromEachUpstream(tctx)
+	per, failures, anyFail := spec.fetchEach(tctx)
 	if a.strictList && anyFail {
-		span.SetStatus(codes.Error, "strict resources/list")
-		return rpc.NewError(hostID, errcodes.StrictAggregationFailed, "resources/list: strict aggregation: one or more upstreams failed", nil), nil
+		span.SetStatus(codes.Error, "strict "+spec.method)
+		return rpc.NewError(hostID, errcodes.StrictAggregationFailed, spec.method+": strict aggregation: one or more upstreams failed", nil), nil
 	}
-	merged := mergeNamespacedResources(a.upstreams, per)
-	payload := map[string]any{"resources": merged}
+	payload := map[string]any{spec.arrayKey: spec.merge(a.upstreams, per)}
 	if a.reportPartialFailures && len(failures) > 0 {
 		attachListExtrasPartialFailures(payload, failures)
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
-		span.SetStatus(codes.Error, "marshal resources/list")
-		return nil, fmt.Errorf("multiplex: marshal resources/list: %w", err)
+		span.SetStatus(codes.Error, "marshal "+spec.method)
+		return nil, fmt.Errorf("multiplex: marshal %s: %w", spec.method, err)
 	}
 	span.SetStatus(codes.Ok, "")
 	return rpc.NewResult(hostID, raw), nil
@@ -70,32 +97,6 @@ func (a *Multiplexer) ResourcesRead(ctx context.Context, hostID json.RawMessage,
 		return nil, fmt.Errorf("multiplex: marshal resources/read: %w", err)
 	}
 	return a.invokeUpstreamGeneric(tctx, hostID, b, "resources/read", forward, span)
-}
-
-func (a *Multiplexer) PromptsList(ctx context.Context, hostID json.RawMessage) (*rpc.Response, error) {
-	tctx, span := telemetry.StartSpan(ctx, telemetry.SpanMultiplexPromptsList)
-	defer span.End()
-	span.SetAttributes(
-		attribute.String(telemetry.AttrMCPMethod, "prompts/list"),
-		telemetry.AttrJSONRPCID(hostID),
-	)
-	per, failures, anyFail := a.listPromptsFromEachUpstream(tctx)
-	if a.strictList && anyFail {
-		span.SetStatus(codes.Error, "strict prompts/list")
-		return rpc.NewError(hostID, errcodes.StrictAggregationFailed, "prompts/list: strict aggregation: one or more upstreams failed", nil), nil
-	}
-	merged := mergeNamespacedPrompts(a.upstreams, per)
-	payload := map[string]any{"prompts": merged}
-	if a.reportPartialFailures && len(failures) > 0 {
-		attachListExtrasPartialFailures(payload, failures)
-	}
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		span.SetStatus(codes.Error, "marshal prompts/list")
-		return nil, fmt.Errorf("multiplex: marshal prompts/list: %w", err)
-	}
-	span.SetStatus(codes.Ok, "")
-	return rpc.NewResult(hostID, raw), nil
 }
 
 func (a *Multiplexer) PromptsGet(ctx context.Context, hostID json.RawMessage, params json.RawMessage) (*rpc.Response, error) {

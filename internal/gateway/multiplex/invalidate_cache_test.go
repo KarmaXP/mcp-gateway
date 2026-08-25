@@ -21,7 +21,7 @@ func TestInvalidateToolCachePreservesCatalogVersion(t *testing.T) {
 	rcfg.Mode = mode.AssistList
 	sr := router.NewSemanticRouter(rcfg, emb, store.NewInMemoryVectorStore(4), 4)
 
-	a, err := New([]backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
+	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
 	require.NoError(t, err)
 
 	_, err = a.ToolsList(context.Background(), json.RawMessage(`1`))

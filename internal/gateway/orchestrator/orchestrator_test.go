@@ -22,7 +22,7 @@ func TestHTTPServerOptionsWithServer(t *testing.T) {
 	require.NoError(t, err)
 
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
 	opts := HTTPServerOptions("test-svc", cfg, v, nil, ratelimit.New(context.Background(), ratelimit.Config{}))

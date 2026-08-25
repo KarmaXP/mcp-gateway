@@ -73,7 +73,7 @@ func (r *recorderSpy) recorded() []string {
 
 func TestHostCapabilitiesAreNotForwardedUpstream(t *testing.T) {
 	up := &scriptedUpstream{inner: mock.NewMockUpstream("b1", "alpha", []string{"echo"})}
-	a, err := New([]backend.Upstream{up}, WithListTTL(0))
+	a, err := New(context.Background(), []backend.Upstream{up}, WithListTTL(0))
 	require.NoError(t, err)
 
 	hostInit := json.RawMessage(`{"protocolVersion":"2025-06-18","capabilities":{"sampling":{},"roots":{"listChanged":true}},"clientInfo":{"name":"h","version":"1"}}`)
@@ -100,7 +100,7 @@ func TestToolResultErrorIsNotRecordedAsSuccess(t *testing.T) {
 			return rpc.NewResult(req.ID, json.RawMessage(`{"content":[{"type":"text","text":"nope"}],"isError":true}`))
 		},
 	}
-	a, err := New([]backend.Upstream{up}, WithListTTL(0))
+	a, err := New(context.Background(), []backend.Upstream{up}, WithListTTL(0))
 	require.NoError(t, err)
 	_, err = a.Initialize(context.Background(), json.RawMessage(`1`))
 	require.NoError(t, err)
@@ -123,7 +123,7 @@ func TestUpstreamEchoedIDNeverReachesTheHost(t *testing.T) {
 			return rpc.NewResult(json.RawMessage(`"upstream-made-this-up"`), json.RawMessage(`{"content":[]}`))
 		},
 	}
-	a, err := New([]backend.Upstream{up}, WithListTTL(0))
+	a, err := New(context.Background(), []backend.Upstream{up}, WithListTTL(0))
 	require.NoError(t, err)
 	_, err = a.Initialize(context.Background(), json.RawMessage(`1`))
 	require.NoError(t, err)
@@ -136,7 +136,7 @@ func TestUpstreamEchoedIDNeverReachesTheHost(t *testing.T) {
 func TestInitializeWithPartialFailureIsNotCached(t *testing.T) {
 	ok := mock.NewMockUpstream("ok", "alpha", []string{"echo"})
 	broken := &scriptedUpstream{inner: mock.NewMockUpstream("broken", "beta", []string{"echo"}), initErr: true}
-	a, err := New([]backend.Upstream{ok, broken}, WithListTTL(0))
+	a, err := New(context.Background(), []backend.Upstream{ok, broken}, WithListTTL(0))
 	require.NoError(t, err)
 
 	_, err = a.Initialize(context.Background(), json.RawMessage(`1`))

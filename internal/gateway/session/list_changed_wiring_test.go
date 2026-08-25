@@ -51,7 +51,7 @@ func TestListChangedHandlerWiringInvalidatesCacheAndBroadcasts(t *testing.T) {
 	counter := &countingToolsListBackend{inner: inner}
 	up := &listChangedWiringUpstream{Upstream: counter}
 
-	mpx, err := multiplex.New([]backend.Upstream{up}, multiplex.WithListTTL(time.Minute))
+	mpx, err := multiplex.New(context.Background(), []backend.Upstream{up}, multiplex.WithListTTL(time.Minute))
 	require.NoError(t, err)
 
 	sm := NewSessionManager(mpx)
@@ -65,7 +65,7 @@ func TestListChangedHandlerWiringInvalidatesCacheAndBroadcasts(t *testing.T) {
 			return
 		}
 		if mcpwire.IsToolsListChangedNotification(req.Method) {
-			mpx.HandleToolsListChanged(context.Background())
+			mpx.HandleToolsListChanged()
 		}
 		sm.BroadcastNotification(req)
 	})

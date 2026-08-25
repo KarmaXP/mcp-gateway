@@ -83,9 +83,8 @@ func New(ctx context.Context, opts Options) (app *App, err error) {
 		multiplex.WithArgumentValidateLimits(argumentLimits(opts.Config)),
 		multiplex.WithAggregationStrict(opts.Config.Aggregation.StrictInitialize, opts.Config.Aggregation.StrictList),
 		multiplex.WithReportPartialFailures(opts.Config.Aggregation.ReportPartialFailures),
-		multiplex.WithLifecycleContext(ctx),
 	)
-	mpx, err := multiplex.New(upstreams, mpxOpts...)
+	mpx, err := multiplex.New(ctx, upstreams, mpxOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("multiplexer: %w", err)
 	}
@@ -105,7 +104,7 @@ func New(ctx context.Context, opts Options) (app *App, err error) {
 				return
 			}
 			if mcpwire.IsToolsListChangedNotification(req.Method) {
-				mpx.HandleToolsListChanged(ctx)
+				mpx.HandleToolsListChanged()
 			}
 			a.srv.BroadcastNotification(req)
 		})

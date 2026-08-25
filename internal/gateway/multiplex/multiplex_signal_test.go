@@ -15,7 +15,7 @@ import (
 
 func TestSemanticRoutingSignalIncludesIntentAndCatalogVersion(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "p", []string{"echo"})
-	a, err := New([]backend.Upstream{b1})
+	a, err := New(context.Background(), []backend.Upstream{b1})
 	require.NoError(t, err)
 	a.catalogVersion.version = "catalog-ver-xyz"
 

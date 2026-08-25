@@ -32,7 +32,7 @@ func (c *countingListBackend) Call(ctx context.Context, req *rpc.Request) (*rpc.
 func TestToolsListCacheHitWhenTTLPositiveAndNoAllowList(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b := &countingListBackend{inner: inner}
-	a, err := New([]backend.Upstream{b}, WithListTTL(time.Minute))
+	a, err := New(context.Background(), []backend.Upstream{b}, WithListTTL(time.Minute))
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -53,7 +53,7 @@ func TestToolsListCacheHitWhenTTLPositiveAndNoAllowList(t *testing.T) {
 func TestToolsListCacheBypassedWithJWTAllowList(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b := &countingListBackend{inner: inner}
-	a, err := New([]backend.Upstream{b}, WithListTTL(time.Minute))
+	a, err := New(context.Background(), []backend.Upstream{b}, WithListTTL(time.Minute))
 	require.NoError(t, err)
 
 	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{"alpha__echo"})
@@ -73,7 +73,7 @@ func TestToolsListCacheBypassedWithJWTAllowList(t *testing.T) {
 func TestToolsListCacheInvalidatedAfterListChanged(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b := &countingListBackend{inner: inner}
-	a, err := New([]backend.Upstream{b}, WithListTTL(time.Minute))
+	a, err := New(context.Background(), []backend.Upstream{b}, WithListTTL(time.Minute))
 	require.NoError(t, err)
 
 	ctx := context.Background()

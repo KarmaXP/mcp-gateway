@@ -126,7 +126,7 @@ func TestToolsListReindexAfterErrgroupDoesNotUseCanceledContext(t *testing.T) {
 	emb := &embedCtxDone{inner: base}
 	sr, _ := routerTestSemanticRouter(t, emb, 0.99, true)
 
-	a, err := New([]backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
+	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 	_, err = a.ToolsList(context.Background(), json.RawMessage(`2`))
@@ -144,7 +144,7 @@ func TestAggregateSemanticRouterExactMatch(t *testing.T) {
 	emb := &mapEmbed{dim: 4, vecs: map[string][]float32{}}
 	sr, _ := routerTestSemanticRouter(t, emb, 0.99, true)
 
-	a, err := New([]backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
+	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 	_, err = a.ToolsList(context.Background(), json.RawMessage(`2`))
@@ -178,7 +178,7 @@ func TestToolsListFilterListSubsetByIntent(t *testing.T) {
 	cfg.QueryTimeout = 5 * time.Second
 	sr := router.NewSemanticRouter(cfg, base, st, 4)
 
-	a, err := New([]backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
+	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 
@@ -202,6 +202,7 @@ func TestHandleToolsListChangedReindexesAndInvalidatesCache(t *testing.T) {
 	sr, _ := routerTestSemanticRouter(t, emb, 0.99, true)
 
 	a, err := New(
+		context.Background(),
 		[]backend.Upstream{up},
 		WithListTTL(time.Minute),
 		WithSemanticRouter(sr),
@@ -218,7 +219,7 @@ func TestHandleToolsListChangedReindexesAndInvalidatesCache(t *testing.T) {
 	require.NotEmpty(t, before)
 
 	up.SetTools([]string{"echo", "list"})
-	a.HandleToolsListChanged(context.Background())
+	a.HandleToolsListChanged()
 	after := sr.CatalogVersion()
 	require.NotEmpty(t, after)
 	require.NotEqual(t, before, after, "tools/list_changed should refresh semantic catalog version")
@@ -238,7 +239,7 @@ func TestToolsCallRestrictedDisallowedNameReturnsPermissionDeniedWithRouter(t *t
 	base.vecs[tRowEcho] = []float32{0, 1, 0, 0}
 
 	sr, _ := routerTestSemanticRouter(t, base, 0.5, false)
-	a, err := New([]backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
+	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
 	require.NoError(t, err)
 	_, err = a.Initialize(context.Background(), json.RawMessage(`1`))
 	require.NoError(t, err)
@@ -263,7 +264,7 @@ func TestToolsCallRestrictedAllowAutoRenameAuthzOnResolvedName(t *testing.T) {
 	base.vecs[tRowEcho] = []float32{0, 1, 0, 0}
 
 	sr, _ := routerTestSemanticRouter(t, base, 0.5, true)
-	a, err := New([]backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
+	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
 	require.NoError(t, err)
 	_, err = a.Initialize(context.Background(), json.RawMessage(`1`))
 	require.NoError(t, err)
@@ -284,7 +285,7 @@ func TestAggregateSemanticRouterAmbiguousReturnsCode(t *testing.T) {
 	emb := &mapEmbed{dim: 4, vecs: map[string][]float32{}}
 	sr, _ := routerTestSemanticRouter(t, emb, 0.5, true)
 
-	a, err := New([]backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
+	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 	_, err = a.ToolsList(context.Background(), json.RawMessage(`2`))

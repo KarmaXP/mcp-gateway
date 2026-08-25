@@ -44,6 +44,7 @@ func TestToolsCallGlobalMaxInFlightBlocksConcurrentCalls(t *testing.T) {
 	slow.ToolsCallDelay = 220 * time.Millisecond
 	up := &countingUpstream{inner: slow}
 	m, err := New(
+		context.Background(),
 		[]backend.Upstream{up},
 		WithListTTL(0),
 		WithCallTimeout(3*time.Second),

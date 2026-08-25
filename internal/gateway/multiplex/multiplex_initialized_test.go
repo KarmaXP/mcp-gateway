@@ -76,7 +76,7 @@ func (b *handshakeAwareBackend) Call(ctx context.Context, req *rpc.Request) (*rp
 func TestNotifyHostInitializedFansOutToAllUpstreams(t *testing.T) {
 	rec1 := newRecordingUpstream(mock.NewMockUpstream("b1", "alpha", []string{"echo"}))
 	rec2 := newRecordingUpstream(mock.NewMockUpstream("b2", "beta", []string{"ping"}))
-	mpx, err := New([]backend.Upstream{rec1, rec2}, WithListTTL(0))
+	mpx, err := New(context.Background(), []backend.Upstream{rec1, rec2}, WithListTTL(0))
 	require.NoError(t, err)
 
 	_, err = mpx.Initialize(context.Background(), json.RawMessage(`1`))
@@ -97,7 +97,7 @@ func TestNotifyHostInitializedFansOutToAllUpstreams(t *testing.T) {
 func TestNotifyHostInitializedUnlocksUpstreamToolsList(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	up := newHandshakeAwareBackend(inner)
-	mpx, err := New([]backend.Upstream{up}, WithListTTL(0))
+	mpx, err := New(context.Background(), []backend.Upstream{up}, WithListTTL(0))
 	require.NoError(t, err)
 
 	_, err = mpx.Initialize(context.Background(), json.RawMessage(`1`))

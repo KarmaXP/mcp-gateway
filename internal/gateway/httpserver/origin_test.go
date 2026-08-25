@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -18,7 +19,7 @@ func newOriginTestServer(t *testing.T, origins []string) *httptest.Server {
 	t.Helper()
 
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
 	srv := New(agg, "", WithOriginAllowList(origins))

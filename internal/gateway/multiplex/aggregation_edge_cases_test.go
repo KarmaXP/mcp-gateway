@@ -19,7 +19,7 @@ import (
 
 func TestToolsCallRejectsEmptyToolName(t *testing.T) {
 	b := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	mpx, err := New([]backend.Upstream{b}, WithListTTL(0))
+	mpx, err := New(context.Background(), []backend.Upstream{b}, WithListTTL(0))
 	require.NoError(t, err)
 	_, err = mpx.Initialize(context.Background(), json.RawMessage(`0`))
 	require.NoError(t, err)
@@ -57,7 +57,7 @@ func (n *nilListResponseBackend) Call(ctx context.Context, req *rpc.Request) (*r
 func TestResourcesListNilUpstreamResponseNoPanic(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", nil)
 	up := &nilListResponseBackend{MockUpstream: inner}
-	mpx, err := New([]backend.Upstream{up}, WithListTTL(0))
+	mpx, err := New(context.Background(), []backend.Upstream{up}, WithListTTL(0))
 	require.NoError(t, err)
 	_, err = mpx.Initialize(context.Background(), json.RawMessage(`0`))
 	require.NoError(t, err)
@@ -70,7 +70,7 @@ func TestResourcesListNilUpstreamResponseNoPanic(t *testing.T) {
 func TestInvokeUpstreamGenericNilResponse(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	up := &nilListResponseBackend{MockUpstream: inner}
-	mpx, err := New([]backend.Upstream{up}, WithListTTL(0))
+	mpx, err := New(context.Background(), []backend.Upstream{up}, WithListTTL(0))
 	require.NoError(t, err)
 	_, err = mpx.Initialize(context.Background(), json.RawMessage(`0`))
 	require.NoError(t, err)
@@ -104,18 +104,17 @@ func TestHandleToolsListChangedRespectsCanceledLifecycleContext(t *testing.T) {
 
 	lifecycle, cancel := context.WithCancel(context.Background())
 	cancel()
-	mpx, err := New([]backend.Upstream{up},
+	mpx, err := New(lifecycle, []backend.Upstream{up},
 		WithListTTL(0),
 		WithSemanticRouter(sr),
 		WithToolsListChangedDebounce(0),
-		WithLifecycleContext(lifecycle),
 		WithListTimeout(2*time.Second),
 	)
 	require.NoError(t, err)
 
 	done := make(chan struct{})
 	go func() {
-		mpx.HandleToolsListChanged(context.Background())
+		mpx.HandleToolsListChanged()
 		close(done)
 	}()
 	select {

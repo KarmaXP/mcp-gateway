@@ -41,7 +41,7 @@ func (m *mockReadinessChecker) CheckReadiness(_ context.Context) error {
 
 func TestServerAddrAsHandlerAndMiddleware(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	srv := New(agg, ":9999", WithHTTPMiddleware(func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -62,7 +62,7 @@ func TestServerAddrAsHandlerAndMiddleware(t *testing.T) {
 
 func TestHealthEndpoints(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	srv := New(agg, "")
 	ts := httptest.NewServer(srv)
@@ -78,7 +78,7 @@ func TestHealthEndpoints(t *testing.T) {
 
 func TestReadyzUsesReadinessChecker(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
 	t.Run("returns ok when checker succeeds", func(t *testing.T) {
@@ -114,7 +114,7 @@ func TestReadyzUsesReadinessChecker(t *testing.T) {
 
 func TestPostRPCMissingSessionHeader(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	srv := New(agg, "")
 	ts := httptest.NewServer(srv)
@@ -129,7 +129,7 @@ func TestPostRPCMissingSessionHeader(t *testing.T) {
 
 func TestPostRPCRejectsWrongSessionSubject(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	srv := New(agg, "", WithHTTPMiddleware(func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -167,7 +167,7 @@ func TestPostRPCRejectsWrongSessionSubject(t *testing.T) {
 
 func TestPostRPCUnknownSession(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	srv := New(agg, "")
 	ts := httptest.NewServer(srv)
@@ -184,7 +184,7 @@ func TestPostRPCUnknownSession(t *testing.T) {
 
 func TestPostRPCBodyTooLarge413(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	srv := New(agg, "")
 	ts := httptest.NewServer(srv)
@@ -213,7 +213,7 @@ func TestPostRPCBodyTooLarge413(t *testing.T) {
 
 func TestSSEKeepaliveComment(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	srv := New(agg, "", WithSSEHeartbeatInterval(80*time.Millisecond))
 	ts := httptest.NewServer(srv)
@@ -246,7 +246,7 @@ func TestSSEKeepaliveComment(t *testing.T) {
 func TestMCPHappyPathOverHTTP(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
-	agg, err := multiplex.New([]backend.Upstream{b1, b2}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1, b2}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	srv := New(agg, "")
 	ts := httptest.NewServer(srv)
@@ -321,7 +321,7 @@ func TestMCPHappyPathOverHTTP(t *testing.T) {
 
 func TestMCPPingOverHTTP(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	srv := New(agg, "")
 	ts := httptest.NewServer(srv)
@@ -443,7 +443,7 @@ func postRPCWithAgentTokensUsedAndCollectHostSpanAttrs(t *testing.T, agentTokens
 	})
 
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New([]backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	srv := New(agg, "")
 	ts := httptest.NewServer(srv)
