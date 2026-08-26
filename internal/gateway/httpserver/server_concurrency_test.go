@@ -90,8 +90,9 @@ func TestPostRPCClosesBodyOnAllPaths(t *testing.T) {
 }
 
 func TestToolsCallAbortsWhenPostContextCancelled(t *testing.T) {
-	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	b1.ToolsCallDelay = 400 * time.Millisecond
+	b1 := mock.NewMockUpstreamWith("b1", "alpha", []string{"echo"}, mock.Behaviour{
+		ToolsCallDelay: 400 * time.Millisecond,
+	})
 	agg, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0), multiplex.WithCallTimeout(2*time.Second))
 	require.NoError(t, err)
 	srv := New(context.Background(), agg, "")

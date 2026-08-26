@@ -12,12 +12,14 @@ import (
 )
 
 func TestResourcesListAggregatesNamespacedURIs(t *testing.T) {
-	a1 := mock.NewMockUpstream("u1", "alpha", []string{"echo"})
-	a1.OmitResourcesList = false
-	a1.ResourceURIs = []string{"file:///a"}
-	a2 := mock.NewMockUpstream("u2", "beta", []string{"ping"})
-	a2.OmitResourcesList = false
-	a2.ResourceURIs = []string{"memo://b"}
+	a1 := mock.NewMockUpstreamWith("u1", "alpha", []string{"echo"}, mock.Behaviour{
+		SupportsResources: true,
+		ResourceURIs:      []string{"file:///a"},
+	})
+	a2 := mock.NewMockUpstreamWith("u2", "beta", []string{"ping"}, mock.Behaviour{
+		SupportsResources: true,
+		ResourceURIs:      []string{"memo://b"},
+	})
 
 	m, err := New(context.Background(), []upstream.Client{a1, a2})
 	require.NoError(t, err)
@@ -40,9 +42,10 @@ func TestResourcesListAggregatesNamespacedURIs(t *testing.T) {
 }
 
 func TestResourcesReadStripsPrefixPreservesID(t *testing.T) {
-	a1 := mock.NewMockUpstream("u1", "alpha", []string{"echo"})
-	a1.OmitResourcesList = false
-	a1.ResourceURIs = []string{"file:///doc"}
+	a1 := mock.NewMockUpstreamWith("u1", "alpha", []string{"echo"}, mock.Behaviour{
+		SupportsResources: true,
+		ResourceURIs:      []string{"file:///doc"},
+	})
 	m, err := New(context.Background(), []upstream.Client{a1})
 	require.NoError(t, err)
 	_, _ = m.Initialize(context.Background(), json.RawMessage(`0`))
@@ -56,9 +59,10 @@ func TestResourcesReadStripsPrefixPreservesID(t *testing.T) {
 }
 
 func TestPromptsListAndGet(t *testing.T) {
-	a1 := mock.NewMockUpstream("u1", "p", []string{"t"})
-	a1.OmitPromptsList = false
-	a1.PromptNames = []string{"greet"}
+	a1 := mock.NewMockUpstreamWith("u1", "p", []string{"t"}, mock.Behaviour{
+		SupportsPrompts: true,
+		PromptNames:     []string{"greet"},
+	})
 	m, err := New(context.Background(), []upstream.Client{a1})
 	require.NoError(t, err)
 	_, _ = m.Initialize(context.Background(), json.RawMessage(`0`))

@@ -50,17 +50,18 @@ func TestToolsCallRejectedWhenNotInAllowList(t *testing.T) {
 }
 
 func TestToolsCallValidatesArgumentsAgainstSchema(t *testing.T) {
-	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	b1.InputSchemaByTool = map[string]map[string]any{
-		"echo": {
-			"type":                 "object",
-			"additionalProperties": false,
-			"properties": map[string]any{
-				"msg": map[string]any{"type": "string"},
+	b1 := mock.NewMockUpstreamWith("b1", "alpha", []string{"echo"}, mock.Behaviour{
+		InputSchemaByTool: map[string]map[string]any{
+			"echo": {
+				"type":                 "object",
+				"additionalProperties": false,
+				"properties": map[string]any{
+					"msg": map[string]any{"type": "string"},
+				},
+				"required": []any{"msg"},
 			},
-			"required": []any{"msg"},
 		},
-	}
+	})
 	a, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
@@ -105,10 +106,11 @@ func TestToolsCallHardensElevatedObjectSchemas(t *testing.T) {
 		},
 		"required": []any{"msg"},
 	}
-	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	b1.InputSchemaByTool = map[string]map[string]any{
-		"echo": inputSchema,
-	}
+	b1 := mock.NewMockUpstreamWith("b1", "alpha", []string{"echo"}, mock.Behaviour{
+		InputSchemaByTool: map[string]map[string]any{
+			"echo": inputSchema,
+		},
+	})
 	pol := policy.NewEngine(policy.EngineInput{
 		Version:       "t",
 		ElevatedTools: []string{"alpha__echo"},
@@ -142,10 +144,11 @@ func TestToolsCallDoesNotHardenSchemaWhenPolicyDisabled(t *testing.T) {
 		},
 		"required": []any{"msg"},
 	}
-	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	b1.InputSchemaByTool = map[string]map[string]any{
-		"echo": inputSchema,
-	}
+	b1 := mock.NewMockUpstreamWith("b1", "alpha", []string{"echo"}, mock.Behaviour{
+		InputSchemaByTool: map[string]map[string]any{
+			"echo": inputSchema,
+		},
+	})
 	pol := policy.NewEngine(policy.EngineInput{
 		Version:          "t",
 		AllowOpenSchemas: true,
@@ -193,8 +196,9 @@ func TestToolsCallHardensSchemasByDefaultForEveryTool(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-			b1.InputSchemaByTool = map[string]map[string]any{"echo": tc.inputSchema}
+			b1 := mock.NewMockUpstreamWith("b1", "alpha", []string{"echo"}, mock.Behaviour{
+				InputSchemaByTool: map[string]map[string]any{"echo": tc.inputSchema},
+			})
 			a, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0))
 			require.NoError(t, err)
 			_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
@@ -234,8 +238,9 @@ func TestElevatedToolNeedsASchemaThatDeclaresSomething(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-			b1.InputSchemaByTool = map[string]map[string]any{"echo": tc.inputSchema}
+			b1 := mock.NewMockUpstreamWith("b1", "alpha", []string{"echo"}, mock.Behaviour{
+				InputSchemaByTool: map[string]map[string]any{"echo": tc.inputSchema},
+			})
 			pol := policy.NewEngine(policy.EngineInput{Version: "t", ElevatedTools: []string{"alpha__echo"}})
 			a, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0), withPolicyEngine(pol))
 			require.NoError(t, err)

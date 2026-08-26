@@ -15,49 +15,80 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/upstream"
 )
 
-type MockUpstream struct {
-	id         string
-	prefix     string
-	toolNames  []string
-	lastNative string
-
+// Behaviour is what a mock upstream answers with, fixed when the mock is built.
+type Behaviour struct {
 	ToolsCallDelay time.Duration
 	ToolsCallErr   error
 
 	InputSchemaByTool map[string]map[string]any
-
 	CallTextByTool    map[string]string
 	DescriptionByTool map[string]string
 
-	// Resources / prompts (opt-in; omitted from JSON-RPC by default for backward-compatible tests).
-	OmitResourcesList bool
-	OmitPromptsList   bool
+	SupportsResources bool
+	SupportsPrompts   bool
 	ResourceURIs      []string
 	PromptNames       []string
 
-	// Initialize failures (strict aggregation tests).
 	InitTransportErr   error
-	InitJSONRPCMessage string // if set, initialize returns this JSON-RPC error message
+	InitJSONRPCMessage string
 
-	ToolsListJSONRPCMessage string
-
+	ToolsListJSONRPCMessage     string
 	ResourcesListJSONRPCMessage string
 	PromptsListJSONRPCMessage   string
+}
 
-	mu sync.Mutex
+type MockUpstream struct {
+	id        string
+	prefix    string
+	toolNames []string
+	behaviour Behaviour
+
+	mu         sync.Mutex
+	lastNative string
 
 	toolsCallInvocations atomic.Uint64
 	toolsListInvocations atomic.Uint64
 }
 
 func NewMockUpstream(id, prefix string, toolNames []string) *MockUpstream {
+	return NewMockUpstreamWith(id, prefix, toolNames, Behaviour{})
+}
+
+// NewMockUpstreamWith builds a mock whose behaviour cannot change once it has been handed over.
+func NewMockUpstreamWith(id, prefix string, toolNames []string, behaviour Behaviour) *MockUpstream {
+	behaviour.InputSchemaByTool = cloneSchemas(behaviour.InputSchemaByTool)
+	behaviour.CallTextByTool = cloneStrings(behaviour.CallTextByTool)
+	behaviour.DescriptionByTool = cloneStrings(behaviour.DescriptionByTool)
+	behaviour.ResourceURIs = append([]string(nil), behaviour.ResourceURIs...)
+	behaviour.PromptNames = append([]string(nil), behaviour.PromptNames...)
 	return &MockUpstream{
-		id:                id,
-		prefix:            prefix,
-		toolNames:         append([]string(nil), toolNames...),
-		OmitResourcesList: true,
-		OmitPromptsList:   true,
+		id:        id,
+		prefix:    prefix,
+		toolNames: append([]string(nil), toolNames...),
+		behaviour: behaviour,
 	}
+}
+
+func cloneSchemas(in map[string]map[string]any) map[string]map[string]any {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]map[string]any, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+func cloneStrings(in map[string]string) map[string]string {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
 }
 
 func (b *MockUpstream) ID() string     { return b.id }
@@ -107,26 +138,20 @@ func (b *MockUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Respons
 }
 
 func (b *MockUpstream) initialize(_ context.Context, req *rpc.Request) (*rpc.Response, error) {
-	b.mu.Lock()
-	transportErr := b.InitTransportErr
-	jsonrpcMessage := strings.TrimSpace(b.InitJSONRPCMessage)
-	omitResources := b.OmitResourcesList
-	omitPrompts := b.OmitPromptsList
-	b.mu.Unlock()
-
-	if transportErr != nil {
-		return nil, transportErr
+	if b.behaviour.InitTransportErr != nil {
+		return nil, b.behaviour.InitTransportErr
 	}
+	jsonrpcMessage := strings.TrimSpace(b.behaviour.InitJSONRPCMessage)
 	if jsonrpcMessage != "" {
 		return rpc.NewError(req.ID, errcodes.InternalError, jsonrpcMessage, nil), nil
 	}
 	caps := map[string]any{
 		"tools": map[string]any{},
 	}
-	if !omitResources {
+	if b.behaviour.SupportsResources {
 		caps["resources"] = map[string]any{}
 	}
-	if !omitPrompts {
+	if b.behaviour.SupportsPrompts {
 		caps["prompts"] = map[string]any{}
 	}
 	result := map[string]any{
@@ -146,12 +171,7 @@ func (b *MockUpstream) initialize(_ context.Context, req *rpc.Request) (*rpc.Res
 func (b *MockUpstream) toolsList(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
 	_ = ctx
 	b.toolsListInvocations.Add(1)
-	b.mu.Lock()
-	jsonrpcMessage := strings.TrimSpace(b.ToolsListJSONRPCMessage)
-	schemaByTool := b.InputSchemaByTool
-	descriptionByTool := b.DescriptionByTool
-	b.mu.Unlock()
-
+	jsonrpcMessage := strings.TrimSpace(b.behaviour.ToolsListJSONRPCMessage)
 	if jsonrpcMessage != "" {
 		return rpc.NewError(req.ID, errcodes.InternalError, jsonrpcMessage, nil), nil
 	}
@@ -162,11 +182,11 @@ func (b *MockUpstream) toolsList(ctx context.Context, req *rpc.Request) (*rpc.Re
 			"additionalProperties": false,
 			"properties":           map[string]any{},
 		}
-		if s, ok := schemaByTool[n]; ok && s != nil {
+		if s, ok := b.behaviour.InputSchemaByTool[n]; ok && s != nil {
 			schema = s
 		}
 		description := "mock tool " + n
-		if d, ok := descriptionByTool[n]; ok && d != "" {
+		if d, ok := b.behaviour.DescriptionByTool[n]; ok && d != "" {
 			description = d
 		}
 		tools = append(tools, map[string]any{
@@ -185,15 +205,10 @@ func (b *MockUpstream) toolsList(ctx context.Context, req *rpc.Request) (*rpc.Re
 
 func (b *MockUpstream) toolsCall(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
 	b.toolsCallInvocations.Add(1)
-	b.mu.Lock()
-	errCall := b.ToolsCallErr
-	delay := b.ToolsCallDelay
-	callTextByTool := b.CallTextByTool
-	b.mu.Unlock()
-	if errCall != nil {
-		return nil, errCall
+	if b.behaviour.ToolsCallErr != nil {
+		return nil, b.behaviour.ToolsCallErr
 	}
-	if delay > 0 {
+	if delay := b.behaviour.ToolsCallDelay; delay > 0 {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -226,7 +241,7 @@ func (b *MockUpstream) toolsCall(ctx context.Context, req *rpc.Request) (*rpc.Re
 	}
 
 	text := fmt.Sprintf("ok from %s:%s", b.id, params.Name)
-	if t, ok := callTextByTool[params.Name]; ok && t != "" {
+	if t, ok := b.behaviour.CallTextByTool[params.Name]; ok && t != "" {
 		text = t
 	}
 	content := []map[string]any{
@@ -244,13 +259,9 @@ func (b *MockUpstream) toolsCall(ctx context.Context, req *rpc.Request) (*rpc.Re
 }
 
 func (b *MockUpstream) resourcesList(_ context.Context, req *rpc.Request) (*rpc.Response, error) {
-	b.mu.Lock()
-	omitResources := b.OmitResourcesList
-	jsonrpcMessage := strings.TrimSpace(b.ResourcesListJSONRPCMessage)
-	uris := b.ResourceURIs
-	b.mu.Unlock()
-
-	if omitResources {
+	uris := b.behaviour.ResourceURIs
+	jsonrpcMessage := strings.TrimSpace(b.behaviour.ResourcesListJSONRPCMessage)
+	if !b.behaviour.SupportsResources {
 		return rpc.NewError(req.ID, errcodes.MethodNotFound, "resources not supported", nil), nil
 	}
 	if jsonrpcMessage != "" {
@@ -271,7 +282,7 @@ func (b *MockUpstream) resourcesList(_ context.Context, req *rpc.Request) (*rpc.
 }
 
 func (b *MockUpstream) resourcesRead(_ context.Context, req *rpc.Request) (*rpc.Response, error) {
-	if b.omitResources() {
+	if !b.behaviour.SupportsResources {
 		return rpc.NewError(req.ID, errcodes.MethodNotFound, "resources not supported", nil), nil
 	}
 	var p struct {
@@ -295,13 +306,9 @@ func (b *MockUpstream) resourcesRead(_ context.Context, req *rpc.Request) (*rpc.
 }
 
 func (b *MockUpstream) promptsList(_ context.Context, req *rpc.Request) (*rpc.Response, error) {
-	b.mu.Lock()
-	omitPrompts := b.OmitPromptsList
-	jsonrpcMessage := strings.TrimSpace(b.PromptsListJSONRPCMessage)
-	names := b.PromptNames
-	b.mu.Unlock()
-
-	if omitPrompts {
+	names := b.behaviour.PromptNames
+	jsonrpcMessage := strings.TrimSpace(b.behaviour.PromptsListJSONRPCMessage)
+	if !b.behaviour.SupportsPrompts {
 		return rpc.NewError(req.ID, errcodes.MethodNotFound, "prompts not supported", nil), nil
 	}
 	if jsonrpcMessage != "" {
@@ -322,7 +329,7 @@ func (b *MockUpstream) promptsList(_ context.Context, req *rpc.Request) (*rpc.Re
 }
 
 func (b *MockUpstream) promptsGet(_ context.Context, req *rpc.Request) (*rpc.Response, error) {
-	if b.omitPrompts() {
+	if !b.behaviour.SupportsPrompts {
 		return rpc.NewError(req.ID, errcodes.MethodNotFound, "prompts not supported", nil), nil
 	}
 	var p struct {
@@ -346,18 +353,6 @@ func (b *MockUpstream) promptsGet(_ context.Context, req *rpc.Request) (*rpc.Res
 		return nil, err
 	}
 	return rpc.NewResult(req.ID, raw), nil
-}
-
-func (b *MockUpstream) omitResources() bool {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.OmitResourcesList
-}
-
-func (b *MockUpstream) omitPrompts() bool {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.OmitPromptsList
 }
 
 var _ upstream.Client = (*MockUpstream)(nil)

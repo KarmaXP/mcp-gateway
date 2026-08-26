@@ -16,8 +16,9 @@ import (
 
 func TestInitializeOmitsPartialFailuresByDefault(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
-	b2.InitTransportErr = errors.New("unreachable")
+	b2 := mock.NewMockUpstreamWith("b2", "beta", []string{"ping"}, mock.Behaviour{
+		InitTransportErr: errors.New("unreachable"),
+	})
 	m, err := New(context.Background(), []upstream.Client{b1, b2}, WithListTTL(0))
 	require.NoError(t, err)
 
@@ -32,8 +33,9 @@ func TestInitializeOmitsPartialFailuresByDefault(t *testing.T) {
 
 func TestInitializeReportsPartialFailuresWhenEnabled(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
-	b2.InitTransportErr = errors.New("unreachable")
+	b2 := mock.NewMockUpstreamWith("b2", "beta", []string{"ping"}, mock.Behaviour{
+		InitTransportErr: errors.New("unreachable"),
+	})
 	m, err := New(context.Background(), []upstream.Client{b1, b2}, WithListTTL(0), WithReportPartialFailures(true))
 	require.NoError(t, err)
 
@@ -49,8 +51,9 @@ func TestInitializeReportsPartialFailuresWhenEnabled(t *testing.T) {
 
 func TestInitializeReportsJSONRPCPartialFailure(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
-	b2.InitJSONRPCMessage = "init failed"
+	b2 := mock.NewMockUpstreamWith("b2", "beta", []string{"ping"}, mock.Behaviour{
+		InitJSONRPCMessage: "init failed",
+	})
 	m, err := New(context.Background(), []upstream.Client{b1, b2}, WithListTTL(0), WithReportPartialFailures(true))
 	require.NoError(t, err)
 
@@ -66,8 +69,9 @@ func TestInitializeReportsJSONRPCPartialFailure(t *testing.T) {
 
 func TestInitializeStrictOmitsPartialFailuresMetadata(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
-	b2.InitJSONRPCMessage = "init failed"
+	b2 := mock.NewMockUpstreamWith("b2", "beta", []string{"ping"}, mock.Behaviour{
+		InitJSONRPCMessage: "init failed",
+	})
 	m, err := New(context.Background(), []upstream.Client{b1, b2}, WithAggregationStrict(true, false), WithReportPartialFailures(true))
 	require.NoError(t, err)
 
@@ -79,8 +83,9 @@ func TestInitializeStrictOmitsPartialFailuresMetadata(t *testing.T) {
 
 func TestToolsListReportsPartialFailuresWhenEnabled(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
-	b2.ToolsListJSONRPCMessage = "list down"
+	b2 := mock.NewMockUpstreamWith("b2", "beta", []string{"ping"}, mock.Behaviour{
+		ToolsListJSONRPCMessage: "list down",
+	})
 	m, err := New(context.Background(), []upstream.Client{b1, b2}, WithListTTL(0), WithReportPartialFailures(true))
 	require.NoError(t, err)
 
@@ -98,8 +103,9 @@ func TestToolsListReportsPartialFailuresWhenEnabled(t *testing.T) {
 
 func TestToolsListStrictOmitsPartialFailuresMetadata(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
-	b2.ToolsListJSONRPCMessage = "list down"
+	b2 := mock.NewMockUpstreamWith("b2", "beta", []string{"ping"}, mock.Behaviour{
+		ToolsListJSONRPCMessage: "list down",
+	})
 	m, err := New(context.Background(), []upstream.Client{b1, b2}, WithAggregationStrict(false, true), WithReportPartialFailures(true))
 	require.NoError(t, err)
 
@@ -111,8 +117,9 @@ func TestToolsListStrictOmitsPartialFailuresMetadata(t *testing.T) {
 
 func TestInitializeReportsTimeoutPartialFailure(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
-	b2.InitTransportErr = context.DeadlineExceeded
+	b2 := mock.NewMockUpstreamWith("b2", "beta", []string{"ping"}, mock.Behaviour{
+		InitTransportErr: context.DeadlineExceeded,
+	})
 	m, err := New(context.Background(), []upstream.Client{b1, b2}, WithListTTL(0), WithReportPartialFailures(true))
 	require.NoError(t, err)
 
@@ -149,9 +156,10 @@ func TestToolsListReportsTimeoutPartialFailure(t *testing.T) {
 }
 
 func TestResourcesListReportsPartialFailuresWhenEnabled(t *testing.T) {
-	b1 := mockUpstreamWithResources("b1", "alpha", []string{"file:///a"})
-	b2 := mockUpstreamWithResources("b2", "beta", []string{"file:///b"})
-	b2.ResourcesListJSONRPCMessage = "resources down"
+	b1 := mockUpstreamWithResources("b1", "alpha", []string{"file:///a"}, mock.Behaviour{})
+	b2 := mockUpstreamWithResources("b2", "beta", []string{"file:///b"}, mock.Behaviour{
+		ResourcesListJSONRPCMessage: "resources down",
+	})
 	m, err := New(context.Background(), []upstream.Client{b1, b2}, WithListTTL(0), WithReportPartialFailures(true))
 	require.NoError(t, err)
 
@@ -168,9 +176,10 @@ func TestResourcesListReportsPartialFailuresWhenEnabled(t *testing.T) {
 }
 
 func TestPromptsListReportsPartialFailuresWhenEnabled(t *testing.T) {
-	b1 := mockUpstreamWithPrompts("b1", "alpha", []string{"summarize"})
-	b2 := mockUpstreamWithPrompts("b2", "beta", []string{"review"})
-	b2.PromptsListJSONRPCMessage = "prompts down"
+	b1 := mockUpstreamWithPrompts("b1", "alpha", []string{"summarize"}, mock.Behaviour{})
+	b2 := mockUpstreamWithPrompts("b2", "beta", []string{"review"}, mock.Behaviour{
+		PromptsListJSONRPCMessage: "prompts down",
+	})
 	m, err := New(context.Background(), []upstream.Client{b1, b2}, WithListTTL(0), WithReportPartialFailures(true))
 	require.NoError(t, err)
 
@@ -202,18 +211,16 @@ func (t *timeoutOnMethodUpstream) Call(ctx context.Context, req *rpc.Request) (*
 	return t.inner.Call(ctx, req)
 }
 
-func mockUpstreamWithResources(id, prefix string, uris []string) *mock.MockUpstream {
-	m := mock.NewMockUpstream(id, prefix, nil)
-	m.OmitResourcesList = false
-	m.ResourceURIs = append([]string(nil), uris...)
-	return m
+func mockUpstreamWithResources(id, prefix string, uris []string, behaviour mock.Behaviour) *mock.MockUpstream {
+	behaviour.SupportsResources = true
+	behaviour.ResourceURIs = uris
+	return mock.NewMockUpstreamWith(id, prefix, nil, behaviour)
 }
 
-func mockUpstreamWithPrompts(id, prefix string, names []string) *mock.MockUpstream {
-	m := mock.NewMockUpstream(id, prefix, nil)
-	m.OmitPromptsList = false
-	m.PromptNames = append([]string(nil), names...)
-	return m
+func mockUpstreamWithPrompts(id, prefix string, names []string, behaviour mock.Behaviour) *mock.MockUpstream {
+	behaviour.SupportsPrompts = true
+	behaviour.PromptNames = names
+	return mock.NewMockUpstreamWith(id, prefix, nil, behaviour)
 }
 
 func mustInitExtras(t *testing.T, raw json.RawMessage) map[string]any {

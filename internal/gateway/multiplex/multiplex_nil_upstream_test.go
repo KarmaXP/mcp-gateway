@@ -150,8 +150,9 @@ func TestPolicyHardenSchemasInsideAllOf(t *testing.T) {
 			"required":   []any{"msg"},
 		}},
 	}
-	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	b1.InputSchemaByTool = map[string]map[string]any{"echo": inputSchema}
+	b1 := mock.NewMockUpstreamWith("b1", "alpha", []string{"echo"}, mock.Behaviour{
+		InputSchemaByTool: map[string]map[string]any{"echo": inputSchema},
+	})
 	pol := policy.NewEngine(policy.EngineInput{Version: "t", ElevatedTools: []string{"alpha__echo"}})
 	a, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0), withPolicyEngine(pol))
 	require.NoError(t, err)

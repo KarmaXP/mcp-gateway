@@ -2,6 +2,7 @@
 package mcpupstreammock
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -104,19 +105,22 @@ func upstreamFor(cfg Config) *mock.MockUpstream {
 			description[t.Name] = t.Description
 		}
 	}
-	upstream := mock.NewMockUpstream(cfg.ServerName, "", names)
-	upstream.CallTextByTool = callText
-	upstream.DescriptionByTool = description
-	return upstream
+	return mock.NewMockUpstreamWith(cfg.ServerName, "", names, mock.Behaviour{
+		CallTextByTool:    callText,
+		DescriptionByTool: description,
+	})
 }
 
 func (s *Server) Addr() string {
 	return s.listener.Addr().String()
 }
 
-// Wait blocks until the server stops, and reports why.
+// Wait blocks until the server stops, and reports why unless the stop was deliberate.
 func (s *Server) Wait() error {
-	return <-s.done
+	if err := <-s.done; !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
 }
 
 func (s *Server) Close() error {

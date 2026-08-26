@@ -18,17 +18,18 @@ import (
 func TestToolCallSpansNeverCarryArgumentValues(t *testing.T) {
 	const canary = "CANARY-8f3ad91c"
 
-	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	b1.InputSchemaByTool = map[string]map[string]any{
-		"echo": {
-			"type":                 "object",
-			"additionalProperties": false,
-			"properties": map[string]any{
-				"msg":   map[string]any{"type": "string", "pattern": "^ok$"},
-				"count": map[string]any{"type": "integer", "maximum": 10},
+	b1 := mock.NewMockUpstreamWith("b1", "alpha", []string{"echo"}, mock.Behaviour{
+		InputSchemaByTool: map[string]map[string]any{
+			"echo": {
+				"type":                 "object",
+				"additionalProperties": false,
+				"properties": map[string]any{
+					"msg":   map[string]any{"type": "string", "pattern": "^ok$"},
+					"count": map[string]any{"type": "integer", "maximum": 10},
+				},
 			},
 		},
-	}
+	})
 
 	tests := []struct {
 		name      string

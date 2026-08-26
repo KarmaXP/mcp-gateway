@@ -14,8 +14,9 @@ import (
 
 func TestInitializeStrictFailsOnUpstreamJSONRPCError(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "a", []string{"t"})
-	b2 := mock.NewMockUpstream("b2", "b", []string{"x"})
-	b2.InitJSONRPCMessage = "init failed"
+	b2 := mock.NewMockUpstreamWith("b2", "b", []string{"x"}, mock.Behaviour{
+		InitJSONRPCMessage: "init failed",
+	})
 	m, err := New(context.Background(), []upstream.Client{b1, b2}, WithAggregationStrict(true, false))
 	require.NoError(t, err)
 	resp, err := m.Initialize(context.Background(), json.RawMessage(`1`))
@@ -26,8 +27,9 @@ func TestInitializeStrictFailsOnUpstreamJSONRPCError(t *testing.T) {
 
 func TestToolsListStrictFailsOnPartialUpstream(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "a", []string{"t"})
-	b2 := mock.NewMockUpstream("b2", "b", []string{"x"})
-	b2.ToolsListJSONRPCMessage = "list down"
+	b2 := mock.NewMockUpstreamWith("b2", "b", []string{"x"}, mock.Behaviour{
+		ToolsListJSONRPCMessage: "list down",
+	})
 	m, err := New(context.Background(), []upstream.Client{b1, b2}, WithAggregationStrict(false, true))
 	require.NoError(t, err)
 	_, _ = m.Initialize(context.Background(), json.RawMessage(`0`))
@@ -38,13 +40,15 @@ func TestToolsListStrictFailsOnPartialUpstream(t *testing.T) {
 }
 
 func TestResourcesListStrictFailsOnPartialUpstream(t *testing.T) {
-	b1 := mock.NewMockUpstream("b1", "a", []string{"t"})
-	b1.OmitResourcesList = false
-	b1.ResourceURIs = []string{"file:///x"}
-	b2 := mock.NewMockUpstream("b2", "b", []string{"x"})
-	b2.OmitResourcesList = false
-	b2.ResourceURIs = []string{"file:///y"}
-	b2.ResourcesListJSONRPCMessage = "res list down"
+	b1 := mock.NewMockUpstreamWith("b1", "a", []string{"t"}, mock.Behaviour{
+		SupportsResources: true,
+		ResourceURIs:      []string{"file:///x"},
+	})
+	b2 := mock.NewMockUpstreamWith("b2", "b", []string{"x"}, mock.Behaviour{
+		SupportsResources:           true,
+		ResourceURIs:                []string{"file:///y"},
+		ResourcesListJSONRPCMessage: "res list down",
+	})
 	m, err := New(context.Background(), []upstream.Client{b1, b2}, WithAggregationStrict(false, true))
 	require.NoError(t, err)
 	_, _ = m.Initialize(context.Background(), json.RawMessage(`0`))
@@ -55,13 +59,15 @@ func TestResourcesListStrictFailsOnPartialUpstream(t *testing.T) {
 }
 
 func TestPromptsListStrictFailsOnPartialUpstream(t *testing.T) {
-	b1 := mock.NewMockUpstream("b1", "p", []string{"t"})
-	b1.OmitPromptsList = false
-	b1.PromptNames = []string{"one"}
-	b2 := mock.NewMockUpstream("b2", "q", []string{"t"})
-	b2.OmitPromptsList = false
-	b2.PromptNames = []string{"two"}
-	b2.PromptsListJSONRPCMessage = "prompts down"
+	b1 := mock.NewMockUpstreamWith("b1", "p", []string{"t"}, mock.Behaviour{
+		SupportsPrompts: true,
+		PromptNames:     []string{"one"},
+	})
+	b2 := mock.NewMockUpstreamWith("b2", "q", []string{"t"}, mock.Behaviour{
+		SupportsPrompts:           true,
+		PromptNames:               []string{"two"},
+		PromptsListJSONRPCMessage: "prompts down",
+	})
 	m, err := New(context.Background(), []upstream.Client{b1, b2}, WithAggregationStrict(false, true))
 	require.NoError(t, err)
 	_, _ = m.Initialize(context.Background(), json.RawMessage(`0`))

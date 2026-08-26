@@ -64,8 +64,9 @@ func TestToolsListPartialUpstreamFailureOmitsTools(t *testing.T) {
 }
 
 func TestToolsCallTimeoutWhenUpstreamSlow(t *testing.T) {
-	slow := mock.NewMockUpstream("s", "alpha", []string{"echo"})
-	slow.ToolsCallDelay = 500 * time.Millisecond
+	slow := mock.NewMockUpstreamWith("s", "alpha", []string{"echo"}, mock.Behaviour{
+		ToolsCallDelay: 500 * time.Millisecond,
+	})
 
 	a, err := New(context.Background(), []upstream.Client{slow}, WithListTTL(0), WithCallTimeout(50*time.Millisecond))
 	require.NoError(t, err)
@@ -79,8 +80,9 @@ func TestToolsCallTimeoutWhenUpstreamSlow(t *testing.T) {
 }
 
 func TestToolsCallUpstreamTransportError(t *testing.T) {
-	b := mock.NewMockUpstream("s", "alpha", []string{"echo"})
-	b.ToolsCallErr = errors.New("connection reset")
+	b := mock.NewMockUpstreamWith("s", "alpha", []string{"echo"}, mock.Behaviour{
+		ToolsCallErr: errors.New("connection reset"),
+	})
 
 	a, err := New(context.Background(), []upstream.Client{b}, WithListTTL(0))
 	require.NoError(t, err)

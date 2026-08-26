@@ -12,8 +12,9 @@ import (
 )
 
 func TestUpstreamToolsCallRespectsContextCancelWithDelay(t *testing.T) {
-	b := NewMockUpstream("b1", "p", []string{"echo"})
-	b.ToolsCallDelay = 500 * time.Millisecond
+	b := NewMockUpstreamWith("b1", "p", []string{"echo"}, Behaviour{
+		ToolsCallDelay: 500 * time.Millisecond,
+	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
