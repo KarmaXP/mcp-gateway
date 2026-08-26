@@ -46,7 +46,7 @@ func (a *Multiplexer) ToolsList(ctx context.Context, hostID json.RawMessage) (*r
 		span.SetStatus(codes.Error, "tools/list upstream strict")
 		return rpc.NewError(hostID, errcodes.StrictAggregationFailed, "tools/list: strict aggregation: one or more upstreams failed", nil), nil
 	}
-	a.replaceToolSchemasFromMerged(merged)
+	a.replaceToolSchemasFromMerged(merged, listFailures)
 
 	outFull, err := json.Marshal(map[string]any{"tools": merged})
 	if err != nil {

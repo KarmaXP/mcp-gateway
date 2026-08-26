@@ -29,7 +29,7 @@ func (a *Multiplexer) runToolsListChangedRefresh() {
 			"upstreams", len(a.upstreams))
 		return
 	}
-	a.replaceToolSchemasFromMerged(merged)
+	a.replaceToolSchemasFromMerged(merged, failures)
 
 	outFull, err := json.Marshal(map[string]any{"tools": merged})
 	if err != nil {

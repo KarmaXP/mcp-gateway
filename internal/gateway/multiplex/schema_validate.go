@@ -1,11 +1,14 @@
 package multiplex
 
 import (
+	"strings"
+
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/namespace"
 	"log/slog"
 	"net/url"
 
@@ -74,8 +77,8 @@ type toolSchema struct {
 	enumeratesProperties bool
 }
 
-func (a *Multiplexer) replaceToolSchemasFromMerged(merged []map[string]any) {
-	out := make(map[string]toolSchema)
+func (a *Multiplexer) replaceToolSchemasFromMerged(merged []map[string]any, failures []PartialFailure) {
+	answered := a.answeredUpstreamsByPrefix(failures)
 	var pol *policy.Engine
 	if a.policyHolder != nil {
 		pol = a.policyHolder.Load()
@@ -101,9 +104,34 @@ func (a *Multiplexer) replaceToolSchemasFromMerged(merged []map[string]any) {
 			slog.Warn("tool inputSchema compile skipped", "tool", name, "err", err)
 			continue
 		}
-		out[name] = toolSchema{validator: v, enumeratesProperties: enumeratesProperties(sch)}
+		if tools := answered[a.upstreamPrefixOf(name)]; tools != nil {
+			tools[name] = toolSchema{validator: v, enumeratesProperties: enumeratesProperties(sch)}
+		}
 	}
-	a.schemaRegistry.replace(out)
+	a.schemaRegistry.replaceReachable(answered)
+}
+
+func (a *Multiplexer) answeredUpstreamsByPrefix(failures []PartialFailure) map[string]map[string]toolSchema {
+	failed := make(map[string]struct{}, len(failures))
+	for _, f := range failures {
+		failed[f.UpstreamID] = struct{}{}
+	}
+	answered := make(map[string]map[string]toolSchema, len(a.upstreams))
+	for _, u := range a.upstreams {
+		if _, down := failed[u.ID()]; down {
+			continue
+		}
+		answered[u.Prefix()] = make(map[string]toolSchema)
+	}
+	return answered
+}
+
+func (a *Multiplexer) upstreamPrefixOf(namespacedTool string) string {
+	prefix, _, found := strings.Cut(namespacedTool, namespace.Separator)
+	if !found {
+		return ""
+	}
+	return prefix
 }
 
 func hardenObjectSchemasForValidation(v any) any {
@@ -202,7 +230,7 @@ func (a *Multiplexer) refreshToolSchemasFromListJSON(raw json.RawMessage) {
 	if err != nil {
 		return
 	}
-	a.replaceToolSchemasFromMerged(tools)
+	a.replaceToolSchemasFromMerged(tools, nil)
 }
 
 func parseToolsArrayFromListJSON(raw json.RawMessage) ([]map[string]any, error) {
