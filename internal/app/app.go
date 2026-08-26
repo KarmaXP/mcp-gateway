@@ -55,7 +55,10 @@ func New(ctx context.Context, opts Options) (app *App, err error) {
 		return nil, fmt.Errorf("preflight: %w", err)
 	}
 
-	authCfg := auth.JWTAuthFromEnvironment()
+	authCfg, err := auth.JWTAuthFromEnvironment()
+	if err != nil {
+		return nil, fmt.Errorf("app: jwt auth config: %w", err)
+	}
 	validator, err := auth.NewValidator(authCfg)
 	if err != nil {
 		return nil, fmt.Errorf("auth config: %w", err)

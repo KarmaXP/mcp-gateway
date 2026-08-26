@@ -221,6 +221,7 @@ test-cover:
 	@go vet ./...
 	@go test -race -coverprofile=bin/coverage.out -covermode=atomic ./internal/...
 	@go tool cover -func=bin/coverage.out | tail -n 25
+	@bash scripts/check-coverage.sh
 
 test-integration:
 	@echo "Integration tests (JWT/RPC always; Qdrant+embed+OTLP when reachable — see docs/DEVELOPER.md)..."

@@ -36,6 +36,9 @@ jobs:
           go vet ./...
           go test -race -count=1 ./...
 
+      - name: Coverage floor
+        run: make test-cover
+
       - name: go.mod and go.sum are tidy
         run: make tidy-check
 
