@@ -7,11 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
-	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
@@ -248,18 +248,15 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 
 	outcome := newInitializeOutcome(a.strictInit, len(a.upstreams))
 
-	g, ctx := errgroup.WithContext(tctx)
+	var wg sync.WaitGroup
 	for i, b := range a.upstreams {
-		i, b := i, b
-		g.Go(func() error {
-			a.initializeUpstream(ctx, i, b, outcome)
-			return nil
-		})
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			a.initializeUpstream(tctx, i, b, outcome)
+		}()
 	}
-	if err := g.Wait(); err != nil {
-		span.SetStatus(codes.Error, "initialize upstream group")
-		return nil, fmt.Errorf("multiplex: initialize upstreams: %w", err)
-	}
+	wg.Wait()
 
 	if a.strictInit && outcome.strictFailed {
 		span.SetStatus(codes.Error, "strict initialize aggregation")
@@ -416,12 +413,6 @@ func cloneMap(m map[string]any) map[string]any {
 	return out
 }
 
-// InvalidateToolCache drops the cached tools/list payload. Compiled schemas survive, so
-// argument validation keeps working until the next successful refresh replaces them.
-func (a *Multiplexer) InvalidateToolCache() {
-	a.invalidateListCache()
-}
-
 func (a *Multiplexer) invalidateListCache() {
 	a.listCache.invalidate()
 }
@@ -437,8 +428,6 @@ func (a *Multiplexer) semanticRoutingSignal(ctx context.Context, toolName string
 	ver := a.catalogVersion.load()
 	allowMode, allowedList := hostctx.AllowListModeFromContext(ctx)
 	return router.RoutingSignal{
-		SessionID:       hostctx.MCPSessionIDFromContext(ctx),
-		Method:          mcpwire.MethodToolsCall,
 		ToolName:        toolName,
 		ArgumentsJSON:   args,
 		IntentText:      hostctx.ClientIntentFromContext(ctx),

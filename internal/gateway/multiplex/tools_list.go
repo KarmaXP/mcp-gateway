@@ -69,7 +69,6 @@ func (a *Multiplexer) narrowToolsForIntent(ctx context.Context, merged []map[str
 		return merged
 	}
 	sig := router.RoutingSignal{
-		Method:         mcpwire.MethodToolsList,
 		IntentText:     intent,
 		AllowList:      allowed,
 		AllowListAuthz: routerAllowListAuthz(allowMode),
@@ -115,7 +114,7 @@ func (a *Multiplexer) tryCachedToolsList(ctx context.Context, hostID json.RawMes
 }
 
 func (a *Multiplexer) fetchAndMergeUpstreamTools(ctx context.Context) ([]map[string]any, []PartialFailure, error) {
-	perUpstream, failures, anyFail := a.fanoutListMethod(ctx, mcpwire.MethodToolsList, a.callUpstreamToolsList)
+	perUpstream, failures, anyFail := a.fanoutListMethod(ctx, a.callUpstreamToolsList)
 	if a.strictList && anyFail {
 		return nil, nil, fmt.Errorf("tools/list: upstream failure")
 	}

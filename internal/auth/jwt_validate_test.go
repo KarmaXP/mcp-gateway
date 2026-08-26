@@ -164,8 +164,9 @@ func TestValidator_ValidateWithAllowedTools(t *testing.T) {
 	s, err := tok.SignedString(priv)
 	require.NoError(t, err)
 
-	tools, err := v.ValidateWithAllowedTools(ctx, s)
+	claims, err := v.ParseTokenClaims(ctx, s)
 	require.NoError(t, err)
+	tools := claims.NormalizedMcpTools()
 	require.Equal(t, []string{"k8s__logs", "prom__q"}, tools)
 
 	emptyTok := jwt.NewWithClaims(jwt.SigningMethodRS256, TokenClaims{
@@ -179,7 +180,7 @@ func TestValidator_ValidateWithAllowedTools(t *testing.T) {
 	emptyTok.Header["kid"] = "k1"
 	es, err := emptyTok.SignedString(priv)
 	require.NoError(t, err)
-	tools, err = v.ValidateWithAllowedTools(ctx, es)
+	emptyClaims, err := v.ParseTokenClaims(ctx, es)
 	require.NoError(t, err)
-	require.Nil(t, tools)
+	require.Nil(t, emptyClaims.NormalizedMcpTools())
 }

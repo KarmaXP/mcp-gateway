@@ -31,7 +31,7 @@ func TestInvalidateToolCachePreservesCatalogVersion(t *testing.T) {
 	require.NotEmpty(t, ver)
 	require.Equal(t, ver, sr.CatalogVersion())
 
-	a.InvalidateToolCache()
+	a.invalidateListCache()
 
 	require.Equal(t, ver, a.catalogVersion.load(), "invalidate must keep catalog version until reindex succeeds")
 }

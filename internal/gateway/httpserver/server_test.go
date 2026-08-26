@@ -50,7 +50,7 @@ func TestServerAddrAsHandlerAndMiddleware(t *testing.T) {
 		})
 	}))
 	require.Equal(t, ":9999", srv.Addr())
-	ts := httptest.NewServer(srv.AsHandler())
+	ts := httptest.NewServer(srv)
 	defer ts.Close()
 
 	res, err := http.Get(ts.URL + PathHealthz)

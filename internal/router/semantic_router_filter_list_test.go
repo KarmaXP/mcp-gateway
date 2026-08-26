@@ -53,7 +53,6 @@ func TestFilterToolsForListSubsetsByIntent(t *testing.T) {
 	emb.vecs[q] = []float32{1, 0, 0, 0}
 
 	keep, full := sr.FilterToolsForList(context.Background(), RoutingSignal{
-		Method:         "tools/list",
 		IntentText:     "match first",
 		CatalogVersion: "v1",
 	})
@@ -136,7 +135,6 @@ func TestFilterToolsForListAllowedToolsRestrictsHits(t *testing.T) {
 	emb.vecs[q] = []float32{1, 0, 0, 0}
 
 	keep, full := sr.FilterToolsForList(context.Background(), RoutingSignal{
-		Method:         "tools/list",
 		IntentText:     "match first",
 		AllowList:      []string{"a__one"},
 		CatalogVersion: "v1",

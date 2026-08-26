@@ -3,8 +3,7 @@ package multiplex
 import (
 	"context"
 	"log/slog"
-
-	"golang.org/x/sync/errgroup"
+	"sync"
 
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
@@ -14,10 +13,11 @@ func (a *Multiplexer) NotifyHostInitialized(ctx context.Context) {
 		return
 	}
 
-	g, ctx := errgroup.WithContext(ctx)
+	var wg sync.WaitGroup
 	for _, b := range a.upstreams {
-		b := b
-		g.Go(func() error {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 			callCtx, cancel := context.WithTimeout(ctx, a.initTimeout)
 			defer cancel()
 			req := &rpc.Request{
@@ -27,8 +27,7 @@ func (a *Multiplexer) NotifyHostInitialized(ctx context.Context) {
 			if _, err := b.Call(callCtx, req); err != nil {
 				slog.Warn("notify host initialized upstream failed", "backend_id", b.ID(), "err", err)
 			}
-			return nil
-		})
+		}()
 	}
-	_ = g.Wait()
+	wg.Wait()
 }

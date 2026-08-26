@@ -87,9 +87,9 @@ func TestToolsListCacheInvalidatedAfterListChanged(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int32(1), b.calls.Load())
 
-	a.InvalidateToolCache()
+	a.invalidateListCache()
 
 	_, err = a.ToolsList(ctx, id)
 	require.NoError(t, err)
-	require.Equal(t, int32(2), b.calls.Load(), "InvalidateToolCache must force upstream tools/list")
+	require.Equal(t, int32(2), b.calls.Load(), "invalidating the list cache must force an upstream tools/list")
 }

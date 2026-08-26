@@ -30,8 +30,6 @@ const (
 )
 
 type RoutingSignal struct {
-	SessionID       string
-	Method          string
 	ToolName        string
 	ArgumentsJSON   json.RawMessage
 	IntentText      string

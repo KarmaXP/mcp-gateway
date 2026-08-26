@@ -12,7 +12,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/namespace"
@@ -195,7 +194,7 @@ func parsePromptsGetParams(hostID, params json.RawMessage) (namespacedName strin
 }
 
 func (a *Multiplexer) listResourcesFromEachUpstream(ctx context.Context) ([][]map[string]any, []PartialFailure, bool) {
-	return a.fanoutListMethod(ctx, mcpwire.MethodResourcesList, a.callUpstreamResourcesList)
+	return a.fanoutListMethod(ctx, a.callUpstreamResourcesList)
 }
 
 func (a *Multiplexer) callUpstreamResourcesList(ctx context.Context, b upstream.Client) ([]map[string]any, *PartialFailure) {
@@ -236,7 +235,7 @@ func (a *Multiplexer) callUpstreamResourcesList(ctx context.Context, b upstream.
 }
 
 func (a *Multiplexer) listPromptsFromEachUpstream(ctx context.Context) ([][]map[string]any, []PartialFailure, bool) {
-	return a.fanoutListMethod(ctx, mcpwire.MethodPromptsList, a.callUpstreamPromptsList)
+	return a.fanoutListMethod(ctx, a.callUpstreamPromptsList)
 }
 
 func (a *Multiplexer) callUpstreamPromptsList(ctx context.Context, b upstream.Client) ([]map[string]any, *PartialFailure) {
@@ -278,30 +277,28 @@ func (a *Multiplexer) callUpstreamPromptsList(ctx context.Context, b upstream.Cl
 
 type listFetchFunc func(context.Context, upstream.Client) ([]map[string]any, *PartialFailure)
 
-func (a *Multiplexer) fanoutListMethod(ctx context.Context, method string, fetch listFetchFunc) ([][]map[string]any, []PartialFailure, bool) {
+func (a *Multiplexer) fanoutListMethod(ctx context.Context, fetch listFetchFunc) ([][]map[string]any, []PartialFailure, bool) {
 	n := len(a.upstreams)
 	results := make([][]map[string]any, n)
 	var failures []PartialFailure
 	var anyFail bool
-	g, gctx := errgroup.WithContext(ctx)
+	var wg sync.WaitGroup
 	var mu sync.Mutex
 	for i, b := range a.upstreams {
-		i, b := i, b
-		g.Go(func() error {
-			items, fail := fetch(gctx, b)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			items, fail := fetch(ctx, b)
 			mu.Lock()
+			defer mu.Unlock()
 			if fail != nil {
 				anyFail = true
 				failures = append(failures, *fail)
 			}
 			results[i] = items
-			mu.Unlock()
-			return nil
-		})
+		}()
 	}
-	if err := g.Wait(); err != nil {
-		slog.Warn("list fanout", "method", method, "err", err)
-	}
+	wg.Wait()
 	return results, failures, anyFail
 }
 

@@ -86,7 +86,7 @@ func TestIntegrationJWTPermissionDeniedSkipsUpstream(t *testing.T) {
 
 	opts := orchestrator.HTTPServerOptions("mcp-gateway-it", authCfg, v, policy.NewHolder(policy.NewEngine(policy.EngineInput{})), ratelimit.New(context.Background(), ratelimit.Config{}))
 	srv := httpserver.New(context.Background(), agg, "", opts...)
-	ts := httptest.NewServer(srv.AsHandler())
+	ts := httptest.NewServer(srv)
 	defer ts.Close()
 
 	ctx, cancelSSE := context.WithCancel(context.Background())
@@ -206,7 +206,7 @@ func TestIntegrationJWTEmptyIntersectionDenyAll(t *testing.T) {
 
 	opts := orchestrator.HTTPServerOptions("mcp-gateway-denyall-it", authCfg, v, policy.NewHolder(policy.NewEngine(policy.EngineInput{})), ratelimit.New(context.Background(), ratelimit.Config{}))
 	srv := httpserver.New(context.Background(), agg, "", opts...)
-	ts := httptest.NewServer(srv.AsHandler())
+	ts := httptest.NewServer(srv)
 	defer ts.Close()
 
 	ctx, cancelSSE := context.WithCancel(context.Background())
