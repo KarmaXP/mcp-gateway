@@ -30,7 +30,7 @@ func TestToolsCallDeniedWhenNotInRouterAllowlist(t *testing.T) {
 	_, err = a.ToolsList(context.Background(), json.RawMessage(`2`))
 	require.NoError(t, err)
 
-	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{"alpha__echo"})
+	ctx := hostctx.WithAllowList(context.Background(), []string{"alpha__echo"})
 	params, _ := json.Marshal(map[string]any{"name": "alpha__list", "arguments": map[string]any{}})
 	resp, err := a.ToolsCall(ctx, json.RawMessage(`3`), params)
 	require.NoError(t, err)

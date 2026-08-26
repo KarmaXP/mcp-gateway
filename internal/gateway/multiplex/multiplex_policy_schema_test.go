@@ -20,7 +20,7 @@ func TestToolsListFilteredByJWTAllowList(t *testing.T) {
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 
-	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{"alpha__echo"})
+	ctx := hostctx.WithAllowList(context.Background(), []string{"alpha__echo"})
 	resp, err := a.ToolsList(ctx, json.RawMessage(`2`))
 	require.NoError(t, err)
 	require.Nil(t, resp.Error)
@@ -41,7 +41,7 @@ func TestToolsCallRejectedWhenNotInAllowList(t *testing.T) {
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 	_, _ = a.ToolsList(context.Background(), json.RawMessage(`2`))
 
-	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{"alpha__echo"})
+	ctx := hostctx.WithAllowList(context.Background(), []string{"alpha__echo"})
 	params, _ := json.Marshal(map[string]any{"name": "alpha__list", "arguments": map[string]any{}})
 	resp, err := a.ToolsCall(ctx, json.RawMessage(`3`), params)
 	require.NoError(t, err)

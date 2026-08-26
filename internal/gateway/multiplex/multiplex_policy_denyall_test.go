@@ -24,7 +24,7 @@ func TestToolsListEmptyIntersectionReturnsNoTools(t *testing.T) {
 	mpx, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0))
 	require.NoError(t, err)
 
-	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{})
+	ctx := hostctx.WithAllowList(context.Background(), []string{})
 	resp, err := mpx.ToolsList(ctx, json.RawMessage(`1`))
 	require.NoError(t, err)
 	require.Nil(t, resp.Error)
@@ -36,7 +36,7 @@ func TestToolsListDenyAllReturnsEmptyArrayNotNull(t *testing.T) {
 	mpx, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0))
 	require.NoError(t, err)
 
-	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{})
+	ctx := hostctx.WithAllowList(context.Background(), []string{})
 	resp, err := mpx.ToolsList(ctx, json.RawMessage(`1`))
 	require.NoError(t, err)
 	require.Nil(t, resp.Error)
@@ -86,7 +86,7 @@ func TestToolsCallDenyAllSkipsSemanticRouter(t *testing.T) {
 	require.NoError(t, err)
 	beforeCall := spy.invokes.Load()
 
-	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{})
+	ctx := hostctx.WithAllowList(context.Background(), []string{})
 	params, _ := json.Marshal(map[string]any{"name": "alpha__echo", "arguments": map[string]any{}})
 	resp, err := mpx.ToolsCall(ctx, json.RawMessage(`2`), params)
 	require.NoError(t, err)
@@ -101,7 +101,7 @@ func TestToolsCallEmptyIntersectionPermissionDenied(t *testing.T) {
 	mpx, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0))
 	require.NoError(t, err)
 
-	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{})
+	ctx := hostctx.WithAllowList(context.Background(), []string{})
 	params, _ := json.Marshal(map[string]any{"name": "alpha__echo", "arguments": map[string]any{}})
 	resp, err := mpx.ToolsCall(ctx, json.RawMessage(`2`), params)
 	require.NoError(t, err)
@@ -115,7 +115,7 @@ func TestToolsListDenyAllSkipsUpstreamFanout(t *testing.T) {
 	mpx, err := New(context.Background(), []upstream.Client{b1, b2}, WithListTTL(0))
 	require.NoError(t, err)
 
-	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{})
+	ctx := hostctx.WithAllowList(context.Background(), []string{})
 	resp, err := mpx.ToolsList(ctx, json.RawMessage(`1`))
 	require.NoError(t, err)
 	require.Nil(t, resp.Error)
@@ -133,7 +133,7 @@ func TestToolsListCacheNotUsedForDenyAllPrincipal(t *testing.T) {
 	_, err = mpx.ToolsList(openCtx, json.RawMessage(`1`))
 	require.NoError(t, err)
 
-	denyCtx := hostctx.WithAllowedToolNames(context.Background(), []string{})
+	denyCtx := hostctx.WithAllowList(context.Background(), []string{})
 	resp, err := mpx.ToolsList(denyCtx, json.RawMessage(`2`))
 	require.NoError(t, err)
 	require.Nil(t, resp.Error)

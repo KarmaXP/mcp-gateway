@@ -136,7 +136,7 @@ func TestSessionDispatchMergesPOSTAllowListForToolsCall(t *testing.T) {
 	}))
 	<-s.Out()
 
-	postCtx := hostctx.WithAllowedToolNames(context.Background(), []string{"alpha__echo"})
+	postCtx := hostctx.WithAllowList(context.Background(), []string{"alpha__echo"})
 	params, _ := json.Marshal(map[string]any{"name": "alpha__list", "arguments": map[string]any{}})
 	require.NoError(t, s.Dispatch(postCtx, &rpc.Request{
 		JSONRPC: rpc.JSONRPCVersion,

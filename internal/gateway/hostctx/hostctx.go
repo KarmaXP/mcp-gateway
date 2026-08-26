@@ -47,7 +47,7 @@ type allowListState struct {
 	names []string
 }
 
-func WithAllowedToolNames(parent context.Context, toolNames []string) context.Context {
+func WithAllowList(parent context.Context, toolNames []string) context.Context {
 	if parent == nil {
 		parent = context.Background()
 	}
@@ -57,7 +57,7 @@ func WithAllowedToolNames(parent context.Context, toolNames []string) context.Co
 	if len(toolNames) == 0 {
 		return context.WithValue(parent, allowedToolNamesKey{}, allowListState{mode: AllowListDenyAll})
 	}
-	cp := normalizeAllowedToolNames(toolNames)
+	cp := normalizeAllowList(toolNames)
 	if len(cp) == 0 {
 		return context.WithValue(parent, allowedToolNamesKey{}, allowListState{mode: AllowListDenyAll})
 	}
@@ -85,11 +85,6 @@ func AllowListModeFromContext(ctx context.Context) (AllowListMode, []string) {
 	}
 	// A mode this function does not know denies, so adding one cannot widen access.
 	return AllowListDenyAll, []string{}
-}
-
-func AllowedToolNamesFromContext(ctx context.Context) []string {
-	_, names := AllowListModeFromContext(ctx)
-	return names
 }
 
 type subjectIDKey struct{}
@@ -159,7 +154,7 @@ func MergeRequestValues(parent, req context.Context) context.Context {
 	return out
 }
 
-func normalizeAllowedToolNames(in []string) []string {
+func normalizeAllowList(in []string) []string {
 	if len(in) == 0 {
 		return nil
 	}

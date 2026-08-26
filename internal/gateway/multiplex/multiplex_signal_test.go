@@ -20,7 +20,7 @@ func TestSemanticRoutingSignalIncludesIntentAndCatalogVersion(t *testing.T) {
 	a.catalogVersion.version = "catalog-ver-xyz"
 
 	ctx := hostctx.WithClientIntent(context.Background(), "operator wants pod logs")
-	ctx = hostctx.WithAllowedToolNames(ctx, []string{"p__echo", "other__tool"})
+	ctx = hostctx.WithAllowList(ctx, []string{"p__echo", "other__tool"})
 	sig := a.semanticRoutingSignal(ctx, "p__echo", json.RawMessage(`{"x":1}`))
 	require.Equal(t, "tools/call", sig.Method)
 	require.Equal(t, "p__echo", sig.ToolName)

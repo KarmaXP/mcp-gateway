@@ -47,7 +47,7 @@ func TestHTTPMiddlewareInjectsAllowedToolsFromJWT(t *testing.T) {
 
 	var got []string
 	h := HTTPMiddleware(cfg, v, nil, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		got = hostctx.AllowedToolNamesFromContext(r.Context())
+		_, got = hostctx.AllowListModeFromContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	}))
 	ts := httptest.NewServer(h)

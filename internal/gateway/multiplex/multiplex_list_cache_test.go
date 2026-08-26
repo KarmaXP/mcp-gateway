@@ -56,7 +56,7 @@ func TestToolsListCacheBypassedWithJWTAllowList(t *testing.T) {
 	a, err := New(context.Background(), []upstream.Client{b}, WithListTTL(time.Minute))
 	require.NoError(t, err)
 
-	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{"alpha__echo"})
+	ctx := hostctx.WithAllowList(context.Background(), []string{"alpha__echo"})
 	id := json.RawMessage(`1`)
 
 	resp1, err := a.ToolsList(ctx, id)

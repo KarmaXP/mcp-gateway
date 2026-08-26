@@ -39,7 +39,7 @@ func keepAllowedTools(merged []map[string]any, policyList []string) ([]map[strin
 	out := make([]map[string]any, 0, len(merged))
 	for _, t := range merged {
 		name, _ := t["name"].(string)
-		ok, err := policy.AllowedListContains(name, policyList)
+		ok, err := policy.AllowListPermits(name, policyList)
 		if err != nil {
 			return nil, err
 		}
@@ -240,7 +240,7 @@ func (a *Multiplexer) validateToolArgsWithSpan(ctx context.Context, hostID json.
 	if a.policyHolder != nil {
 		pol = a.policyHolder.Load()
 	}
-	if pol != nil && pol.RequiresStrictSchema(namespacedTool) && !sch.enumeratesProperties {
+	if pol != nil && pol.RequiresInputSchema(namespacedTool) && !sch.enumeratesProperties {
 		err := fmt.Errorf("tool %q requires an input schema that declares its properties (elevated policy)", namespacedTool)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "elevated schema required")

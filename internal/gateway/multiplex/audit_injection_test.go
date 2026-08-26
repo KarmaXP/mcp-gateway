@@ -41,7 +41,7 @@ func TestDeniedToolCallReachesTheInjectedAuditor(t *testing.T) {
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 	_, _ = a.ToolsList(context.Background(), json.RawMessage(`2`))
 
-	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{"alpha__echo"})
+	ctx := hostctx.WithAllowList(context.Background(), []string{"alpha__echo"})
 	ctx = hostctx.WithSubjectID(ctx, "user-7")
 	ctx = hostctx.WithPolicyVersion(ctx, "v-audit")
 	params, _ := json.Marshal(map[string]any{"name": "alpha__list", "arguments": map[string]any{}})
@@ -68,7 +68,7 @@ func TestTwoMultiplexersDoNotShareAnAuditor(t *testing.T) {
 		require.NoError(t, err)
 		_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 		_, _ = a.ToolsList(context.Background(), json.RawMessage(`2`))
-		ctx := hostctx.WithAllowedToolNames(context.Background(), []string{"alpha__nothing"})
+		ctx := hostctx.WithAllowList(context.Background(), []string{"alpha__nothing"})
 		params, _ := json.Marshal(map[string]any{"name": tool, "arguments": map[string]any{}})
 		_, err = a.ToolsCall(ctx, json.RawMessage(`3`), params)
 		require.NoError(t, err)
@@ -92,7 +92,7 @@ func TestAllowedToolCallIsAudited(t *testing.T) {
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 	_, _ = a.ToolsList(context.Background(), json.RawMessage(`2`))
 
-	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{"alpha__echo"})
+	ctx := hostctx.WithAllowList(context.Background(), []string{"alpha__echo"})
 	ctx = hostctx.WithSubjectID(ctx, "user-7")
 	params, _ := json.Marshal(map[string]any{"name": "alpha__echo", "arguments": map[string]any{}})
 	resp, err := a.ToolsCall(ctx, json.RawMessage(`3`), params)

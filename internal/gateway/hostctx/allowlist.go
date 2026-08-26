@@ -1,7 +1,6 @@
 package hostctx
 
-// PolicyAllowListView maps hostctx allow-list mode to policy.AllowedListContains semantics.
-// unrestricted -> nil slice; deny-all -> non-nil empty; restricted -> names copy.
+// PolicyAllowListView maps hostctx allow-list mode to policy.AllowListPermits semantics.
 func PolicyAllowListView(mode AllowListMode, names []string) []string {
 	switch mode {
 	case AllowListUnrestricted:

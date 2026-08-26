@@ -97,7 +97,7 @@ func (a *Multiplexer) enforceHostToolAuthz(ctx context.Context, hostID json.RawM
 
 func (a *Multiplexer) authorizeAgainstAllowList(ctx context.Context, hostID json.RawMessage, namespacedTool string, allowed []string) *rpc.Response {
 	span := trace.SpanFromContext(ctx)
-	ok, err := policy.AllowedListContains(namespacedTool, allowed)
+	ok, err := policy.AllowListPermits(namespacedTool, allowed)
 	if err != nil {
 		span.RecordError(errors.New("policy evaluation failed"))
 		span.SetStatus(codes.Error, "policy evaluation failed")
