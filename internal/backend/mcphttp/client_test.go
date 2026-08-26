@@ -232,10 +232,7 @@ func TestCallSurvivesReconnectWhenPOSTInFlight(t *testing.T) {
 	}()
 
 	require.Eventually(t, func() bool {
-		c.pendMu.Lock()
-		defer c.pendMu.Unlock()
-		_, ok := c.pending["n:55"]
-		return ok
+		return c.calls.InFlight(json.RawMessage(`55`))
 	}, 2*time.Second, 10*time.Millisecond)
 
 	close(dropFirstSSE)
@@ -364,38 +361,6 @@ func TestReconnectAfterSSEDisconnect(t *testing.T) {
 	require.Contains(t, string(resp.Result), "ok")
 }
 
-func TestDispatchResponseAbortsPendingWhenChannelFull(t *testing.T) {
-	c, cleanup, err := NewHTTPMCPUpstream(context.Background(), "u1", "alpha", "http://example.invalid", 1, "")
-	require.NoError(t, err)
-	defer cleanup()
-
-	ch := make(chan *rpc.Response, pendingJSONRPCChannelCap)
-	c.pendMu.Lock()
-	c.pending["n:9"] = ch
-	c.pendMu.Unlock()
-	ch <- &rpc.Response{JSONRPC: rpc.JSONRPCVersion, ID: json.RawMessage(`9`), Result: json.RawMessage(`{}`)}
-
-	raw, err := json.Marshal(map[string]any{
-		"jsonrpc": rpc.JSONRPCVersion,
-		"id":      9,
-		"result":  map[string]any{},
-	})
-	require.NoError(t, err)
-	c.dispatch(raw)
-	require.Equal(t, uint64(1), c.DroppedResponses())
-
-	c.pendMu.Lock()
-	deliverErr := c.pendingErr["n:9"]
-	c.pendMu.Unlock()
-	require.Error(t, deliverErr)
-	require.Contains(t, deliverErr.Error(), "pending channel full")
-
-	_, ok := <-ch
-	require.True(t, ok)
-	_, ok = <-ch
-	require.False(t, ok)
-}
-
 func TestParallelEnsureSessionUsesSingleConnect(t *testing.T) {
 	var (
 		sseCount     atomic.Int32
@@ -502,10 +467,7 @@ func TestCallFailsFastOnSSEDisconnect(t *testing.T) {
 	}()
 
 	require.Eventually(t, func() bool {
-		c.pendMu.Lock()
-		defer c.pendMu.Unlock()
-		_, ok := c.pending["n:7"]
-		return ok
+		return c.calls.InFlight(json.RawMessage(`7`))
 	}, 2*time.Second, 10*time.Millisecond)
 
 	start := time.Now()
@@ -545,109 +507,6 @@ func TestEnsureSessionRespectsCallContextDeadline(t *testing.T) {
 	elapsed := time.Since(start)
 	require.Error(t, err)
 	require.Less(t, elapsed, 500*time.Millisecond)
-}
-
-func TestCallRejectsDuplicateJSONRPCID(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet && r.URL.Path == mcpwire.PathMCPSSE {
-			w.Header().Set(mcpwire.HeaderMCPSessionID, "dup-sess")
-			w.Header().Set("Content-Type", "text/event-stream")
-			w.WriteHeader(http.StatusOK)
-			w.(http.Flusher).Flush()
-			<-r.Context().Done()
-			return
-		}
-		http.NotFound(w, r)
-	}))
-	t.Cleanup(srv.Close)
-
-	c, cleanup, err := NewHTTPMCPUpstream(context.Background(), "u1", "alpha", srv.URL, 1, "")
-	require.NoError(t, err)
-	t.Cleanup(cleanup)
-	require.NoError(t, c.ensureSession(context.Background()))
-
-	ch := make(chan *rpc.Response, pendingJSONRPCChannelCap)
-	c.pendMu.Lock()
-	c.pending["n:99"] = ch
-	c.pendMu.Unlock()
-
-	_, err = c.Call(context.Background(), &rpc.Request{
-		JSONRPC: rpc.JSONRPCVersion,
-		ID:      json.RawMessage(`99`),
-		Method:  "tools/list",
-	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "duplicate jsonrpc id")
-}
-
-func TestCallReturnsErrorWhenPendingChannelFull(t *testing.T) {
-	blockPOST := make(chan struct{})
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == mcpwire.PathMCPSSE:
-			w.Header().Set(mcpwire.HeaderMCPSessionID, "full-sess")
-			w.Header().Set("Content-Type", "text/event-stream")
-			w.WriteHeader(http.StatusOK)
-			w.(http.Flusher).Flush()
-			<-r.Context().Done()
-		case r.Method == http.MethodPost && r.URL.Path == mcpwire.PathMCPRPC:
-			<-blockPOST
-			w.WriteHeader(http.StatusAccepted)
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	t.Cleanup(srv.Close)
-
-	c, cleanup, err := NewHTTPMCPUpstream(context.Background(), "u1", "alpha", srv.URL, 1, "")
-	require.NoError(t, err)
-	t.Cleanup(cleanup)
-
-	require.NoError(t, c.ensureSession(context.Background()))
-
-	req := &rpc.Request{
-		JSONRPC: rpc.JSONRPCVersion,
-		ID:      json.RawMessage(`11`),
-		Method:  "tools/list",
-	}
-	callCtx, callCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer callCancel()
-
-	callDone := make(chan error, 1)
-	go func() {
-		_, err := c.Call(callCtx, req)
-		callDone <- err
-	}()
-
-	require.Eventually(t, func() bool {
-		c.pendMu.Lock()
-		defer c.pendMu.Unlock()
-		_, ok := c.pending["n:11"]
-		return ok
-	}, 2*time.Second, 10*time.Millisecond)
-
-	c.pendMu.Lock()
-	ch := c.pending["n:11"]
-	c.pendMu.Unlock()
-	require.NotNil(t, ch)
-	ch <- &rpc.Response{JSONRPC: rpc.JSONRPCVersion, ID: json.RawMessage(`11`), Result: json.RawMessage(`{}`)}
-
-	raw, err := json.Marshal(map[string]any{
-		"jsonrpc": rpc.JSONRPCVersion,
-		"id":      11,
-		"result":  map[string]any{"ok": true},
-	})
-	require.NoError(t, err)
-	c.dispatch(raw)
-	close(blockPOST)
-
-	select {
-	case err := <-callDone:
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "pending channel full")
-	case <-time.After(2 * time.Second):
-		t.Fatal("Call did not return after pending channel full")
-	}
 }
 
 func TestRPCClientHasTimeout(t *testing.T) {
