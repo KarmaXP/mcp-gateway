@@ -73,7 +73,7 @@ func TestRouterEvalVectorRecallMiniLM(t *testing.T) {
 			ToolName:       "wrong__tool_name",
 			IntentText:     tc.Intent,
 			CatalogVersion: ver,
-			AllowedTools:   tc.Allowed,
+			AllowList:      tc.Allowed,
 		})
 		if err != nil {
 			if errors.Is(err, router.ErrAmbiguous) {
@@ -109,22 +109,22 @@ type recallCase struct {
 	Allowed  []string
 }
 
-func goldenCasesFromCatalog(cat []router.IndexedTool) []recallCase {
+func goldenCasesFromCatalog(cat []router.CatalogEntry) []recallCase {
 	cases := make([]recallCase, 0, len(cat))
 	for _, tool := range cat {
-		intent := strings.TrimSpace(tool.ToolRow.Description)
+		intent := strings.TrimSpace(tool.Tool.Description)
 		if intent == "" {
-			intent = tool.ToolRow.Name
+			intent = tool.Tool.Name
 		}
 		cases = append(cases, recallCase{
 			Intent:   intent,
-			WantTool: tool.ToolRow.Name,
+			WantTool: tool.Tool.Name,
 		})
 	}
 	return cases
 }
 
-func routerEvalCatalogForIntegration(t *testing.T) ([]router.IndexedTool, string) {
+func routerEvalCatalogForIntegration(t *testing.T) ([]router.CatalogEntry, string) {
 	t.Helper()
 
 	candidates := []string{

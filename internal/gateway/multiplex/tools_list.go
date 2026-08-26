@@ -71,7 +71,7 @@ func (a *Multiplexer) narrowToolsForIntent(ctx context.Context, merged []map[str
 	sig := router.RoutingSignal{
 		Method:         mcpwire.MethodToolsList,
 		IntentText:     intent,
-		AllowedTools:   allowed,
+		AllowList:      allowed,
 		AllowListAuthz: routerAllowListAuthz(allowMode),
 		CatalogVersion: a.catalogVersion.load(),
 	}
@@ -229,7 +229,7 @@ func (a *Multiplexer) maybeReindexSemanticCatalog(ctx context.Context, merged []
 	a.commitSemanticCatalogVersion(ctx, ver, indexed, refreshGen)
 }
 
-func (a *Multiplexer) commitSemanticCatalogVersion(ctx context.Context, ver string, indexed []router.IndexedTool, refreshGen uint64) {
+func (a *Multiplexer) commitSemanticCatalogVersion(ctx context.Context, ver string, indexed []router.CatalogEntry, refreshGen uint64) {
 	a.catalogVersion.commitIfCurrent(ver, refreshGen, func() {
 		if a.semantic != nil {
 			a.semantic.ApplyCatalog(ctx, ver, indexed)

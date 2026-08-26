@@ -13,13 +13,13 @@ func main() {
 	cat := routertest.SyntheticCatalog()
 	tools := make([]map[string]any, 0, len(cat))
 	for _, entry := range cat {
-		props := make(map[string]any, len(entry.ToolRow.ParamKeys))
-		for _, key := range entry.ToolRow.ParamKeys {
+		props := make(map[string]any, len(entry.Tool.ParamKeys))
+		for _, key := range entry.Tool.ParamKeys {
 			props[key] = map[string]any{"type": "string"}
 		}
 		tools = append(tools, map[string]any{
-			"name":        entry.ToolRow.Name,
-			"description": entry.ToolRow.Description,
+			"name":        entry.Tool.Name,
+			"description": entry.Tool.Description,
 			"inputSchema": map[string]any{
 				"type":       "object",
 				"properties": props,

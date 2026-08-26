@@ -40,7 +40,7 @@ func TestResolveToolsCallSiloNarrowedZeroToolsSkipsVectorSearch(t *testing.T) {
 	st := &queryCountingStore{inner: inner}
 	emb := &mapEmbed{vecs: make(map[string][]float32), dim: dim}
 
-	aws := index.ToolRow{Name: "aws__list_buckets", Description: "s3 buckets", ParamKeys: nil}
+	aws := index.Tool{Name: "aws__list_buckets", Description: "s3 buckets", ParamKeys: nil}
 	doc := index.FormatDocument(aws)
 	emb.vecs[doc] = []float32{1, 0, 0, 0}
 
@@ -50,8 +50,8 @@ func TestResolveToolsCallSiloNarrowedZeroToolsSkipsVectorSearch(t *testing.T) {
 	cfg.ScoreMin = 0.5
 	sr := NewSemanticRouter(cfg, emb, st, dim)
 	sr.SetRules(rules.New(nil, map[string]string{"kubernetes": "k8s"}))
-	reindexAndApply(t, sr, context.Background(), "v1", []IndexedTool{
-		{ToolRow: aws, UpstreamID: "b1"},
+	reindexAndApply(t, sr, context.Background(), "v1", []CatalogEntry{
+		{Tool: aws, UpstreamID: "b1"},
 	})
 
 	_, dec, err := sr.ResolveToolsCall(context.Background(), RoutingSignal{

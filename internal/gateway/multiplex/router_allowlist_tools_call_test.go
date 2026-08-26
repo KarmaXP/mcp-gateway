@@ -17,8 +17,8 @@ import (
 func TestToolsCallDeniedWhenNotInRouterAllowlist(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo", "list"})
 	base := &mapEmbed{dim: 4, vecs: make(map[string][]float32)}
-	tRowList := index.FormatDocument(index.ToolRow{Name: "alpha__list", Description: "list tool"})
-	tRowEcho := index.FormatDocument(index.ToolRow{Name: "alpha__echo", Description: "echo tool"})
+	tRowList := index.FormatDocument(index.Tool{Name: "alpha__list", Description: "list tool"})
+	tRowEcho := index.FormatDocument(index.Tool{Name: "alpha__echo", Description: "echo tool"})
 	base.vecs[tRowList] = []float32{1, 0, 0, 0}
 	base.vecs[tRowEcho] = []float32{0, 1, 0, 0}
 

@@ -9,7 +9,7 @@ import (
 func TestSyntheticCatalogCanonicalSRETools(t *testing.T) {
 	names := make(map[string]struct{}, len(SyntheticCatalog()))
 	for _, entry := range SyntheticCatalog() {
-		names[entry.ToolRow.Name] = struct{}{}
+		names[entry.Tool.Name] = struct{}{}
 	}
 	for _, want := range []string{
 		"k8s__get_pod_logs",

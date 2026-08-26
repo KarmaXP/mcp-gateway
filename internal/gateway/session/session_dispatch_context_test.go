@@ -45,8 +45,8 @@ func (m *sessionTestMapEmbed) Embed(ctx context.Context, texts []string) ([][]fl
 func TestSessionDispatchMergesPOSTIntentForToolsListFilter(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "p", []string{"echo", "list"})
 	base := &sessionTestMapEmbed{dim: 4, vecs: make(map[string][]float32)}
-	tEcho := index.ToolRow{Name: "p__echo", Description: "mock tool echo", ParamKeys: nil}
-	tList := index.ToolRow{Name: "p__list", Description: "mock tool list", ParamKeys: nil}
+	tEcho := index.Tool{Name: "p__echo", Description: "mock tool echo", ParamKeys: nil}
+	tList := index.Tool{Name: "p__list", Description: "mock tool list", ParamKeys: nil}
 	dEcho := index.FormatDocument(tEcho)
 	dList := index.FormatDocument(tList)
 	base.vecs[dEcho] = []float32{1, 0, 0, 0}

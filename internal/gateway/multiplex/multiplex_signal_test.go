@@ -26,7 +26,7 @@ func TestSemanticRoutingSignalIncludesIntentAndCatalogVersion(t *testing.T) {
 	require.Equal(t, "p__echo", sig.ToolName)
 	require.JSONEq(t, `{"x":1}`, string(sig.ArgumentsJSON))
 	require.Equal(t, "operator wants pod logs", sig.IntentText)
-	require.Equal(t, []string{"p__echo", "other__tool"}, sig.AllowedTools)
+	require.Equal(t, []string{"p__echo", "other__tool"}, sig.AllowList)
 	require.Equal(t, router.AllowListAuthzRestricted, sig.AllowListAuthz)
 	require.Equal(t, "catalog-ver-xyz", sig.CatalogVersion)
 }

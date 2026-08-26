@@ -45,12 +45,12 @@ func TestSemanticRouterExactShortcutNoVector(t *testing.T) {
 	cfg.ScoreMin = 0.9
 	e := NewSemanticRouter(cfg, emb, st, dim)
 
-	row := index.ToolRow{Name: "pre__tool", Description: "d", ParamKeys: nil}
+	row := index.Tool{Name: "pre__tool", Description: "d", ParamKeys: nil}
 	doc := index.FormatDocument(row)
 	emb.vecs[doc] = []float32{1, 0, 0, 0}
 
-	reindexAndApply(t, e, context.Background(), "v1", []IndexedTool{
-		{ToolRow: row, UpstreamID: "be1"},
+	reindexAndApply(t, e, context.Background(), "v1", []CatalogEntry{
+		{Tool: row, UpstreamID: "be1"},
 	})
 
 	name, dec, err := e.ResolveToolsCall(context.Background(), RoutingSignal{ToolName: "pre__tool"})
@@ -65,8 +65,8 @@ func TestSemanticRouterVectorResolvesWhenNameWrong(t *testing.T) {
 	st := store.NewInMemoryVectorStore(dim)
 	emb := &mapEmbed{vecs: make(map[string][]float32), dim: dim}
 
-	t1 := index.ToolRow{Name: "a__one", Description: "first", ParamKeys: []string{"x"}}
-	t2 := index.ToolRow{Name: "a__two", Description: "second", ParamKeys: nil}
+	t1 := index.Tool{Name: "a__one", Description: "first", ParamKeys: []string{"x"}}
+	t2 := index.Tool{Name: "a__two", Description: "second", ParamKeys: nil}
 	d1 := index.FormatDocument(t1)
 	d2 := index.FormatDocument(t2)
 	emb.vecs[d1] = []float32{1, 0, 0, 0}
@@ -79,9 +79,9 @@ func TestSemanticRouterVectorResolvesWhenNameWrong(t *testing.T) {
 	cfg.AllowAutoRename = true
 	e := NewSemanticRouter(cfg, emb, st, dim)
 
-	reindexAndApply(t, e, context.Background(), "v1", []IndexedTool{
-		{ToolRow: t1, UpstreamID: "b1"},
-		{ToolRow: t2, UpstreamID: "b1"},
+	reindexAndApply(t, e, context.Background(), "v1", []CatalogEntry{
+		{Tool: t1, UpstreamID: "b1"},
+		{Tool: t2, UpstreamID: "b1"},
 	})
 
 	q := index.FormatQuery("wrong", "", nil)
@@ -90,7 +90,7 @@ func TestSemanticRouterVectorResolvesWhenNameWrong(t *testing.T) {
 	name, dec, err := e.ResolveToolsCall(context.Background(), RoutingSignal{ToolName: "wrong"})
 	require.NoError(t, err)
 	require.Equal(t, "a__one", name)
-	require.GreaterOrEqual(t, dec.Confidence, 0.99)
+	require.GreaterOrEqual(t, dec.Score, 0.99)
 	require.Equal(t, OutcomeVectorHit, dec.Outcome)
 }
 
@@ -98,7 +98,7 @@ func TestSemanticRouterRejectRenameWhenDisabled(t *testing.T) {
 	dim := 4
 	st := store.NewInMemoryVectorStore(dim)
 	emb := &mapEmbed{vecs: make(map[string][]float32), dim: dim}
-	t1 := index.ToolRow{Name: "a__one", Description: "first", ParamKeys: nil}
+	t1 := index.Tool{Name: "a__one", Description: "first", ParamKeys: nil}
 	emb.vecs[index.FormatDocument(t1)] = []float32{1, 0, 0, 0}
 	q := index.FormatQuery("typo", "", nil)
 	emb.vecs[q] = []float32{1, 0, 0, 0}
@@ -109,7 +109,7 @@ func TestSemanticRouterRejectRenameWhenDisabled(t *testing.T) {
 	cfg.ScoreMin = 0.99
 	cfg.AllowAutoRename = false
 	e := NewSemanticRouter(cfg, emb, st, dim)
-	reindexAndApply(t, e, context.Background(), "v1", []IndexedTool{{ToolRow: t1, UpstreamID: "b1"}})
+	reindexAndApply(t, e, context.Background(), "v1", []CatalogEntry{{Tool: t1, UpstreamID: "b1"}})
 
 	_, _, err := e.ResolveToolsCall(context.Background(), RoutingSignal{ToolName: "typo"})
 	require.Error(t, err)
@@ -119,8 +119,8 @@ func TestSemanticRouterAllowedToolsFilter(t *testing.T) {
 	dim := 4
 	st := store.NewInMemoryVectorStore(dim)
 	emb := &mapEmbed{vecs: make(map[string][]float32), dim: dim}
-	t1 := index.ToolRow{Name: "a__one", Description: "first", ParamKeys: nil}
-	t2 := index.ToolRow{Name: "a__two", Description: "second", ParamKeys: nil}
+	t1 := index.Tool{Name: "a__one", Description: "first", ParamKeys: nil}
+	t2 := index.Tool{Name: "a__two", Description: "second", ParamKeys: nil}
 	emb.vecs[index.FormatDocument(t1)] = []float32{1, 0, 0, 0}
 	emb.vecs[index.FormatDocument(t2)] = []float32{0.9, 0.1, 0, 0} // closer to query in raw space
 	q := index.FormatQuery("x", "", nil)
@@ -132,14 +132,14 @@ func TestSemanticRouterAllowedToolsFilter(t *testing.T) {
 	cfg.ScoreMin = 0.5
 	cfg.AllowAutoRename = true
 	e := NewSemanticRouter(cfg, emb, st, dim)
-	reindexAndApply(t, e, context.Background(), "v1", []IndexedTool{
-		{ToolRow: t1, UpstreamID: "b1"},
-		{ToolRow: t2, UpstreamID: "b1"},
+	reindexAndApply(t, e, context.Background(), "v1", []CatalogEntry{
+		{Tool: t1, UpstreamID: "b1"},
+		{Tool: t2, UpstreamID: "b1"},
 	})
 
 	name, _, err := e.ResolveToolsCall(context.Background(), RoutingSignal{
-		ToolName:     "x",
-		AllowedTools: []string{"a__one"},
+		ToolName:  "x",
+		AllowList: []string{"a__one"},
 	})
 	require.NoError(t, err)
 	require.Equal(t, "a__one", name)
@@ -153,8 +153,8 @@ func TestSemanticRouterRulesAliasExact(t *testing.T) {
 	cfg.Mode = mode.AssistList
 	e := NewSemanticRouter(cfg, emb, st, dim)
 	e.SetRules(rules.New(map[string]string{"legacy__logs": "pre__tool"}, nil))
-	row := index.ToolRow{Name: "pre__tool", Description: "d", ParamKeys: nil}
-	reindexAndApply(t, e, context.Background(), "v1", []IndexedTool{{ToolRow: row, UpstreamID: "be1"}})
+	row := index.Tool{Name: "pre__tool", Description: "d", ParamKeys: nil}
+	reindexAndApply(t, e, context.Background(), "v1", []CatalogEntry{{Tool: row, UpstreamID: "be1"}})
 
 	name, dec, err := e.ResolveToolsCall(context.Background(), RoutingSignal{ToolName: "legacy__logs"})
 	require.NoError(t, err)
@@ -192,14 +192,14 @@ func TestSemanticRouterReindexRequiresEmbed(t *testing.T) {
 	cfg := DefaultSemanticRouterRuntimeConfig()
 	cfg.Mode = mode.AssistList
 	e := NewSemanticRouter(cfg, nil, store.NewInMemoryVectorStore(4), 4)
-	err := e.Reindex(context.Background(), "v1", []IndexedTool{{ToolRow: index.ToolRow{Name: "a__b"}, UpstreamID: "x"}})
+	err := e.Reindex(context.Background(), "v1", []CatalogEntry{{Tool: index.Tool{Name: "a__b"}, UpstreamID: "x"}})
 	require.Error(t, err)
 }
 
 func TestReindexNoOpWhenRouterDisabled(t *testing.T) {
 	e := NewSemanticRouter(DefaultSemanticRouterRuntimeConfig(), nil, store.NewInMemoryVectorStore(4), 4)
-	require.NoError(t, e.Reindex(context.Background(), "v1", []IndexedTool{
-		{ToolRow: index.ToolRow{Name: "a__b"}, UpstreamID: "x"},
+	require.NoError(t, e.Reindex(context.Background(), "v1", []CatalogEntry{
+		{Tool: index.Tool{Name: "a__b"}, UpstreamID: "x"},
 	}))
 }
 
@@ -207,8 +207,8 @@ func TestReindexRejectsEmptyCatalogVersion(t *testing.T) {
 	cfg := DefaultSemanticRouterRuntimeConfig()
 	cfg.Mode = mode.AssistList
 	e := NewSemanticRouter(cfg, &mapEmbed{dim: 4}, store.NewInMemoryVectorStore(4), 4)
-	err := e.Reindex(context.Background(), "", []IndexedTool{
-		{ToolRow: index.ToolRow{Name: "a__b"}, UpstreamID: "x"},
+	err := e.Reindex(context.Background(), "", []CatalogEntry{
+		{Tool: index.Tool{Name: "a__b"}, UpstreamID: "x"},
 	})
 	require.Error(t, err)
 }
@@ -220,8 +220,8 @@ func TestSemanticRouterRejectsStaleClientCatalogPin(t *testing.T) {
 	cfg := DefaultSemanticRouterRuntimeConfig()
 	cfg.Mode = mode.AssistList
 	e := NewSemanticRouter(cfg, emb, st, dim)
-	row := index.ToolRow{Name: "pre__tool", Description: "d", ParamKeys: nil}
-	reindexAndApply(t, e, context.Background(), "v2", []IndexedTool{{ToolRow: row, UpstreamID: "be1"}})
+	row := index.Tool{Name: "pre__tool", Description: "d", ParamKeys: nil}
+	reindexAndApply(t, e, context.Background(), "v2", []CatalogEntry{{Tool: row, UpstreamID: "be1"}})
 
 	_, dec, err := e.ResolveToolsCall(context.Background(), RoutingSignal{
 		ToolName:       "pre__tool",
@@ -243,7 +243,7 @@ func TestSemanticRouterVectorQueryUsesArgumentKeysFromPayload(t *testing.T) {
 	dim := 4
 	st := store.NewInMemoryVectorStore(dim)
 	emb := &mapEmbed{vecs: make(map[string][]float32), dim: dim}
-	t1 := index.ToolRow{Name: "a__one", Description: "first", ParamKeys: nil}
+	t1 := index.Tool{Name: "a__one", Description: "first", ParamKeys: nil}
 	emb.vecs[index.FormatDocument(t1)] = []float32{1, 0, 0, 0}
 	q := index.FormatQuery("typo", "", []string{"k"})
 	emb.vecs[q] = []float32{1, 0, 0, 0}
@@ -254,7 +254,7 @@ func TestSemanticRouterVectorQueryUsesArgumentKeysFromPayload(t *testing.T) {
 	cfg.ScoreMin = 0.99
 	cfg.AllowAutoRename = true
 	e := NewSemanticRouter(cfg, emb, st, dim)
-	reindexAndApply(t, e, context.Background(), "v1", []IndexedTool{{ToolRow: t1, UpstreamID: "b1"}})
+	reindexAndApply(t, e, context.Background(), "v1", []CatalogEntry{{Tool: t1, UpstreamID: "b1"}})
 
 	name, _, err := e.ResolveToolsCall(context.Background(), RoutingSignal{
 		ToolName:      "typo",

@@ -31,9 +31,9 @@ func TestRouterEvalVectorRecallLexical(t *testing.T) {
 	sr := router.NewSemanticRouter(cfg, emb, st, dim)
 
 	cat := SyntheticCatalog()
-	catVer := "eval-v1"
-	require.NoError(t, sr.Reindex(ctx, catVer, cat))
-	sr.ApplyCatalog(ctx, catVer, cat)
+	catalogVersion := "eval-v1"
+	require.NoError(t, sr.Reindex(ctx, catalogVersion, cat))
+	sr.ApplyCatalog(ctx, catalogVersion, cat)
 	ver := sr.CatalogVersion()
 	require.Equal(t, "eval-v1", ver)
 
@@ -44,7 +44,7 @@ func TestRouterEvalVectorRecallLexical(t *testing.T) {
 			ToolName:       "wrong__tool_name",
 			IntentText:     tc.Intent,
 			CatalogVersion: ver,
-			AllowedTools:   tc.Allowed,
+			AllowList:      tc.Allowed,
 		}
 		got, dec, err := sr.ResolveToolsCall(ctx, sig)
 		require.NoError(t, err, "case %s", tc.WantTool)
@@ -71,10 +71,10 @@ func TestRouterEvalEmbedAndQueryP95(t *testing.T) {
 	cfg.ScoreMin = 0.08
 	cfg.AllowAutoRename = true
 	sr := router.NewSemanticRouter(cfg, emb, st, dim)
-	catVer := "eval-v1"
+	catalogVersion := "eval-v1"
 	catalog := SyntheticCatalog()
-	require.NoError(t, sr.Reindex(ctx, catVer, catalog))
-	sr.ApplyCatalog(ctx, catVer, catalog)
+	require.NoError(t, sr.Reindex(ctx, catalogVersion, catalog))
+	sr.ApplyCatalog(ctx, catalogVersion, catalog)
 	ver := sr.CatalogVersion()
 
 	cases := GoldenCases()
@@ -110,17 +110,17 @@ func TestRouterEvalSiloNarrowingRespectsAllowedTools(t *testing.T) {
 	cfg.AllowAutoRename = true
 	sr := router.NewSemanticRouter(cfg, emb, st, dim)
 	sr.SetRules(rules.New(nil, map[string]string{"kubernetes": "k8s"}))
-	catVer := "eval-v2"
+	catalogVersion := "eval-v2"
 	catalog := SyntheticCatalog()
-	require.NoError(t, sr.Reindex(ctx, catVer, catalog))
-	sr.ApplyCatalog(ctx, catVer, catalog)
+	require.NoError(t, sr.Reindex(ctx, catalogVersion, catalog))
+	sr.ApplyCatalog(ctx, catalogVersion, catalog)
 	ver := sr.CatalogVersion()
 
 	sig := router.RoutingSignal{
 		ToolName:       "wrong__tool",
 		IntentText:     "debug kubernetes pod logs during incident",
 		CatalogVersion: ver,
-		AllowedTools:   []string{"k8s__get_pod_logs", "prom__query_range"},
+		AllowList:      []string{"k8s__get_pod_logs", "prom__query_range"},
 	}
 	got, dec, err := sr.ResolveToolsCall(ctx, sig)
 	require.NoError(t, err)
@@ -140,10 +140,10 @@ func TestGoldenCasesMRRAndNDCG(t *testing.T) {
 	cfg.AllowAutoRename = true
 	sr := router.NewSemanticRouter(cfg, emb, st, dim)
 
-	catVer := "eval-v1"
+	catalogVersion := "eval-v1"
 	catalog := SyntheticCatalog()
-	require.NoError(t, sr.Reindex(ctx, catVer, catalog))
-	sr.ApplyCatalog(ctx, catVer, catalog)
+	require.NoError(t, sr.Reindex(ctx, catalogVersion, catalog))
+	sr.ApplyCatalog(ctx, catalogVersion, catalog)
 	ver := sr.CatalogVersion()
 	cases := GoldenCases()
 
@@ -155,7 +155,7 @@ func TestGoldenCasesMRRAndNDCG(t *testing.T) {
 			ToolName:       "wrong__tool_name",
 			IntentText:     tc.Intent,
 			CatalogVersion: ver,
-			AllowedTools:   tc.Allowed,
+			AllowList:      tc.Allowed,
 		})
 		require.NoError(t, err, "case %s", tc.WantTool)
 		require.Equal(t, router.OutcomeVectorHit, dec.Outcome)
@@ -164,7 +164,7 @@ func TestGoldenCasesMRRAndNDCG(t *testing.T) {
 		if len(candidates) == 0 {
 			candidates = append(candidates, router.ScoredTool{
 				Name:   got,
-				Score:  dec.Confidence,
+				Score:  dec.Score,
 				Source: "vector",
 			})
 		}

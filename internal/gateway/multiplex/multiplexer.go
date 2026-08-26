@@ -442,7 +442,7 @@ func (a *Multiplexer) semanticRoutingSignal(ctx context.Context, toolName string
 		ToolName:        toolName,
 		ArgumentsJSON:   args,
 		IntentText:      hostctx.ClientIntentFromContext(ctx),
-		AllowedTools:    allowedList,
+		AllowList:       allowedList,
 		AllowListAuthz:  routerAllowListAuthz(allowMode),
 		CatalogVersion:  ver,
 		RecentToolNames: hostctx.RecentToolNamesFromContext(ctx),

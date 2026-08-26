@@ -68,7 +68,7 @@ func (s *muxEmbedSpy) Embed(ctx context.Context, texts []string) ([][]float32, e
 func TestToolsCallDenyAllSkipsSemanticRouter(t *testing.T) {
 	base := &mapEmbed{dim: 4, vecs: make(map[string][]float32)}
 	spy := &muxEmbedSpy{inner: base}
-	tRow := index.ToolRow{Name: "alpha__echo", Description: "mock echo"}
+	tRow := index.Tool{Name: "alpha__echo", Description: "mock echo"}
 	base.vecs[index.FormatDocument(tRow)] = []float32{1, 0, 0, 0}
 
 	st := store.NewInMemoryVectorStore(4)

@@ -5,7 +5,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/router/index"
 )
 
-func SyntheticCatalog() []router.IndexedTool {
+func SyntheticCatalog() []router.CatalogEntry {
 	rows := []struct {
 		prefix, native, desc string
 		keys                 []string
@@ -37,11 +37,11 @@ func SyntheticCatalog() []router.IndexedTool {
 		{"gh", "list_issues", "List GitHub issues filtered by labels and state for incident triage", []string{"owner", "repo", "labels", "state"}},
 		{"gh", "search_code", "Search GitHub code in a repository for error strings and stack trace tokens", []string{"owner", "repo", "query"}},
 	}
-	out := make([]router.IndexedTool, 0, len(rows))
+	out := make([]router.CatalogEntry, 0, len(rows))
 	for _, r := range rows {
 		full := r.prefix + "__" + r.native
-		out = append(out, router.IndexedTool{
-			ToolRow: index.ToolRow{
+		out = append(out, router.CatalogEntry{
+			Tool: index.Tool{
 				Name:        full,
 				Description: r.desc,
 				ParamKeys:   r.keys,
@@ -63,20 +63,20 @@ func GoldenCases() []GoldenCase {
 	cat := SyntheticCatalog()
 	toolsByPrefix := make(map[string][]string, len(cat))
 	for _, e := range cat {
-		pfx := e.ToolRow.Name
+		pfx := e.Tool.Name
 		for i := 0; i < len(pfx)-1; i++ {
 			if pfx[i] == '_' && pfx[i+1] == '_' {
 				pfx = pfx[:i]
 				break
 			}
 		}
-		toolsByPrefix[pfx] = append(toolsByPrefix[pfx], e.ToolRow.Name)
+		toolsByPrefix[pfx] = append(toolsByPrefix[pfx], e.Tool.Name)
 	}
 	cases := make([]GoldenCase, 0, len(cat))
 	for _, e := range cat {
-		intent := e.ToolRow.Description
-		relevance := map[string]float64{e.ToolRow.Name: 3}
-		pfx := e.ToolRow.Name
+		intent := e.Tool.Description
+		relevance := map[string]float64{e.Tool.Name: 3}
+		pfx := e.Tool.Name
 		for i := 0; i < len(pfx)-1; i++ {
 			if pfx[i] == '_' && pfx[i+1] == '_' {
 				pfx = pfx[:i]
@@ -84,14 +84,14 @@ func GoldenCases() []GoldenCase {
 			}
 		}
 		for _, other := range toolsByPrefix[pfx] {
-			if other == e.ToolRow.Name {
+			if other == e.Tool.Name {
 				continue
 			}
 			relevance[other] = 1
 		}
 		cases = append(cases, GoldenCase{
 			Intent:    intent,
-			WantTool:  e.ToolRow.Name,
+			WantTool:  e.Tool.Name,
 			Relevance: relevance,
 		})
 	}

@@ -44,7 +44,7 @@ func TestSemanticRouterStoreQueryFails(t *testing.T) {
 	mem := store.NewInMemoryVectorStore(dim)
 	st := &errStore{inner: mem, err: errors.New("vector store unavailable")}
 	emb := &mapEmbed{vecs: make(map[string][]float32), dim: dim}
-	row := index.ToolRow{Name: "p__echo", Description: "e"}
+	row := index.Tool{Name: "p__echo", Description: "e"}
 	doc := index.FormatDocument(row)
 	emb.vecs[doc] = []float32{1, 0, 0, 0}
 	q := index.FormatQuery("typo", "", nil)
@@ -55,7 +55,7 @@ func TestSemanticRouterStoreQueryFails(t *testing.T) {
 	cfg.TopK = testRouterTopK
 	cfg.ScoreMin = testRouterMinHit
 	sr := NewSemanticRouter(cfg, emb, st, dim)
-	reindexAndApply(t, sr, context.Background(), "v1", []IndexedTool{{ToolRow: row, UpstreamID: "b1"}})
+	reindexAndApply(t, sr, context.Background(), "v1", []CatalogEntry{{Tool: row, UpstreamID: "b1"}})
 
 	_, dec, err := sr.ResolveToolsCall(context.Background(), RoutingSignal{ToolName: "typo"})
 	require.Error(t, err)

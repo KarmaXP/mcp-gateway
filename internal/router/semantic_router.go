@@ -26,8 +26,8 @@ const (
 )
 
 // One tool row in the catalog plus its upstream id.
-type IndexedTool struct {
-	ToolRow    index.ToolRow
+type CatalogEntry struct {
+	Tool       index.Tool
 	UpstreamID string
 }
 
@@ -40,7 +40,7 @@ type SemanticRouter struct {
 
 	mu             sync.RWMutex
 	catalog        map[string]struct{}
-	catalogVer     string
+	catalogVersion string
 	upstreamByTool map[string]string
 	toolDoc        map[string]string
 
@@ -85,7 +85,7 @@ func (sr *SemanticRouter) AllowAutoRename() bool {
 func (sr *SemanticRouter) CatalogVersion() string {
 	sr.mu.RLock()
 	defer sr.mu.RUnlock()
-	return sr.catalogVer
+	return sr.catalogVersion
 }
 
 func (sr *SemanticRouter) listCatalog() []string {
@@ -194,7 +194,7 @@ func jsonKeys(raw json.RawMessage) []string {
 	return keys
 }
 
-func BuildIndexedTools(listJSON []byte, upstreamIDForPrefix func(prefix string) (string, error)) ([]IndexedTool, error) {
+func BuildIndexedTools(listJSON []byte, upstreamIDForPrefix func(prefix string) (string, error)) ([]CatalogEntry, error) {
 	rows, err := index.ParseToolsListJSON(listJSON)
 	if err != nil {
 		return nil, err
@@ -202,12 +202,12 @@ func BuildIndexedTools(listJSON []byte, upstreamIDForPrefix func(prefix string) 
 	return buildIndexedToolsFromRows(rows, upstreamIDForPrefix)
 }
 
-func BuildIndexedToolsFromMerged(merged []map[string]any, upstreamIDForPrefix func(prefix string) (string, error)) ([]IndexedTool, error) {
+func BuildIndexedToolsFromMerged(merged []map[string]any, upstreamIDForPrefix func(prefix string) (string, error)) ([]CatalogEntry, error) {
 	return buildIndexedToolsFromRows(index.ToolRowsFromListMaps(merged), upstreamIDForPrefix)
 }
 
-func buildIndexedToolsFromRows(rows []index.ToolRow, upstreamIDForPrefix func(prefix string) (string, error)) ([]IndexedTool, error) {
-	out := make([]IndexedTool, 0, len(rows))
+func buildIndexedToolsFromRows(rows []index.Tool, upstreamIDForPrefix func(prefix string) (string, error)) ([]CatalogEntry, error) {
+	out := make([]CatalogEntry, 0, len(rows))
 	for _, r := range rows {
 		prefix, _, err := namespace.Split(r.Name)
 		if err != nil {
@@ -218,7 +218,7 @@ func buildIndexedToolsFromRows(rows []index.ToolRow, upstreamIDForPrefix func(pr
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, IndexedTool{ToolRow: r, UpstreamID: uid})
+		out = append(out, CatalogEntry{Tool: r, UpstreamID: uid})
 	}
 	return out, nil
 }
