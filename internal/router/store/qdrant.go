@@ -42,6 +42,8 @@ const (
 	uuidVariantClearMask = 0x3f // clear variant bits before OR
 	uuidVersion4Nibble = 0x40 // RFC 4122 version 4 in byte 6 high nibble
 	uuidVariantNibble = 0x80 // RFC 4122 variant in byte 8 high bits
+
+	persistedPayloadKeyUpstreamID = "backend"
 )
 
 func pointID(key string) string {
@@ -162,9 +164,9 @@ func (q *QdrantVectorStore) putPointsChunk(ctx context.Context, chunk []ToolVect
 			"id":     pointID(p.ID),
 			"vector": p.Vector,
 			"payload": map[string]string{
-				"tool_name": p.ToolName,
-				"backend":   p.UpstreamID,
-				"version":   p.CatalogVersion,
+				"tool_name":                   p.ToolName,
+				persistedPayloadKeyUpstreamID: p.UpstreamID,
+				"version":                     p.CatalogVersion,
 			},
 		})
 	}
@@ -255,7 +257,7 @@ func (q *QdrantVectorStore) Query(ctx context.Context, vector []float32, topK in
 		_ = json.Unmarshal(hit.Payload, &meta)
 		out = append(out, VectorSearchHit{
 			ToolName:   payloadString(meta["tool_name"]),
-			UpstreamID: payloadString(meta["backend"]),
+			UpstreamID: payloadString(meta[persistedPayloadKeyUpstreamID]),
 			Score:      hit.Score,
 		})
 	}

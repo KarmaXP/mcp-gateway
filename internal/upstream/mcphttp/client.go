@@ -17,11 +17,11 @@ import (
 	"golang.org/x/sync/semaphore"
 	"golang.org/x/sync/singleflight"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend/framing"
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 	"github.com/KarmaXP/mcp-gateway/internal/rpcconn"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/framing"
 )
 
 const (

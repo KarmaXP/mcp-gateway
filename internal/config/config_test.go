@@ -12,7 +12,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 )
 
-func TestLoadYAMLAndEnvBackends(t *testing.T) {
+func TestLoadYAMLAndEnvUpstreams(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "g.yaml")
 	err := os.WriteFile(p, []byte(`
@@ -34,7 +34,7 @@ backends:
 	require.Equal(t, 2, cfg.Upstreams[0].MaxConcurrency)
 }
 
-func TestLoadBackendsJSONOnly(t *testing.T) {
+func TestLoadUpstreamsJSONOnly(t *testing.T) {
 	t.Setenv("MCP_GATEWAY_CONFIG", "")
 	t.Chdir(t.TempDir())
 	raw, _ := json.Marshal([]UpstreamDefinition{

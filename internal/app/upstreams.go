@@ -5,19 +5,19 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mcphttp"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mcpstdio"
 	"github.com/KarmaXP/mcp-gateway/internal/config"
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mcphttp"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mcpstdio"
 )
 
 var (
-	_ backend.Upstream = (*mcphttp.HTTPMCPUpstream)(nil)
-	_ backend.Upstream = (*mcpstdio.StdioMCPUpstream)(nil)
+	_ upstream.Client = (*mcphttp.HTTPMCPUpstream)(nil)
+	_ upstream.Client = (*mcpstdio.StdioMCPUpstream)(nil)
 )
 
-func connectUpstreams(ctx context.Context, defs []config.UpstreamDefinition) ([]backend.Upstream, func(), error) {
+func connectUpstreams(ctx context.Context, defs []config.UpstreamDefinition) ([]upstream.Client, func(), error) {
 	var cleaners []func()
 	// Closes transports in reverse registration order.
 	cleanup := func() {
@@ -26,7 +26,7 @@ func connectUpstreams(ctx context.Context, defs []config.UpstreamDefinition) ([]
 		}
 	}
 
-	out := make([]backend.Upstream, 0, len(defs))
+	out := make([]upstream.Client, 0, len(defs))
 	for _, d := range defs {
 		maxConcurrency := int64(d.MaxConcurrency)
 		if maxConcurrency <= 0 {

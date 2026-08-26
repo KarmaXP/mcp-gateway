@@ -9,10 +9,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
 )
 
 type MockUpstream struct {
@@ -360,4 +360,4 @@ func (b *MockUpstream) omitPrompts() bool {
 	return b.OmitPromptsList
 }
 
-var _ backend.Upstream = (*MockUpstream)(nil)
+var _ upstream.Client = (*MockUpstream)(nil)

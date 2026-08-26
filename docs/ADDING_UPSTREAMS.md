@@ -172,14 +172,14 @@ TOOL_NAME=billing__your_tool GATEWAY_URL=http://127.0.0.1:8080 go run ./scripts/
 | Mock | Command | Config |
 |------|---------|--------|
 | Single smoke upstream | (started by `make demo`) | `gateway.demo.yaml` |
-| Alpha + beta | `make demo-backends` | `gateway.example.yaml` |
-| k8s + prom + gh | `make sre-backends` | `gateway.sre.example.yaml` |
+| Alpha + beta | `make demo-upstreams` | `gateway.example.yaml` |
+| k8s + prom + gh | `make sre-upstreams` | `gateway.sre.example.yaml` |
 | Real stdio MCP (multibackend benchmark) | `npx` servers via YAML `command` | [`gateway.real.yaml`](../deployments/gateway.real.yaml) |
 
-Real-backend walkthrough: [scenario-real-backends-jwt.md](evaluation/scenario-real-backends-jwt.md).
+Real-backend walkthrough: [scenario-real-upstreams-jwt.md](evaluation/scenario-real-upstreams-jwt.md).
 
 ```bash
-make demo-backends
+make demo-upstreams
 MCP_GATEWAY_CONFIG=deployments/gateway.example.yaml make run
 # other terminal:
 TOOL_NAME=alpha__echo go run ./scripts/mcp_host_demo
@@ -236,7 +236,7 @@ Optional `aggregation:` block in YAML (see comments in `gateway.example.yaml`):
 | Change | Action |
 |--------|--------|
 | `policy:` block | `SIGHUP` reloads policy only. |
-| `backends:` list | **Restart** the gateway process (`make stop` then `make run`). Mock upstreams keep running unless you run `make demo-backends-stop` or `make sre-down`. |
+| `backends:` list | **Restart** the gateway process (`make stop` then `make run`). Mock upstreams keep running unless you run `make demo-upstreams-stop` or `make sre-down`. |
 | Env (`ROUTER_MODE`, `QDRANT_URL`, …) | Restart. |
 
 ---
@@ -257,5 +257,5 @@ Optional `aggregation:` block in YAML (see comments in `gateway.example.yaml`):
 - [configuration.md](configuration.md): env and YAML reference
 - [local-ports.md](local-ports.md): local ports
 - [deployment.md](deployment.md): Docker and production
-- [evaluation/scenario-sre-multibackend.md](evaluation/scenario-sre-multibackend.md): multi-backend + router walkthrough
+- [evaluation/scenario-sre-multiupstream.md](evaluation/scenario-sre-multiupstream.md): multi-upstream + router walkthrough
 - [artifacts/openapi/openapi.yaml](artifacts/openapi/openapi.yaml): HTTP contract

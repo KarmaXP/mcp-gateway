@@ -11,7 +11,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 )
 
-func TestBackendToolsCallRespectsContextCancelWithDelay(t *testing.T) {
+func TestUpstreamToolsCallRespectsContextCancelWithDelay(t *testing.T) {
 	b := NewMockUpstream("b1", "p", []string{"echo"})
 	b.ToolsCallDelay = 500 * time.Millisecond
 

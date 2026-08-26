@@ -9,16 +9,16 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 func TestSessionToolsListBeforeHandshake(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
 	s := NewSession(context.Background(), "test-session", agg, nil)
@@ -42,7 +42,7 @@ func TestSessionToolsListBeforeHandshake(t *testing.T) {
 
 func TestSessionInitializedNotificationWithoutInitializeDoesNotOpenTools(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
 	s := NewSession(context.Background(), "test-session", agg, nil)
@@ -66,7 +66,7 @@ func TestSessionInitializedNotificationWithoutInitializeDoesNotOpenTools(t *test
 
 func TestSessionMiddlewareRejectsWithRequestRejected(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
 	mw := Middleware(func(ctx context.Context, req *rpc.Request) error {
@@ -92,7 +92,7 @@ func TestSessionMiddlewareRejectsWithRequestRejected(t *testing.T) {
 
 func TestSessionFullHandshakeAndToolsList(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
 	s := NewSession(context.Background(), "test-session", agg, nil)
@@ -120,7 +120,7 @@ func TestSessionFullHandshakeAndToolsList(t *testing.T) {
 
 func TestSessionManagerGetRemove(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	m := NewSessionManager(context.Background(), agg)
 	s, err := m.Create(context.Background())
@@ -135,7 +135,7 @@ func TestSessionManagerGetRemove(t *testing.T) {
 
 func TestSessionMethodNotFound(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	s := NewSession(context.Background(), "s1", agg, nil)
 	handshake(t, s)
@@ -154,7 +154,7 @@ func TestSessionMethodNotFound(t *testing.T) {
 
 func TestSessionPingReturnsEmptyResult(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	s := NewSession(context.Background(), "ping-session", agg, nil)
 	require.NoError(t, s.Dispatch(context.Background(), &rpc.Request{
@@ -172,7 +172,7 @@ func TestSessionPingReturnsEmptyResult(t *testing.T) {
 
 func TestSessionLegacyInitializedNotification(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	s := NewSession(context.Background(), "s2", agg, nil)
 	require.NoError(t, s.Dispatch(context.Background(), &rpc.Request{
@@ -199,7 +199,7 @@ func TestSessionLegacyInitializedNotification(t *testing.T) {
 
 func TestSessionMiddlewareNilSkipped(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	s := NewSession(context.Background(), "s3", agg, []Middleware{nil})
 	handshake(t, s)
@@ -216,7 +216,7 @@ func TestSessionMiddlewareNilSkipped(t *testing.T) {
 
 func TestSessionMiddlewareRejectsNotification(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	mw := Middleware(func(context.Context, *rpc.Request) error {
 		return fmt.Errorf("blocked")
@@ -231,7 +231,7 @@ func TestSessionMiddlewareRejectsNotification(t *testing.T) {
 
 func TestUnknownNotificationIgnored(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	s := NewSession(context.Background(), "s5", agg, nil)
 	require.NoError(t, s.Dispatch(context.Background(), &rpc.Request{
@@ -262,7 +262,7 @@ func handshake(t *testing.T, s *Session) {
 
 func TestSessionToolsCallAfterHandshake(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	s := NewSession(context.Background(), "s7", agg, nil)
 	handshake(t, s)
@@ -283,9 +283,9 @@ func TestSessionToolsCallAfterHandshake(t *testing.T) {
 	require.Contains(t, string(resp.Result), "ok from b1:echo")
 }
 
-func TestSessionResourcesListEmptyWhenBackendsOmit(t *testing.T) {
+func TestSessionResourcesListEmptyWhenUpstreamsOmit(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	s := NewSession(context.Background(), "s-res", agg, nil)
 	handshake(t, s)
@@ -307,7 +307,7 @@ func TestSessionResourcesListEmptyWhenBackendsOmit(t *testing.T) {
 
 func TestSessionToolHistoryRecordsSuccessfulToolsCall(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	s := NewSession(context.Background(), "s-hist", agg, nil)
 	handshake(t, s)
@@ -325,7 +325,7 @@ func TestSessionToolHistoryRecordsSuccessfulToolsCall(t *testing.T) {
 
 func TestSessionDispatchNilRequestContext(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	s := NewSession(context.Background(), "s6", agg, nil)
 	require.NoError(t, s.Dispatch(nil, &rpc.Request{ //nolint:staticcheck // nil exercises mergedCancel fallback
@@ -343,7 +343,7 @@ func TestSessionDispatchNilRequestContext(t *testing.T) {
 
 func TestSessionMiddlewareRejectionDoesNotAlsoDispatch(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
 	mw := Middleware(func(ctx context.Context, req *rpc.Request) error {

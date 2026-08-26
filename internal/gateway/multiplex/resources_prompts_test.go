@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 func TestResourcesListAggregatesNamespacedURIs(t *testing.T) {
@@ -19,7 +19,7 @@ func TestResourcesListAggregatesNamespacedURIs(t *testing.T) {
 	a2.OmitResourcesList = false
 	a2.ResourceURIs = []string{"memo://b"}
 
-	m, err := New(context.Background(), []backend.Upstream{a1, a2})
+	m, err := New(context.Background(), []upstream.Client{a1, a2})
 	require.NoError(t, err)
 	_, _ = m.Initialize(context.Background(), json.RawMessage(`0`))
 	resp, err := m.ResourcesList(context.Background(), json.RawMessage(`1`))
@@ -43,7 +43,7 @@ func TestResourcesReadStripsPrefixPreservesID(t *testing.T) {
 	a1 := mock.NewMockUpstream("u1", "alpha", []string{"echo"})
 	a1.OmitResourcesList = false
 	a1.ResourceURIs = []string{"file:///doc"}
-	m, err := New(context.Background(), []backend.Upstream{a1})
+	m, err := New(context.Background(), []upstream.Client{a1})
 	require.NoError(t, err)
 	_, _ = m.Initialize(context.Background(), json.RawMessage(`0`))
 	params, err := json.Marshal(map[string]any{"uri": "alpha__file:///doc"})
@@ -59,7 +59,7 @@ func TestPromptsListAndGet(t *testing.T) {
 	a1 := mock.NewMockUpstream("u1", "p", []string{"t"})
 	a1.OmitPromptsList = false
 	a1.PromptNames = []string{"greet"}
-	m, err := New(context.Background(), []backend.Upstream{a1})
+	m, err := New(context.Background(), []upstream.Client{a1})
 	require.NoError(t, err)
 	_, _ = m.Initialize(context.Background(), json.RawMessage(`0`))
 	resp, err := m.PromptsList(context.Background(), json.RawMessage(`1`))

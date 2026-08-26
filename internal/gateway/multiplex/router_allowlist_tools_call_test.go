@@ -7,11 +7,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 	"github.com/KarmaXP/mcp-gateway/internal/router/index"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 func TestToolsCallDeniedWhenNotInRouterAllowlist(t *testing.T) {
@@ -23,7 +23,7 @@ func TestToolsCallDeniedWhenNotInRouterAllowlist(t *testing.T) {
 	base.vecs[tRowEcho] = []float32{0, 1, 0, 0}
 
 	sr, _ := routerTestSemanticRouter(t, base, 0.5, false)
-	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
+	a, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0), WithSemanticRouter(sr))
 	require.NoError(t, err)
 	_, err = a.Initialize(context.Background(), json.RawMessage(`1`))
 	require.NoError(t, err)
@@ -40,4 +40,4 @@ func TestToolsCallDeniedWhenNotInRouterAllowlist(t *testing.T) {
 	require.Equal(t, uint64(0), b1.ToolsCallInvocationCount())
 }
 
-var _ backend.Upstream = (*mock.MockUpstream)(nil)
+var _ upstream.Client = (*mock.MockUpstream)(nil)

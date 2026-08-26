@@ -42,7 +42,7 @@ func (e *errStore) DeleteCatalogVersion(ctx context.Context, version string) err
 func TestSemanticRouterStoreQueryFails(t *testing.T) {
 	dim := testVectorDim
 	mem := store.NewInMemoryVectorStore(dim)
-	st := &errStore{inner: mem, err: errors.New("vector backend unavailable")}
+	st := &errStore{inner: mem, err: errors.New("vector store unavailable")}
 	emb := &mapEmbed{vecs: make(map[string][]float32), dim: dim}
 	row := index.ToolRow{Name: "p__echo", Description: "e"}
 	doc := index.FormatDocument(row)

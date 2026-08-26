@@ -24,7 +24,7 @@ func (o *initializeOutcome) recordFailure(upstreamID, reason string) {
 		o.strictFailed = true
 		return
 	}
-	o.failures = append(o.failures, PartialFailure{BackendID: upstreamID, Reason: reason})
+	o.failures = append(o.failures, PartialFailure{UpstreamID: upstreamID, Reason: reason})
 }
 
 func (o *initializeOutcome) recordResult(index int, result json.RawMessage) {

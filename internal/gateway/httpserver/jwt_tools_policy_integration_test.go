@@ -23,14 +23,14 @@ import (
 
 	"github.com/KarmaXP/mcp-gateway/internal/auth"
 	"github.com/KarmaXP/mcp-gateway/internal/auth/ratelimit"
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/httpserver"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/orchestrator"
 	"github.com/KarmaXP/mcp-gateway/internal/policy"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 func testRSAKeyPair(t *testing.T) (*rsa.PrivateKey, string) {
@@ -52,7 +52,7 @@ func signTokenClaims(t *testing.T, priv *rsa.PrivateKey, claims *auth.TokenClaim
 }
 
 // Denied tools/call returns -32003 on SSE without forwarding upstream.
-func TestIntegrationJWTPermissionDeniedSkipsBackend(t *testing.T) {
+func TestIntegrationJWTPermissionDeniedSkipsUpstream(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in -short mode")
 	}
@@ -72,7 +72,7 @@ func TestIntegrationJWTPermissionDeniedSkipsBackend(t *testing.T) {
 	token := signTokenClaims(t, priv, claims)
 
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo", "other"})
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
 	authCfg := auth.JWTAuthConfig{
@@ -158,7 +158,7 @@ func TestIntegrationJWTPermissionDeniedSkipsBackend(t *testing.T) {
 		t.Fatal("timeout tools/call deny")
 	}
 
-	require.Equal(t, uint64(0), b1.ToolsCallInvocationCount(), "backend must not run tools/call when JWT allow-list denies")
+	require.Equal(t, uint64(0), b1.ToolsCallInvocationCount(), "upstream must not run tools/call when JWT allow-list denies")
 
 	cancelSSE()
 	wg.Wait()
@@ -192,7 +192,7 @@ func TestIntegrationJWTEmptyIntersectionDenyAll(t *testing.T) {
 
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo", "other"})
 	b2 := mock.NewMockUpstream("b2", "beta", []string{"other"})
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1, b2}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []upstream.Client{b1, b2}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
 	authCfg := auth.JWTAuthConfig{

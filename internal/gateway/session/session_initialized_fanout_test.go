@@ -8,20 +8,20 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 type sessionRecordingUpstream struct {
-	inner backend.Upstream
+	inner upstream.Client
 
 	mu      sync.Mutex
 	methods []string
 }
 
-func newSessionRecordingUpstream(inner backend.Upstream) *sessionRecordingUpstream {
+func newSessionRecordingUpstream(inner upstream.Client) *sessionRecordingUpstream {
 	return &sessionRecordingUpstream{inner: inner}
 }
 
@@ -43,7 +43,7 @@ func (r *sessionRecordingUpstream) Methods() []string {
 
 func TestSessionHostInitializedFansOutToUpstreams(t *testing.T) {
 	rec := newSessionRecordingUpstream(mock.NewMockUpstream("b1", "alpha", []string{"echo"}))
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{rec}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []upstream.Client{rec}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
 	s := NewSession(context.Background(), "fanout-session", agg, nil)

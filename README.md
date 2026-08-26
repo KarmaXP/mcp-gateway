@@ -11,7 +11,7 @@
 
 ### MCP gives you a protocol. This gives you a **platform layer**.
 
-**One URL for your host, many [MCP](https://modelcontextprotocol.io/) backends behind it**
+**One URL for your host, many [MCP](https://modelcontextprotocol.io/) upstreams behind it**
 
 <br/>
 
@@ -38,7 +38,7 @@
 <br/>
 
 [Model Context Protocol](https://modelcontextprotocol.io/) standardizes how a host talks to **one** MCP server on the wire.  
-It does not merge catalogs across backends, enforce policy in one place, or route natural-language intent. **MCP Gateway** does.
+It does not merge catalogs across upstreams, enforce policy in one place, or route natural-language intent. **MCP Gateway** does.
 
 <br/>
 
@@ -54,7 +54,7 @@ flowchart TB
     A1[Agent / IDE]
     A2[LangGraph]
   end
-  subgraph backends [Your MCP servers]
+  subgraph upstreams [Your MCP servers]
     B1[k8s]
     B2[Prometheus]
     B3[GitHub]
@@ -86,7 +86,7 @@ flowchart TB
     A2[LangGraph]
   end
   GW[MCP Gateway]
-  subgraph backends [Your MCP servers]
+  subgraph upstreams [Your MCP servers]
     B1[k8s]
     B2[Prometheus]
     B3[GitHub]
@@ -152,7 +152,7 @@ You get a live gateway, a mock upstream, `initialize`, and `tools/call`, then a 
 </div>
 
 <details>
-<summary><b>Level up</b> · Docker, semantic router, real backends</summary>
+<summary><b>Level up</b> · Docker, semantic router, real upstreams</summary>
 
 ```bash
 make bootstrap          # .env from .env.example
@@ -171,11 +171,11 @@ make run                # gateway on :8080 (or PORT in .env)
 </tr>
 <tr>
 <td align="center"><code>make verify-e2e</code></td>
-<td align="center">Full automated smoke (demo + multi-backend + SRE)</td>
+<td align="center">Full automated smoke (demo + multi-upstream + SRE)</td>
 </tr>
 <tr>
 <td align="center"><code>make demo-lab-verify</code></td>
-<td align="center">Lab rehearsal: real stdio backends + JWT + optional agent</td>
+<td align="center">Lab rehearsal: real stdio upstreams + JWT + optional agent</td>
 </tr>
 <tr>
 <td align="center"><code>make ci</code></td>
@@ -222,8 +222,8 @@ Measured runs with commits and replay commands in the linked docs.
 <td align="center"><a href="docs/evaluation/calibration-run.md">calibration-run.md</a> · <a href="docs/evaluation/README.md">evaluation index</a></td>
 </tr>
 <tr>
-<td align="center"><b>Multibackend + JWT walkthrough</b></td>
-<td align="center"><a href="docs/evaluation/scenario-real-backends-jwt.md">scenario-real-backends-jwt.md</a></td>
+<td align="center"><b>Multiupstream + JWT walkthrough</b></td>
+<td align="center"><a href="docs/evaluation/scenario-real-upstreams-jwt.md">scenario-real-upstreams-jwt.md</a></td>
 </tr>
 <tr>
 <td align="center"><b>Agent host integration</b> (complementary)</td>
@@ -266,7 +266,7 @@ Measured runs with commits and replay commands in the linked docs.
 </tr>
 <tr>
 <td align="center"><b>Extending</b> · register upstream MCP servers</td>
-<td align="center"><a href="docs/ADDING_BACKENDS.md">Adding backends</a></td>
+<td align="center"><a href="docs/ADDING_UPSTREAMS.md">Adding upstreams</a></td>
 </tr>
 <tr>
 <td align="center"><b>Operating</b> · config, deploy, observability</td>

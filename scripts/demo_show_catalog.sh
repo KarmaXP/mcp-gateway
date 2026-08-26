@@ -140,7 +140,7 @@ wait_sse_contains '"id":1' 'initialize'
 
 post_rpc '{"jsonrpc":"2.0","method":"notifications/initialized"}' "notifications/initialized"
 post_rpc '{"jsonrpc":"2.0","id":3,"method":"tools/list"}' "tools/list"
-echo "waiting for tools/list (cold stdio backends can take ~60s)..." >&2
+echo "waiting for tools/list (cold stdio upstreams can take ~60s)..." >&2
 wait_sse_contains '"id":3' 'tools/list' 180 0.5
 
 OUT_FILE="$(mktemp)"

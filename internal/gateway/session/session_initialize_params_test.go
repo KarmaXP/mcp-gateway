@@ -9,14 +9,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 type initParamsRecorder struct {
-	inner  backend.Upstream
+	inner  upstream.Client
 	mu     sync.Mutex
 	params json.RawMessage
 }
@@ -36,7 +36,7 @@ func (r *initParamsRecorder) Call(ctx context.Context, req *rpc.Request) (*rpc.R
 func TestSessionInitializeForwardsHostParamsToUpstream(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	rec := &initParamsRecorder{inner: inner}
-	mpx, err := multiplex.New(context.Background(), []backend.Upstream{rec}, multiplex.WithListTTL(0))
+	mpx, err := multiplex.New(context.Background(), []upstream.Client{rec}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
 	s := NewSession(context.Background(), "sess-init-params", mpx, nil)

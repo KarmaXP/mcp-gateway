@@ -9,12 +9,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 func TestEnqueueResponseTimesOutWhenOutboundFull(t *testing.T) {
@@ -30,7 +30,7 @@ func TestEnqueueResponseTimesOutWhenOutboundFull(t *testing.T) {
 
 func TestDispatchEmitsJSONRPCErrorWhenOutboundFull(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "p", []string{"echo"})
-	mpx, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
+	mpx, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	s := NewSession(context.Background(), "full-dispatch", mpx, nil)
 	handshake(t, s)
@@ -76,7 +76,7 @@ filled:
 
 func TestBroadcastNotificationReturnsWithoutWaitingForSlowConsumer(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "p", []string{"echo"})
-	mpx, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
+	mpx, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	sm := NewSessionManager(context.Background(), mpx)
 

@@ -27,7 +27,7 @@ The gateway is positioned as an SRE/platform MCP broker that aggregates backend 
 
 | MCP method / group | Gateway status | Notes |
 |---|---|---|
-| `initialize` | Supported | Aggregated negotiation across backends. |
+| `initialize` | Supported | Aggregated negotiation across upstreams. |
 | `notifications/initialized` / `initialized` | Supported | Required handshake step before operational RPCs. |
 | `ping` | Supported | Forwarded/handled as standard utility method. |
 | `tools/list` | Supported (aggregated + policy-enforced) | Merged catalog; AuthZ filtering applies. |

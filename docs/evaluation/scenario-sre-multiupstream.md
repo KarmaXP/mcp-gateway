@@ -1,10 +1,10 @@
-# SRE scenario: multi-backend namespaced routing
+# SRE scenario: multi-upstream namespaced routing
 
 This scenario validates gateway behavior when multiple MCP backends are exposed behind namespaced tools (canonical names: `k8s__get_pod_logs`, `prom__query_instant`, `gh__list_prs`) with semantic routing enabled.
 
-**HTTP mocks (SRE mock scenario).** For **real stdio MCP + JWT + recorded metrics**, use [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) and [calibration-results.md](calibration-results.md).
+**HTTP mocks (SRE mock scenario).** For **real stdio MCP + JWT + recorded metrics**, use [scenario-real-upstreams-jwt.md](scenario-real-upstreams-jwt.md) and [calibration-results.md](calibration-results.md).
 
-Use this runbook to exercise multi-backend namespaced routing with the existing smoke flow (`scripts/smoke_e2e.sh`) or your MCP host client. For agent integration, see [CONNECTING_AGENTS.md](../CONNECTING_AGENTS.md).
+Use this runbook to exercise multi-upstream namespaced routing with the existing smoke flow (`scripts/smoke_e2e.sh`) or your MCP host client. For agent integration, see [CONNECTING_AGENTS.md](../CONNECTING_AGENTS.md).
 
 ## 1) Topology and config shape
 
@@ -59,9 +59,9 @@ In a second shell, set `GATEWAY_URL` to match `PORT` (defaults in [local-ports.m
 
 ## 2) Walkthrough (host client or smoke scripts)
 
-Use one client session over MCP SSE + JSON-RPC. The sequence below mirrors `scripts/smoke_e2e.sh` semantics, replacing the tool names with multi-backend targets.
+Use one client session over MCP SSE + JSON-RPC. The sequence below mirrors `scripts/smoke_e2e.sh` semantics, replacing the tool names with multi-upstream targets.
 
-1. Start gateway with the multi-backend config and verify `GET /healthz` and `GET /readyz`.
+1. Start gateway with the multi-upstream config and verify `GET /healthz` and `GET /readyz`.
 2. Open `GET /mcp/sse` and capture `Mcp-Session-Id`.
 3. Send `initialize` (`protocolVersion` **2024-11-05**), then `notifications/initialized`.
 4. Send `tools/list`.

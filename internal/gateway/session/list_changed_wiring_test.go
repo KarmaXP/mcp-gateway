@@ -9,15 +9,15 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 type listChangedWiringUpstream struct {
-	backend.Upstream
+	upstream.Client
 	onNotify func(*rpc.Request)
 }
 
@@ -31,15 +31,15 @@ func (u *listChangedWiringUpstream) deliverNotification(req *rpc.Request) {
 	}
 }
 
-type countingToolsListBackend struct {
-	inner backend.Upstream
+type countingToolsListUpstream struct {
+	inner upstream.Client
 	calls atomic.Int32
 }
 
-func (c *countingToolsListBackend) ID() string     { return c.inner.ID() }
-func (c *countingToolsListBackend) Prefix() string { return c.inner.Prefix() }
+func (c *countingToolsListUpstream) ID() string     { return c.inner.ID() }
+func (c *countingToolsListUpstream) Prefix() string { return c.inner.Prefix() }
 
-func (c *countingToolsListBackend) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
+func (c *countingToolsListUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
 	if req.Method == "tools/list" {
 		c.calls.Add(1)
 	}
@@ -48,10 +48,10 @@ func (c *countingToolsListBackend) Call(ctx context.Context, req *rpc.Request) (
 
 func TestListChangedHandlerWiringInvalidatesCacheAndBroadcasts(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	counter := &countingToolsListBackend{inner: inner}
-	up := &listChangedWiringUpstream{Upstream: counter}
+	counter := &countingToolsListUpstream{inner: inner}
+	up := &listChangedWiringUpstream{Client: counter}
 
-	mpx, err := multiplex.New(context.Background(), []backend.Upstream{up}, multiplex.WithListTTL(time.Minute))
+	mpx, err := multiplex.New(context.Background(), []upstream.Client{up}, multiplex.WithListTTL(time.Minute))
 	require.NoError(t, err)
 
 	sm := NewSessionManager(context.Background(), mpx)
@@ -60,7 +60,7 @@ func TestListChangedHandlerWiringInvalidatesCacheAndBroadcasts(t *testing.T) {
 	sess, err := sm.Create(ctx)
 	require.NoError(t, err)
 
-	backend.RegisterNotificationHandlers([]backend.Upstream{up}, func(req *rpc.Request) {
+	upstream.RegisterNotificationHandlers([]upstream.Client{up}, func(req *rpc.Request) {
 		if req == nil || !mcpwire.IsCatalogListChangedNotification(req.Method) {
 			return
 		}

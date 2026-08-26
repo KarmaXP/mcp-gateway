@@ -2,7 +2,7 @@
 
 Walkthrough for validating the gateway with **stdio MCP servers** (not HTTP mocks), **semantic router**, **JWT**, and **OTLP → Prometheus**. Recorded numbers: [calibration-results.md](calibration-results.md) (multibackend benchmark, 2026-05-30).
 
-For mocks-only validation, use [scenario-sre-multibackend.md](scenario-sre-multibackend.md) or the **SRE mock** scenario in [integration-checklist.md](integration-checklist.md).
+For mocks-only validation, use [scenario-sre-multiupstream.md](scenario-sre-multiupstream.md) or the **SRE mock** scenario in [integration-checklist.md](integration-checklist.md).
 
 ---
 
@@ -208,7 +208,7 @@ Expected: recall@1 = recall@3 = 1.000 (26/26).
 
 ## Record results
 
-Copy measured values into [calibration-results.md](calibration-results.md) → **Multibackend benchmark (2026-05-30)** or **LangGraph agent integration run (2026-06-08)**.
+Copy measured values into [calibration-results.md](calibration-results.md) → **Multiupstream benchmark (2026-05-30)** or **LangGraph agent integration run (2026-06-08)**.
 
 ---
 

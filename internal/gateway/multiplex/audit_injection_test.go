@@ -8,10 +8,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 	"github.com/KarmaXP/mcp-gateway/internal/policy"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 type recordingAuditSink struct {
@@ -36,7 +36,7 @@ func TestDeniedToolCallReachesTheInjectedAuditor(t *testing.T) {
 	t.Parallel()
 	sink := &recordingAuditSink{}
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo", "list"})
-	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), WithAuditor(policy.NewAuditor(sink, []byte("test-pepper"))))
+	a, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0), WithAuditor(policy.NewAuditor(sink, []byte("test-pepper"))))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 	_, _ = a.ToolsList(context.Background(), json.RawMessage(`2`))
@@ -64,7 +64,7 @@ func TestTwoMultiplexersDoNotShareAnAuditor(t *testing.T) {
 	first, second := &recordingAuditSink{}, &recordingAuditSink{}
 	deny := func(sink *recordingAuditSink, tool string) {
 		b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo", "list"})
-		a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), WithAuditor(policy.NewAuditor(sink, []byte("test-pepper"))))
+		a, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0), WithAuditor(policy.NewAuditor(sink, []byte("test-pepper"))))
 		require.NoError(t, err)
 		_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 		_, _ = a.ToolsList(context.Background(), json.RawMessage(`2`))
@@ -87,7 +87,7 @@ func TestAllowedToolCallIsAudited(t *testing.T) {
 	t.Parallel()
 	sink := &recordingAuditSink{}
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), WithAuditor(policy.NewAuditor(sink, []byte("test-pepper"))))
+	a, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0), WithAuditor(policy.NewAuditor(sink, []byte("test-pepper"))))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 	_, _ = a.ToolsList(context.Background(), json.RawMessage(`2`))

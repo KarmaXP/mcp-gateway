@@ -11,13 +11,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 type countingUpstream struct {
-	inner       backend.Upstream
+	inner       upstream.Client
 	inFlight    atomic.Int32
 	maxInFlight atomic.Int32
 }
@@ -45,7 +45,7 @@ func TestToolsCallGlobalMaxInFlightBlocksConcurrentCalls(t *testing.T) {
 	up := &countingUpstream{inner: slow}
 	m, err := New(
 		context.Background(),
-		[]backend.Upstream{up},
+		[]upstream.Client{up},
 		WithListTTL(0),
 		WithCallTimeout(3*time.Second),
 		WithGlobalMaxInFlight(2),

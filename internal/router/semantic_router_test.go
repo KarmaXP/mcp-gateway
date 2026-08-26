@@ -234,7 +234,7 @@ func TestSemanticRouterRejectsStaleClientCatalogPin(t *testing.T) {
 func TestBuildIndexedToolsUpstreamLookupError(t *testing.T) {
 	raw := []byte(`{"tools":[{"name":"p__t","description":"","inputSchema":{"type":"object"}}]}`)
 	_, err := BuildIndexedTools(raw, func(string) (string, error) {
-		return "", fmt.Errorf("no backend")
+		return "", fmt.Errorf("no upstream")
 	})
 	require.Error(t, err)
 }

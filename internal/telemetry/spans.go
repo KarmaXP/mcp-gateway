@@ -13,5 +13,6 @@ const (
 	SpanMultiplexPromptsList = "mcp.multiplex.prompts_list"
 	SpanMultiplexPromptsGet = "mcp.multiplex.prompts_get"
 	SpanSemanticRouter = "mcp.router.semantic"
+	// SpanBackendCall keeps the "backend" spelling: renaming it breaks deployed dashboards.
 	SpanBackendCall = "mcp.backend.call"
 )

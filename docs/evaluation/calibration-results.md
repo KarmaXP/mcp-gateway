@@ -9,8 +9,8 @@ Canonical recorded lab results. Procedure: [`calibration-run.md`](calibration-ru
 | Run | Date (UTC) | Scope |
 | ----- | ---------- | ----- |
 | Calibration | 2026-05-18 | Router recall, unit benchmarks, client loadtest (`AUTH_MODE=none`, demo mocks) |
-| **Multibackend benchmark** | 2026-05-30 | Real MCP backends (stdio), JWT, OTLP→Prometheus, smoke load |
-| **LangGraph agent integration run** | 2026-06-08 | Multibackend benchmark plus MCP host demo, LangGraph agent, Tempo, JWT loadtest |
+| **Multiupstream benchmark** | 2026-05-30 | Real MCP backends (stdio), JWT, OTLP→Prometheus, smoke load |
+| **LangGraph agent integration run** | 2026-06-08 | Multiupstream benchmark plus MCP host demo, LangGraph agent, Tempo, JWT loadtest |
 
 ---
 
@@ -24,7 +24,7 @@ Hyperparameters: `deployments/gateway.example.yaml` (`top_k=8`, `score_min=0.35`
 | ----- | ----- |
 | Date (UTC) | 2026-05-18T18:56:21Z |
 | Gateway commit | `67251c25a68247c7ed934863fbc8e946a76ea99c` |
-| Environment | Host gateway (`PORT=18080`) + Docker deps (`make docker-up`) + demo mocks (`make demo-backends`) |
+| Environment | Host gateway (`PORT=18080`) + Docker deps (`make docker-up`) + demo mocks (`make demo-upstreams`) |
 | Catalog | default `docs/evaluation/router-eval-catalog.json` |
 | Qdrant URL | `http://127.0.0.1:6333` |
 | Embed URL | `http://127.0.0.1:8001` (default compose host mapping; override via `HOST_PORT_EMBED` / `EMBED_URL`) |
@@ -61,7 +61,7 @@ Golden cases (lexical): MRR=1.000, nDCG@5=0.907 (`TestGoldenCasesMRRAndNDCG`).
 
 ### Client-observed load test (`AUTH_MODE=none`)
 
-Gateway: `AUTH_MODE=none ROUTER_MODE=assist_list` + `make demo-backends`.
+Gateway: `AUTH_MODE=none ROUTER_MODE=assist_list` + `make demo-upstreams`.
 
 **Direct (`alpha__echo`):**
 
@@ -89,15 +89,15 @@ Latency percentiles above use **successful** iterations only. The high `errors` 
 | Tempo trace decomposition | **Not measured** | Optional step not executed |
 | Semantic loadtest latency | **Not measured** | Zero successful samples |
 
-Calibration supplies recall, unit benchmarks, and direct loadtest reference. Operational latency under JWT + real backends is in the **multibackend benchmark** below.
+Calibration supplies recall, unit benchmarks, and direct loadtest reference. Operational latency under JWT + real upstreams is in the **multibackend benchmark** below.
 
 ---
 
-## Multibackend benchmark (2026-05-30)
+## Multiupstream benchmark (2026-05-30)
 
 **Scope:** single session — real MCP backends (stdio), semantic router (`ROUTER_MODE=on`), JWT, OTLP→Prometheus. No SRE HTTP mocks (`make sre-up` not used).
 
-Config: `deployments/gateway.real.yaml`. Procedure: [`integration-checklist.md`](integration-checklist.md) (multibackend benchmark), [`scenario-real-backends-jwt.md`](scenario-real-backends-jwt.md).
+Config: `deployments/gateway.real.yaml`. Procedure: [`integration-checklist.md`](integration-checklist.md) (multibackend benchmark), [`scenario-real-upstreams-jwt.md`](scenario-real-upstreams-jwt.md).
 
 ### Run metadata
 
@@ -168,7 +168,7 @@ sum(rate(mcp_mcp_gateway_internal_duration_seconds_count{method="tools/call",pha
 | mux | 0.0060 | PASS |
 | router | 0.0307 | PASS |
 
-### Multibackend benchmark — not measured (protocol choice)
+### Multiupstream benchmark — not measured (protocol choice)
 
 | Artifact | Status | Reason |
 | -------- | ------ | ------ |
@@ -182,7 +182,7 @@ sum(rate(mcp_mcp_gateway_internal_duration_seconds_count{method="tools/call",pha
 
 **Scope:** single session extending the multibackend benchmark in the same gateway config — MCP host demo with JWT, a LangGraph agent host, Tempo trace capture, and a JWT-aware loadtest. **Does not replace the multibackend benchmark numbers above**, which remain the primary gateway benchmark.
 
-Procedure: [integration-checklist.md](integration-checklist.md) (LangGraph agent integration run) and [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md).
+Procedure: [integration-checklist.md](integration-checklist.md) (LangGraph agent integration run) and [scenario-real-upstreams-jwt.md](scenario-real-upstreams-jwt.md).
 
 ### Run metadata
 
@@ -218,9 +218,9 @@ Known multiplexing caveats (upstream JSON-RPC id forwarding, concurrent `tools/l
 | ----- | --- | -------- |
 | Router recall@1/@3 on eval catalog | Calibration + multibackend regression | 1.000 (26/26) both dates |
 | Lexical ranking (calibration) | Calibration | MRR=1.000, nDCG@5=0.907 |
-| Real multibackend MCP + namespacing | Multibackend benchmark | smoke_e2e ×3 (prom/k8s/gh) |
-| JWT allow-list enforcement | Multibackend benchmark | allow OK; deny -32003 |
-| Internal gateway work ≪ 50 ms | Multibackend benchmark + LangGraph agent integration run | Prom **mean** by phase (≪ 50 ms at low rate and under 353 rps) |
+| Real multibackend MCP + namespacing | Multiupstream benchmark | smoke_e2e ×3 (prom/k8s/gh) |
+| JWT allow-list enforcement | Multiupstream benchmark | allow OK; deny -32003 |
+| Internal gateway work ≪ 50 ms | Multiupstream benchmark + LangGraph agent integration run | Prom **mean** by phase (≪ 50 ms at low rate and under 353 rps) |
 | Client-observed throughput/latency (no JWT) | Calibration | loadtest direct p95 ≈ 1.24 ms (includes SSE client path) |
 | MCP host + agent (LangGraph) over JWT | LangGraph agent integration run | host demo ×3 silos + LangGraph `StateGraph` `tools/call` OK |
 | Client-observed latency **under JWT** | LangGraph agent integration run | loadtest direct p95 ≈ 0.944 ms, 0 errors (1 worker, 10.6k samples) |

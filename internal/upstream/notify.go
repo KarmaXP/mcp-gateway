@@ -1,4 +1,4 @@
-package backend
+package upstream
 
 import "github.com/KarmaXP/mcp-gateway/internal/rpc"
 
@@ -6,7 +6,7 @@ type NotificationReceiver interface {
 	SetOnNotification(func(*rpc.Request))
 }
 
-func RegisterNotificationHandlers(upstreams []Upstream, fn func(*rpc.Request)) {
+func RegisterNotificationHandlers(upstreams []Client, fn func(*rpc.Request)) {
 	if fn == nil {
 		return
 	}

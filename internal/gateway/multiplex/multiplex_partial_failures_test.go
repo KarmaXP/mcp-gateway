@@ -8,17 +8,17 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 func TestInitializeOmitsPartialFailuresByDefault(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
 	b2.InitTransportErr = errors.New("unreachable")
-	m, err := New(context.Background(), []backend.Upstream{b1, b2}, WithListTTL(0))
+	m, err := New(context.Background(), []upstream.Client{b1, b2}, WithListTTL(0))
 	require.NoError(t, err)
 
 	resp, err := m.Initialize(context.Background(), json.RawMessage(`1`))
@@ -34,7 +34,7 @@ func TestInitializeReportsPartialFailuresWhenEnabled(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
 	b2.InitTransportErr = errors.New("unreachable")
-	m, err := New(context.Background(), []backend.Upstream{b1, b2}, WithListTTL(0), WithReportPartialFailures(true))
+	m, err := New(context.Background(), []upstream.Client{b1, b2}, WithListTTL(0), WithReportPartialFailures(true))
 	require.NoError(t, err)
 
 	resp, err := m.Initialize(context.Background(), json.RawMessage(`1`))
@@ -51,7 +51,7 @@ func TestInitializeReportsJSONRPCPartialFailure(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
 	b2.InitJSONRPCMessage = "init failed"
-	m, err := New(context.Background(), []backend.Upstream{b1, b2}, WithListTTL(0), WithReportPartialFailures(true))
+	m, err := New(context.Background(), []upstream.Client{b1, b2}, WithListTTL(0), WithReportPartialFailures(true))
 	require.NoError(t, err)
 
 	resp, err := m.Initialize(context.Background(), json.RawMessage(`1`))
@@ -68,7 +68,7 @@ func TestInitializeStrictOmitsPartialFailuresMetadata(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
 	b2.InitJSONRPCMessage = "init failed"
-	m, err := New(context.Background(), []backend.Upstream{b1, b2}, WithAggregationStrict(true, false), WithReportPartialFailures(true))
+	m, err := New(context.Background(), []upstream.Client{b1, b2}, WithAggregationStrict(true, false), WithReportPartialFailures(true))
 	require.NoError(t, err)
 
 	resp, err := m.Initialize(context.Background(), json.RawMessage(`1`))
@@ -81,7 +81,7 @@ func TestToolsListReportsPartialFailuresWhenEnabled(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
 	b2.ToolsListJSONRPCMessage = "list down"
-	m, err := New(context.Background(), []backend.Upstream{b1, b2}, WithListTTL(0), WithReportPartialFailures(true))
+	m, err := New(context.Background(), []upstream.Client{b1, b2}, WithListTTL(0), WithReportPartialFailures(true))
 	require.NoError(t, err)
 
 	resp, err := m.ToolsList(context.Background(), json.RawMessage(`2`))
@@ -100,7 +100,7 @@ func TestToolsListStrictOmitsPartialFailuresMetadata(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
 	b2.ToolsListJSONRPCMessage = "list down"
-	m, err := New(context.Background(), []backend.Upstream{b1, b2}, WithAggregationStrict(false, true), WithReportPartialFailures(true))
+	m, err := New(context.Background(), []upstream.Client{b1, b2}, WithAggregationStrict(false, true), WithReportPartialFailures(true))
 	require.NoError(t, err)
 
 	resp, err := m.ToolsList(context.Background(), json.RawMessage(`2`))
@@ -113,7 +113,7 @@ func TestInitializeReportsTimeoutPartialFailure(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
 	b2.InitTransportErr = context.DeadlineExceeded
-	m, err := New(context.Background(), []backend.Upstream{b1, b2}, WithListTTL(0), WithReportPartialFailures(true))
+	m, err := New(context.Background(), []upstream.Client{b1, b2}, WithListTTL(0), WithReportPartialFailures(true))
 	require.NoError(t, err)
 
 	resp, err := m.Initialize(context.Background(), json.RawMessage(`1`))
@@ -128,12 +128,12 @@ func TestInitializeReportsTimeoutPartialFailure(t *testing.T) {
 
 func TestToolsListReportsTimeoutPartialFailure(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	b2 := &timeoutOnMethodBackend{
+	b2 := &timeoutOnMethodUpstream{
 		inner:  mock.NewMockUpstream("b2", "beta", []string{"ping"}),
 		method: "tools/list",
 		err:    context.DeadlineExceeded,
 	}
-	m, err := New(context.Background(), []backend.Upstream{b1, b2}, WithListTTL(0), WithReportPartialFailures(true))
+	m, err := New(context.Background(), []upstream.Client{b1, b2}, WithListTTL(0), WithReportPartialFailures(true))
 	require.NoError(t, err)
 
 	resp, err := m.ToolsList(context.Background(), json.RawMessage(`2`))
@@ -152,7 +152,7 @@ func TestResourcesListReportsPartialFailuresWhenEnabled(t *testing.T) {
 	b1 := mockUpstreamWithResources("b1", "alpha", []string{"file:///a"})
 	b2 := mockUpstreamWithResources("b2", "beta", []string{"file:///b"})
 	b2.ResourcesListJSONRPCMessage = "resources down"
-	m, err := New(context.Background(), []backend.Upstream{b1, b2}, WithListTTL(0), WithReportPartialFailures(true))
+	m, err := New(context.Background(), []upstream.Client{b1, b2}, WithListTTL(0), WithReportPartialFailures(true))
 	require.NoError(t, err)
 
 	resp, err := m.ResourcesList(context.Background(), json.RawMessage(`3`))
@@ -171,7 +171,7 @@ func TestPromptsListReportsPartialFailuresWhenEnabled(t *testing.T) {
 	b1 := mockUpstreamWithPrompts("b1", "alpha", []string{"summarize"})
 	b2 := mockUpstreamWithPrompts("b2", "beta", []string{"review"})
 	b2.PromptsListJSONRPCMessage = "prompts down"
-	m, err := New(context.Background(), []backend.Upstream{b1, b2}, WithListTTL(0), WithReportPartialFailures(true))
+	m, err := New(context.Background(), []upstream.Client{b1, b2}, WithListTTL(0), WithReportPartialFailures(true))
 	require.NoError(t, err)
 
 	resp, err := m.PromptsList(context.Background(), json.RawMessage(`4`))
@@ -186,16 +186,16 @@ func TestPromptsListReportsPartialFailuresWhenEnabled(t *testing.T) {
 	require.Equal(t, PartialFailureJSONRPC, failures[0]["reason"])
 }
 
-type timeoutOnMethodBackend struct {
-	inner  backend.Upstream
+type timeoutOnMethodUpstream struct {
+	inner  upstream.Client
 	method string
 	err    error
 }
 
-func (t *timeoutOnMethodBackend) ID() string     { return t.inner.ID() }
-func (t *timeoutOnMethodBackend) Prefix() string { return t.inner.Prefix() }
+func (t *timeoutOnMethodUpstream) ID() string     { return t.inner.ID() }
+func (t *timeoutOnMethodUpstream) Prefix() string { return t.inner.Prefix() }
 
-func (t *timeoutOnMethodBackend) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
+func (t *timeoutOnMethodUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
 	if req.Method == t.method {
 		return nil, t.err
 	}

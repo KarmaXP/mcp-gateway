@@ -7,15 +7,15 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 	"github.com/KarmaXP/mcp-gateway/internal/router"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 func TestSemanticRoutingSignalIncludesIntentAndCatalogVersion(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "p", []string{"echo"})
-	a, err := New(context.Background(), []backend.Upstream{b1})
+	a, err := New(context.Background(), []upstream.Client{b1})
 	require.NoError(t, err)
 	a.catalogVersion.version = "catalog-ver-xyz"
 

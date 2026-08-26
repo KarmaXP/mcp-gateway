@@ -11,8 +11,8 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 func TestToolCallSpansNeverCarryArgumentValues(t *testing.T) {
@@ -49,7 +49,7 @@ func TestToolCallSpansNeverCarryArgumentValues(t *testing.T) {
 				_ = tp.Shutdown(context.Background())
 			})
 
-			a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0))
+			a, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0))
 			require.NoError(t, err)
 			_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 			_, _ = a.ToolsList(context.Background(), json.RawMessage(`2`))

@@ -7,16 +7,16 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 	"github.com/KarmaXP/mcp-gateway/internal/policy"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 func TestToolsListFilteredByJWTAllowList(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo", "list"})
-	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0))
+	a, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 
@@ -36,7 +36,7 @@ func TestToolsListFilteredByJWTAllowList(t *testing.T) {
 
 func TestToolsCallRejectedWhenNotInAllowList(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo", "list"})
-	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0))
+	a, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 	_, _ = a.ToolsList(context.Background(), json.RawMessage(`2`))
@@ -61,7 +61,7 @@ func TestToolsCallValidatesArgumentsAgainstSchema(t *testing.T) {
 			"required": []any{"msg"},
 		},
 	}
-	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0))
+	a, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 	_, _ = a.ToolsList(context.Background(), json.RawMessage(`2`))
@@ -85,7 +85,7 @@ func TestToolsCallElevatedToolRequiresSchema(t *testing.T) {
 		Version:       "t",
 		ElevatedTools: []string{"alpha__echo"},
 	})
-	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), withPolicyEngine(pol))
+	a, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0), withPolicyEngine(pol))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 	_, _ = a.ToolsList(context.Background(), json.RawMessage(`2`))
@@ -113,7 +113,7 @@ func TestToolsCallHardensElevatedObjectSchemas(t *testing.T) {
 		Version:       "t",
 		ElevatedTools: []string{"alpha__echo"},
 	})
-	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), withPolicyEngine(pol))
+	a, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0), withPolicyEngine(pol))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 	_, _ = a.ToolsList(context.Background(), json.RawMessage(`2`))
@@ -151,7 +151,7 @@ func TestToolsCallDoesNotHardenSchemaWhenPolicyDisabled(t *testing.T) {
 		AllowOpenSchemas: true,
 		ElevatedTools:    []string{"alpha__echo"},
 	})
-	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), withPolicyEngine(pol))
+	a, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0), withPolicyEngine(pol))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 	_, _ = a.ToolsList(context.Background(), json.RawMessage(`2`))
@@ -195,7 +195,7 @@ func TestToolsCallHardensSchemasByDefaultForEveryTool(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 			b1.InputSchemaByTool = map[string]map[string]any{"echo": tc.inputSchema}
-			a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0))
+			a, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0))
 			require.NoError(t, err)
 			_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 			_, _ = a.ToolsList(context.Background(), json.RawMessage(`2`))
@@ -237,7 +237,7 @@ func TestElevatedToolNeedsASchemaThatDeclaresSomething(t *testing.T) {
 			b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 			b1.InputSchemaByTool = map[string]map[string]any{"echo": tc.inputSchema}
 			pol := policy.NewEngine(policy.EngineInput{Version: "t", ElevatedTools: []string{"alpha__echo"}})
-			a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), withPolicyEngine(pol))
+			a, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0), withPolicyEngine(pol))
 			require.NoError(t, err)
 			_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 			_, _ = a.ToolsList(context.Background(), json.RawMessage(`2`))

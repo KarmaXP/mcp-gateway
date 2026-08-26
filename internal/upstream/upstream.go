@@ -1,4 +1,4 @@
-package backend
+package upstream
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 )
 
 // One MCP server the gateway multiplexes to (stdio or HTTP+SSE).
-type Upstream interface {
+type Client interface {
 	ID() string
 	Prefix() string
 	Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error)

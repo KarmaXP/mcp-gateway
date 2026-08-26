@@ -12,7 +12,6 @@ import (
 
 	"github.com/KarmaXP/mcp-gateway/internal/auth"
 	"github.com/KarmaXP/mcp-gateway/internal/auth/ratelimit"
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/config"
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/httpserver"
@@ -21,6 +20,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/orchestrator"
 	"github.com/KarmaXP/mcp-gateway/internal/policy"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
 )
 
 type Options struct {
@@ -99,7 +99,7 @@ func New(ctx context.Context, opts Options) (app *App, err error) {
 	a.srv = httpserver.New(context.Background(), mpx, a.addr, httpOpts...)
 
 	if opts.Config.ForwardToolsListChanged() {
-		backend.RegisterNotificationHandlers(upstreams, func(req *rpc.Request) {
+		upstream.RegisterNotificationHandlers(upstreams, func(req *rpc.Request) {
 			if req == nil || !mcpwire.IsCatalogListChangedNotification(req.Method) {
 				return
 			}

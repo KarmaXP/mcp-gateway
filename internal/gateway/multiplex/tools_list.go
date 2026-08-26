@@ -14,7 +14,6 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
@@ -22,6 +21,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/router"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
 )
 
 func (a *Multiplexer) ToolsList(ctx context.Context, hostID json.RawMessage) (*rpc.Response, error) {
@@ -122,13 +122,13 @@ func (a *Multiplexer) fetchAndMergeUpstreamTools(ctx context.Context) ([]map[str
 	return mergeNamespacedToolList(a.upstreams, perUpstream), failures, nil
 }
 
-func (a *Multiplexer) callUpstreamToolsList(ctx context.Context, b backend.Upstream) ([]map[string]any, *PartialFailure) {
+func (a *Multiplexer) callUpstreamToolsList(ctx context.Context, b upstream.Client) ([]map[string]any, *PartialFailure) {
 	callCtx, cancel := context.WithTimeout(ctx, a.listTimeout)
 	defer cancel()
 	release, err := a.acquireGlobalCallSlot(callCtx)
 	if err != nil {
 		slog.Warn("tools/list semaphore wait failed", "backend_id", b.ID(), "err", err)
-		return nil, &PartialFailure{BackendID: b.ID(), Reason: classifyCallFailure(err)}
+		return nil, &PartialFailure{UpstreamID: b.ID(), Reason: classifyCallFailure(err)}
 	}
 	defer release()
 	subID := json.RawMessage(fmt.Sprintf(`"gw-list-%s"`, b.ID()))
@@ -136,27 +136,27 @@ func (a *Multiplexer) callUpstreamToolsList(ctx context.Context, b backend.Upstr
 	resp, err := b.Call(callCtx, req)
 	if err != nil {
 		slog.Warn("tools/list backend failed", "backend_id", b.ID(), "err", err)
-		return nil, &PartialFailure{BackendID: b.ID(), Reason: classifyCallFailure(err)}
+		return nil, &PartialFailure{UpstreamID: b.ID(), Reason: classifyCallFailure(err)}
 	}
 	if resp == nil {
 		slog.Warn("tools/list backend returned nil response", "backend_id", b.ID())
-		return nil, &PartialFailure{BackendID: b.ID(), Reason: PartialFailureOmitted}
+		return nil, &PartialFailure{UpstreamID: b.ID(), Reason: PartialFailureOmitted}
 	}
 	if resp.Error != nil {
 		slog.Warn("tools/list jsonrpc error", "backend_id", b.ID(), "message", resp.Error.Message)
-		return nil, &PartialFailure{BackendID: b.ID(), Reason: PartialFailureJSONRPC}
+		return nil, &PartialFailure{UpstreamID: b.ID(), Reason: PartialFailureJSONRPC}
 	}
 	var body struct {
 		Tools []map[string]any `json:"tools"`
 	}
 	if err := json.Unmarshal(resp.Result, &body); err != nil {
 		slog.Warn("tools/list decode", "backend_id", b.ID(), "err", err)
-		return nil, &PartialFailure{BackendID: b.ID(), Reason: PartialFailureOmitted}
+		return nil, &PartialFailure{UpstreamID: b.ID(), Reason: PartialFailureOmitted}
 	}
 	return body.Tools, nil
 }
 
-func mergeNamespacedToolList(upstreams []backend.Upstream, perUpstream [][]map[string]any) []map[string]any {
+func mergeNamespacedToolList(upstreams []upstream.Client, perUpstream [][]map[string]any) []map[string]any {
 	mergedCap := 0
 	for i := range upstreams {
 		if i < len(perUpstream) {

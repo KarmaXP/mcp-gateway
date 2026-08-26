@@ -11,18 +11,18 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/policy"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
-type nilUpstreamBackend struct{ inner backend.Upstream }
+type nilResponseUpstream struct{ inner upstream.Client }
 
-func (n *nilUpstreamBackend) ID() string     { return n.inner.ID() }
-func (n *nilUpstreamBackend) Prefix() string { return n.inner.Prefix() }
-func (n *nilUpstreamBackend) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
+func (n *nilResponseUpstream) ID() string     { return n.inner.ID() }
+func (n *nilResponseUpstream) Prefix() string { return n.inner.Prefix() }
+func (n *nilResponseUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
 	switch req.Method {
 	case "tools/list", "initialize", "tools/call":
 		return nil, nil
@@ -33,8 +33,8 @@ func (n *nilUpstreamBackend) Call(ctx context.Context, req *rpc.Request) (*rpc.R
 
 func TestToolsListNilUpstreamResponseNoPanic(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	up := &nilUpstreamBackend{inner: inner}
-	mpx, err := New(context.Background(), []backend.Upstream{up}, WithListTTL(0))
+	up := &nilResponseUpstream{inner: inner}
+	mpx, err := New(context.Background(), []upstream.Client{up}, WithListTTL(0))
 	require.NoError(t, err)
 	_, err = mpx.Initialize(context.Background(), json.RawMessage([]byte("0")))
 	require.NoError(t, err)
@@ -45,8 +45,8 @@ func TestToolsListNilUpstreamResponseNoPanic(t *testing.T) {
 
 func TestInitializeNilUpstreamResponseJSONRPCError(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	up := &nilUpstreamBackend{inner: inner}
-	mpx, err := New(context.Background(), []backend.Upstream{up}, WithListTTL(0))
+	up := &nilResponseUpstream{inner: inner}
+	mpx, err := New(context.Background(), []upstream.Client{up}, WithListTTL(0))
 	require.NoError(t, err)
 	resp, err := mpx.Initialize(context.Background(), json.RawMessage([]byte("1")))
 	require.NoError(t, err)
@@ -56,8 +56,8 @@ func TestInitializeNilUpstreamResponseJSONRPCError(t *testing.T) {
 
 func TestToolsCallNilUpstreamResponseJSONRPCError(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	up := &nilUpstreamBackend{inner: inner}
-	mpx, err := New(context.Background(), []backend.Upstream{up}, WithListTTL(0))
+	up := &nilResponseUpstream{inner: inner}
+	mpx, err := New(context.Background(), []upstream.Client{up}, WithListTTL(0))
 	require.NoError(t, err)
 	_, err = mpx.Initialize(context.Background(), json.RawMessage([]byte("0")))
 	require.NoError(t, err)
@@ -70,14 +70,14 @@ func TestToolsCallNilUpstreamResponseJSONRPCError(t *testing.T) {
 	require.Equal(t, errcodes.GatewayInternal, resp.Error.Code)
 }
 
-type countingInitializeBackend struct {
-	inner backend.Upstream
+type countingInitializeUpstream struct {
+	inner upstream.Client
 	calls atomic.Int32
 }
 
-func (c *countingInitializeBackend) ID() string     { return c.inner.ID() }
-func (c *countingInitializeBackend) Prefix() string { return c.inner.Prefix() }
-func (c *countingInitializeBackend) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
+func (c *countingInitializeUpstream) ID() string     { return c.inner.ID() }
+func (c *countingInitializeUpstream) Prefix() string { return c.inner.Prefix() }
+func (c *countingInitializeUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
 	if req.Method == "initialize" {
 		c.calls.Add(1)
 	}
@@ -86,9 +86,9 @@ func (c *countingInitializeBackend) Call(ctx context.Context, req *rpc.Request) 
 
 func TestInitializeIdempotentSkipsRepeatUpstreamCall(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	initBack := &countingInitializeBackend{inner: inner}
-	listBack := &countingListBackend{inner: initBack}
-	mpx, err := New(context.Background(), []backend.Upstream{listBack}, WithListTTL(time.Minute))
+	initBack := &countingInitializeUpstream{inner: inner}
+	listBack := &countingListUpstream{inner: initBack}
+	mpx, err := New(context.Background(), []upstream.Client{listBack}, WithListTTL(time.Minute))
 	require.NoError(t, err)
 	_, err = mpx.Initialize(context.Background(), json.RawMessage([]byte("1")))
 	require.NoError(t, err)
@@ -105,7 +105,7 @@ func TestInitializeIdempotentSkipsRepeatUpstreamCall(t *testing.T) {
 }
 
 type initParamsRecorder struct {
-	inner  backend.Upstream
+	inner  upstream.Client
 	mu     sync.Mutex
 	params json.RawMessage
 }
@@ -124,7 +124,7 @@ func (r *initParamsRecorder) Call(ctx context.Context, req *rpc.Request) (*rpc.R
 func TestInitializeForwardsHostParamsToUpstream(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	rec := &initParamsRecorder{inner: inner}
-	mpx, err := New(context.Background(), []backend.Upstream{rec}, WithListTTL(0))
+	mpx, err := New(context.Background(), []upstream.Client{rec}, WithListTTL(0))
 	require.NoError(t, err)
 	hostParams, _ := json.Marshal(map[string]any{
 		"protocolVersion": "2099-01-01",
@@ -153,7 +153,7 @@ func TestPolicyHardenSchemasInsideAllOf(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b1.InputSchemaByTool = map[string]map[string]any{"echo": inputSchema}
 	pol := policy.NewEngine(policy.EngineInput{Version: "t", ElevatedTools: []string{"alpha__echo"}})
-	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), withPolicyEngine(pol))
+	a, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0), withPolicyEngine(pol))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage([]byte("1")))
 	_, _ = a.ToolsList(context.Background(), json.RawMessage([]byte("2")))

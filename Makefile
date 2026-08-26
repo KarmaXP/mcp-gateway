@@ -37,8 +37,8 @@ CYAN    := \033[36m
 RESET   := \033[0m
 
 .DEFAULT_GOAL := help
-.PHONY: help bootstrap demo demo-backends demo-backends-stop demo-full verify-e2e \
-        sre-backends sre-backends-stop sre-up sre-down sre-smoke gen-router-eval-catalog \
+.PHONY: help bootstrap demo demo-upstreams demo-upstreams-stop demo-full verify-e2e \
+        sre-upstreams sre-upstreams-stop sre-up sre-down sre-smoke gen-router-eval-catalog \
         build run run-filter-list stop test test-cover test-integration ci smoke smoke-e2e fmt lint clean tidy \
         docker-build docker-up docker-up-full docker-up-demo docker-up-sre docker-down docker-logs docker-clean calibration-up \
         lab-jwt-keys lab-jwt-env lab-jwt-verify demo-lab-preflight demo-lab-verify
@@ -56,11 +56,11 @@ help:
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "demo-lab-preflight" "Pre-demo checks (docker-up + fixture + JWT; no gateway)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "demo-lab-verify" "Full demo rehearsal (preflight + gateway + catalog + JWT + LangGraph)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "demo" "Quick start: one mock upstream + gateway + MCP tools/call (no Docker)"
-	@printf "  $(CYAN)%-20s$(RESET) %s\n" "demo-backends" "Start alpha/beta mock MCP servers on ports 3101 and 3102"
-	@printf "  $(CYAN)%-20s$(RESET) %s\n" "demo-backends-stop" "Stop alpha/beta mock servers"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "demo-upstreams" "Start alpha/beta mock MCP servers on ports 3101 and 3102"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "demo-upstreams-stop" "Stop alpha/beta mock servers"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "demo-full" "Two backends + gateway.example.yaml; calls alpha__echo"
-	@printf "  $(CYAN)%-20s$(RESET) %s\n" "sre-backends" "Start k8s/prom/gh mock MCP servers on ports 3201–3203"
-	@printf "  $(CYAN)%-20s$(RESET) %s\n" "sre-backends-stop" "Stop k8s/prom/gh mock servers"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "sre-upstreams" "Start k8s/prom/gh mock MCP servers on ports 3201–3203"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "sre-upstreams-stop" "Stop k8s/prom/gh mock servers"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "sre-up" "Docker deps (Qdrant, embed) + SRE mock servers"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "sre-smoke" "Gateway + SRE config; tools/call k8s, prom, gh"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "sre-down" "Stop SRE mock servers (Docker deps keep running)"
@@ -129,19 +129,19 @@ demo:
 	@MCP_GATEWAY_CONFIG=$(DEMO_CONFIG) ROUTER_MODE=off OTEL_EXPORTER_OTLP_ENDPOINT= \
 		SMOKE_AUTO_START_GATEWAY=1 DEMO_PRINT_HELP=1 bash scripts/smoke_test.sh
 
-demo-backends:
+demo-upstreams:
 	@bash scripts/mock_upstreams.sh demo start
 
-demo-backends-stop:
+demo-upstreams-stop:
 	@bash scripts/mock_upstreams.sh demo stop
 
-demo-full: bootstrap demo-backends
+demo-full: bootstrap demo-upstreams
 	@echo "Multi-backend demo (gateway.example.yaml + alpha__echo)..."
 	@MCP_GATEWAY_CONFIG=$(EXAMPLE_CONFIG) bash scripts/scenario_smoke.sh demo
-	@$(MAKE) demo-backends-stop
+	@$(MAKE) demo-upstreams-stop
 
 verify-e2e: ci
-	@echo "Running full E2E checks (demo, multi-backend, SRE)..."
+	@echo "Running full E2E checks (demo, multi-upstream, SRE)..."
 	@$(MAKE) stop
 	@$(MAKE) demo
 	@$(MAKE) stop
@@ -152,18 +152,18 @@ verify-e2e: ci
 	@$(MAKE) stop
 	@echo "VERIFY-E2E OK"
 
-sre-backends:
+sre-upstreams:
 	@bash scripts/mock_upstreams.sh sre start
 
-sre-backends-stop:
+sre-upstreams-stop:
 	@bash scripts/mock_upstreams.sh sre stop
 
-sre-up: bootstrap sre-backends
+sre-up: bootstrap sre-upstreams
 	@echo "Starting compose dependencies (Qdrant, embed, OTel)..."
 	@$(COMPOSE) up -d || printf "WARN: docker-up failed — start Docker for router=on; mocks on 3201–3203 are up\n"
 	@echo "SRE mocks ready. Run: make sre-smoke (router=on when Qdrant+embed healthy)"
 
-sre-down: sre-backends-stop
+sre-down: sre-upstreams-stop
 	@echo "SRE mocks stopped (docker compose deps still up; use make docker-down to stop all)"
 
 sre-smoke:
@@ -208,7 +208,7 @@ stop:
 		}; \
 		kill_port "$$PORT"; kill_port "$$GATEWAY_PORT"; kill_port "$(GATEWAY_PORT)"; \
 		kill_port "$(SMOKE_GATEWAY_PORT)"; kill_port "$(SMOKE_JWT_GATEWAY_PORT)"; kill_port "31400"; \
-		echo "Stopped gateway listeners (PORT/GATEWAY_PORT from .env when set). Use make sre-down / demo-backends-stop for mocks."'
+		echo "Stopped gateway listeners (PORT/GATEWAY_PORT from .env when set). Use make sre-down / demo-upstreams-stop for mocks."'
 
 test:
 	@echo "Running vet + tests..."

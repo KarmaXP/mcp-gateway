@@ -21,17 +21,17 @@ GATEWAY_URL=http://127.0.0.1:8080 go run ./scripts/mcp_host_demo
 Multi-backend (`gateway.example.yaml`):
 
 ```bash
-make demo-backends
+make demo-upstreams
 MCP_GATEWAY_CONFIG=deployments/gateway.example.yaml make run   # other terminal
 TOOL_NAME=alpha__echo GATEWAY_URL=http://127.0.0.1:8080 go run ./scripts/mcp_host_demo
 ```
 
 Or one shot: `make demo-full`.
 
-### Multibackend benchmark / LangGraph agent integration run (real backends + JWT)
+### Multiupstream benchmark / LangGraph agent integration run (real upstreams + JWT)
 
 When the gateway runs with `AUTH_MODE=jwt` (see
-[scenario-real-backends-jwt.md](../../docs/evaluation/scenario-real-backends-jwt.md)),
+[scenario-real-upstreams-jwt.md](../../docs/evaluation/scenario-real-upstreams-jwt.md)),
 set `GATEWAY_JWT` so the client sends `Authorization: Bearer` on the SSE GET and
 every POST, and pass `TOOL_ARGS` for tools that need arguments:
 
@@ -50,7 +50,7 @@ Optional env vars:
 
 - `GATEWAY_URL`: Gateway base URL (default `http://127.0.0.1:8080`)
 - `GATEWAY_JWT`: Bearer token sent on SSE and every POST. Required when the gateway runs with `AUTH_MODE=jwt`.
-- `TOOL_NAME`: Tool to call after `tools/list`. If empty, the first tool returned by `tools/list` is used (e.g. `alpha__echo` with `make demo-backends`).
+- `TOOL_NAME`: Tool to call after `tools/list`. If empty, the first tool returned by `tools/list` is used (e.g. `alpha__echo` with `make demo-upstreams`).
 - `TOOL_ARGS`: JSON object passed as `tools/call` arguments (default `{}`). Example: `{"path":"/private/tmp/mcp-gateway-lab/readme.txt"}`.
 
 ## Example output

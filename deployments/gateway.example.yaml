@@ -1,7 +1,7 @@
 # Example MCP Gateway upstream table. Copy to gateway.yaml or set MCP_GATEWAY_CONFIG.
 #
 # Quick start: deployments/gateway.demo.yaml + make demo
-# Add backends: docs/ADDING_BACKENDS.md — mocks: make demo-backends (127.0.0.1:3101/3102).
+# Add backends: docs/ADDING_UPSTREAMS.md — mocks: make demo-upstreams (127.0.0.1:3101/3102).
 # Docker Compose gateway container: deployments/gateway.example.docker.yaml (mock-alpha/beta DNS).
 #
 # Each backend uses either:
@@ -64,11 +64,11 @@
 # Env: GATEWAY_ALLOWED_ORIGINS=https://app.example.com
 
 backends:
-  - id: backend-alpha
+  - id: upstream-alpha
     prefix: alpha
-    url: http://127.0.0.1:3101  # requires make demo-backends
+    url: http://127.0.0.1:3101  # requires make demo-upstreams
     max_concurrency: 8
-  - id: backend-beta
+  - id: upstream-beta
     prefix: beta
     url: http://127.0.0.1:3102
     max_concurrency: 4

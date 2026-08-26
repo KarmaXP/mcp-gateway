@@ -7,14 +7,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
-type nilInitUpstream struct{ inner backend.Upstream }
+type nilInitUpstream struct{ inner upstream.Client }
 
 func (n *nilInitUpstream) ID() string     { return n.inner.ID() }
 func (n *nilInitUpstream) Prefix() string { return n.inner.Prefix() }
@@ -25,7 +25,7 @@ func (n *nilInitUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Resp
 	return n.inner.Call(ctx, req)
 }
 
-type nilCallUpstream struct{ inner backend.Upstream }
+type nilCallUpstream struct{ inner upstream.Client }
 
 func (n *nilCallUpstream) ID() string     { return n.inner.ID() }
 func (n *nilCallUpstream) Prefix() string { return n.inner.Prefix() }
@@ -38,7 +38,7 @@ func (n *nilCallUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Resp
 
 func TestSessionDispatchInitializeNilMuxResponseNoPanic(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	mpx, err := multiplex.New(context.Background(), []backend.Upstream{&nilInitUpstream{inner: inner}}, multiplex.WithListTTL(0))
+	mpx, err := multiplex.New(context.Background(), []upstream.Client{&nilInitUpstream{inner: inner}}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	s := NewSession(context.Background(), "init-nil", mpx, nil)
 
@@ -58,7 +58,7 @@ func TestSessionDispatchInitializeNilMuxResponseNoPanic(t *testing.T) {
 
 func TestSessionDispatchToolsCallNilMuxResponseNoPanic(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	mpx, err := multiplex.New(context.Background(), []backend.Upstream{&nilCallUpstream{inner: inner}}, multiplex.WithListTTL(0))
+	mpx, err := multiplex.New(context.Background(), []upstream.Client{&nilCallUpstream{inner: inner}}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	s := NewSession(context.Background(), "call-nil", mpx, nil)
 	handshake(t, s)
