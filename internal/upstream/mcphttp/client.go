@@ -17,15 +17,15 @@ import (
 	"golang.org/x/sync/semaphore"
 	"golang.org/x/sync/singleflight"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend/framing"
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/rpcconn"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/framing"
 )
 
 const (
 	weightedSemaphoreTickets int64 = 1
-	pendingJSONRPCChannelCap int = 1
 	callSessionRetryAttempts int = 2
 )
 
@@ -51,12 +51,9 @@ type HTTPMCPUpstream struct {
 	connErr      error
 	connectGroup singleflight.Group
 
-	droppedResponses atomic.Uint64
-	reconnecting     atomic.Bool
+	reconnecting atomic.Bool
 
-	pendMu     sync.Mutex
-	pending    map[string]chan *rpc.Response
-	pendingErr map[string]error
+	calls *rpcconn.Table
 
 	onNotifMu sync.Mutex
 	onNotif   func(*rpc.Request)
@@ -91,9 +88,8 @@ func NewHTTPMCPUpstream(lifecycle context.Context, id, prefix, baseURL string, m
 			Transport: transport,
 			Timeout:   defaults.MultiplexCallTimeout,
 		},
-		sem:        semaphore.NewWeighted(maxConcurrency),
-		pending:    make(map[string]chan *rpc.Response),
-		pendingErr: make(map[string]error),
+		sem:   semaphore.NewWeighted(maxConcurrency),
+		calls: rpcconn.NewTable("mcphttp " + id),
 	}
 	cleanup := func() { c.close() }
 	return c, cleanup, nil
@@ -101,10 +97,6 @@ func NewHTTPMCPUpstream(lifecycle context.Context, id, prefix, baseURL string, m
 
 func (c *HTTPMCPUpstream) ID() string     { return c.id }
 func (c *HTTPMCPUpstream) Prefix() string { return c.prefix }
-
-func (c *HTTPMCPUpstream) DroppedResponses() uint64 {
-	return c.droppedResponses.Load()
-}
 
 func (c *HTTPMCPUpstream) SetOnNotification(fn func(*rpc.Request)) {
 	c.onNotifMu.Lock()
@@ -278,23 +270,11 @@ func (c *HTTPMCPUpstream) onSSEClosed(reason error) {
 }
 
 func (c *HTTPMCPUpstream) abortPendingForReconnect() {
-	c.pendMu.Lock()
-	defer c.pendMu.Unlock()
-	for key, ch := range c.pending {
-		c.pendingErr[key] = errSessionReconnecting
-		delete(c.pending, key)
-		close(ch)
-	}
+	c.calls.FailAll(errSessionReconnecting)
 }
 
 func (c *HTTPMCPUpstream) failPending() {
-	c.pendMu.Lock()
-	defer c.pendMu.Unlock()
-	for key, ch := range c.pending {
-		delete(c.pending, key)
-		close(ch)
-	}
-	clear(c.pendingErr)
+	c.calls.FailAll(c.disconnectErr())
 }
 
 func isRetriableSessionLoss(err error) bool {
@@ -382,27 +362,7 @@ func (c *HTTPMCPUpstream) readSSE(body io.Reader, ctx context.Context) error {
 func (c *HTTPMCPUpstream) dispatch(raw []byte) {
 	resp, err := rpc.ParseResponse(raw)
 	if err == nil {
-		key, idErr := rpc.CanonicalIDKey(resp.ID)
-		if idErr != nil {
-			return
-		}
-		c.pendMu.Lock()
-		ch := c.pending[key]
-		delete(c.pending, key)
-		c.pendMu.Unlock()
-		if ch == nil {
-			return
-		}
-		select {
-		case ch <- resp:
-		default:
-			c.droppedResponses.Add(1)
-			deliverErr := fmt.Errorf("mcphttp %s: pending channel full for id %s", c.id, key)
-			c.pendMu.Lock()
-			c.pendingErr[key] = deliverErr
-			c.pendMu.Unlock()
-			close(ch)
-		}
+		c.calls.Deliver(resp)
 		return
 	}
 	req, err := rpc.ParseRequest(raw)
@@ -492,47 +452,20 @@ func (c *HTTPMCPUpstream) callWithSession(ctx context.Context, req *rpc.Request)
 		return nil, true, nil
 	}
 
-	key, err := rpc.CanonicalIDKey(req.ID)
+	call, err := c.calls.Register(req.ID)
 	if err != nil {
-		return nil, false, fmt.Errorf("mcphttp %s: jsonrpc id: %w", c.id, err)
+		return nil, false, err
 	}
-	ch := make(chan *rpc.Response, pendingJSONRPCChannelCap)
-	c.pendMu.Lock()
-	if _, exists := c.pending[key]; exists {
-		c.pendMu.Unlock()
-		return nil, false, fmt.Errorf("mcphttp %s: duplicate jsonrpc id %s", c.id, key)
-	}
-	c.pending[key] = ch
-	c.pendMu.Unlock()
-	defer func() {
-		c.pendMu.Lock()
-		if cur, ok := c.pending[key]; ok && cur == ch {
-			delete(c.pending, key)
-		}
-		delete(c.pendingErr, key)
-		c.pendMu.Unlock()
-	}()
+	defer call.Release()
 
 	if err := c.postRPC(ctx, req); err != nil {
 		return nil, false, err
 	}
-
-	select {
-	case <-ctx.Done():
-		return nil, true, ctx.Err()
-	case resp, ok := <-ch:
-		c.pendMu.Lock()
-		deliverErr := c.pendingErr[key]
-		delete(c.pendingErr, key)
-		c.pendMu.Unlock()
-		if deliverErr != nil {
-			return nil, true, deliverErr
-		}
-		if !ok {
-			return nil, true, c.disconnectErr()
-		}
-		return resp, true, nil
+	resp, err := call.Wait(ctx)
+	if err != nil {
+		return nil, true, err
 	}
+	return resp, true, nil
 }
 
 func (c *HTTPMCPUpstream) close() {

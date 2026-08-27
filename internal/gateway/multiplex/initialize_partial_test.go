@@ -7,9 +7,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 type emptyInitializeUpstream struct {
@@ -26,7 +26,7 @@ func (u *emptyInitializeUpstream) Call(ctx context.Context, req *rpc.Request) (*
 func TestInitializeReportsNoPartialFailureWhenOthersSucceeded(t *testing.T) {
 	healthy := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	quiet := &emptyInitializeUpstream{MockUpstream: mock.NewMockUpstream("b2", "beta", []string{"ping"})}
-	a, err := New(context.Background(), []backend.Upstream{healthy, quiet},
+	a, err := New(context.Background(), []upstream.Client{healthy, quiet},
 		WithListTTL(0),
 		WithReportPartialFailures(true),
 	)

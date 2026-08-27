@@ -274,8 +274,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.handler.ServeHTTP(w, r)
 }
 
-func (s *Server) AsHandler() http.Handler { return s.handler }
-
 func isRequestBodyTooLargeError(err error) bool {
 	if err == nil {
 		return false

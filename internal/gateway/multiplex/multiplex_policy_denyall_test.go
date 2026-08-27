@@ -9,22 +9,22 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 	"github.com/KarmaXP/mcp-gateway/internal/router"
 	"github.com/KarmaXP/mcp-gateway/internal/router/index"
 	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 func TestToolsListEmptyIntersectionReturnsNoTools(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo", "other"})
-	mpx, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0))
+	mpx, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0))
 	require.NoError(t, err)
 
-	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{})
+	ctx := hostctx.WithAllowList(context.Background(), []string{})
 	resp, err := mpx.ToolsList(ctx, json.RawMessage(`1`))
 	require.NoError(t, err)
 	require.Nil(t, resp.Error)
@@ -33,10 +33,10 @@ func TestToolsListEmptyIntersectionReturnsNoTools(t *testing.T) {
 
 func TestToolsListDenyAllReturnsEmptyArrayNotNull(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo", "other"})
-	mpx, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0))
+	mpx, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0))
 	require.NoError(t, err)
 
-	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{})
+	ctx := hostctx.WithAllowList(context.Background(), []string{})
 	resp, err := mpx.ToolsList(ctx, json.RawMessage(`1`))
 	require.NoError(t, err)
 	require.Nil(t, resp.Error)
@@ -68,7 +68,7 @@ func (s *muxEmbedSpy) Embed(ctx context.Context, texts []string) ([][]float32, e
 func TestToolsCallDenyAllSkipsSemanticRouter(t *testing.T) {
 	base := &mapEmbed{dim: 4, vecs: make(map[string][]float32)}
 	spy := &muxEmbedSpy{inner: base}
-	tRow := index.ToolRow{Name: "alpha__echo", Description: "mock echo"}
+	tRow := index.Tool{Name: "alpha__echo", Description: "mock echo"}
 	base.vecs[index.FormatDocument(tRow)] = []float32{1, 0, 0, 0}
 
 	st := store.NewInMemoryVectorStore(4)
@@ -78,7 +78,7 @@ func TestToolsCallDenyAllSkipsSemanticRouter(t *testing.T) {
 	sr := router.NewSemanticRouter(cfg, spy, st, 4)
 
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	mpx, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
+	mpx, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0), WithSemanticRouter(sr))
 	require.NoError(t, err)
 	_, err = mpx.Initialize(context.Background(), json.RawMessage(`0`))
 	require.NoError(t, err)
@@ -86,7 +86,7 @@ func TestToolsCallDenyAllSkipsSemanticRouter(t *testing.T) {
 	require.NoError(t, err)
 	beforeCall := spy.invokes.Load()
 
-	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{})
+	ctx := hostctx.WithAllowList(context.Background(), []string{})
 	params, _ := json.Marshal(map[string]any{"name": "alpha__echo", "arguments": map[string]any{}})
 	resp, err := mpx.ToolsCall(ctx, json.RawMessage(`2`), params)
 	require.NoError(t, err)
@@ -98,10 +98,10 @@ func TestToolsCallDenyAllSkipsSemanticRouter(t *testing.T) {
 
 func TestToolsCallEmptyIntersectionPermissionDenied(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	mpx, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0))
+	mpx, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0))
 	require.NoError(t, err)
 
-	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{})
+	ctx := hostctx.WithAllowList(context.Background(), []string{})
 	params, _ := json.Marshal(map[string]any{"name": "alpha__echo", "arguments": map[string]any{}})
 	resp, err := mpx.ToolsCall(ctx, json.RawMessage(`2`), params)
 	require.NoError(t, err)
@@ -112,10 +112,10 @@ func TestToolsCallEmptyIntersectionPermissionDenied(t *testing.T) {
 func TestToolsListDenyAllSkipsUpstreamFanout(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo", "other"})
 	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
-	mpx, err := New(context.Background(), []backend.Upstream{b1, b2}, WithListTTL(0))
+	mpx, err := New(context.Background(), []upstream.Client{b1, b2}, WithListTTL(0))
 	require.NoError(t, err)
 
-	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{})
+	ctx := hostctx.WithAllowList(context.Background(), []string{})
 	resp, err := mpx.ToolsList(ctx, json.RawMessage(`1`))
 	require.NoError(t, err)
 	require.Nil(t, resp.Error)
@@ -126,14 +126,14 @@ func TestToolsListDenyAllSkipsUpstreamFanout(t *testing.T) {
 
 func TestToolsListCacheNotUsedForDenyAllPrincipal(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	mpx, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(time.Minute))
+	mpx, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(time.Minute))
 	require.NoError(t, err)
 
 	openCtx := context.Background()
 	_, err = mpx.ToolsList(openCtx, json.RawMessage(`1`))
 	require.NoError(t, err)
 
-	denyCtx := hostctx.WithAllowedToolNames(context.Background(), []string{})
+	denyCtx := hostctx.WithAllowList(context.Background(), []string{})
 	resp, err := mpx.ToolsList(denyCtx, json.RawMessage(`2`))
 	require.NoError(t, err)
 	require.Nil(t, resp.Error)

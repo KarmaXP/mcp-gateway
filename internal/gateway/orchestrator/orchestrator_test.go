@@ -10,10 +10,10 @@ import (
 
 	"github.com/KarmaXP/mcp-gateway/internal/auth"
 	"github.com/KarmaXP/mcp-gateway/internal/auth/ratelimit"
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/httpserver"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 func TestHTTPServerOptionsWithServer(t *testing.T) {
@@ -22,7 +22,7 @@ func TestHTTPServerOptionsWithServer(t *testing.T) {
 	require.NoError(t, err)
 
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
 	opts := HTTPServerOptions("test-svc", cfg, v, nil, ratelimit.New(context.Background(), ratelimit.Config{}))

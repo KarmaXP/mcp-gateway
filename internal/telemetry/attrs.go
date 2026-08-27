@@ -14,6 +14,7 @@ const (
 	AttrMCPMethod = "mcp.method"
 	AttrMCPJSONRPCID = "mcp.jsonrpc.id"
 	AttrMCPSessionID = "mcp.session.id"
+	// AttrMCPBackendID keeps the "backend" spelling: renaming it breaks deployed dashboards.
 	AttrMCPBackendID = "mcp.backend.id"
 	AttrMCPToolName = "mcp.tool.name"
 	AttrMCPAgentTokensUsed = "mcp.agent.tokens_used"

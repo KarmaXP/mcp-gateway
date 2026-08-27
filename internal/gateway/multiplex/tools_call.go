@@ -63,7 +63,7 @@ func (a *Multiplexer) ToolsCall(ctx context.Context, hostID json.RawMessage, par
 	}
 
 	muxStart := time.Now()
-	b, native, err := a.resolveBackendForTool(p.Name)
+	b, native, err := a.resolveUpstreamForTool(p.Name)
 	if err != nil {
 		telemetry.RecordInternalPhase(ctx, mcpwire.MethodToolsCall, defaults.MetricInternalPhaseMux, time.Since(muxStart))
 		return rpc.NewError(hostID, errcodes.InvalidParams, err.Error(), nil), nil
@@ -97,7 +97,7 @@ func (a *Multiplexer) enforceHostToolAuthz(ctx context.Context, hostID json.RawM
 
 func (a *Multiplexer) authorizeAgainstAllowList(ctx context.Context, hostID json.RawMessage, namespacedTool string, allowed []string) *rpc.Response {
 	span := trace.SpanFromContext(ctx)
-	ok, err := policy.AllowedListContains(namespacedTool, allowed)
+	ok, err := policy.AllowListPermits(namespacedTool, allowed)
 	if err != nil {
 		span.RecordError(errors.New("policy evaluation failed"))
 		span.SetStatus(codes.Error, "policy evaluation failed")
@@ -177,7 +177,7 @@ func (a *Multiplexer) applySemanticToolRouting(ctx context.Context, hostID json.
 	return nil
 }
 
-func (a *Multiplexer) resolveBackendForTool(namespaced string) (b backendCaller, native string, err error) {
+func (a *Multiplexer) resolveUpstreamForTool(namespaced string) (b upstreamCaller, native string, err error) {
 	prefix, nativeName, err := namespace.Split(namespaced)
 	if err != nil {
 		return nil, "", err
@@ -189,12 +189,12 @@ func (a *Multiplexer) resolveBackendForTool(namespaced string) (b backendCaller,
 	return up, nativeName, nil
 }
 
-type backendCaller interface {
+type upstreamCaller interface {
 	ID() string
 	Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error)
 }
 
-func (a *Multiplexer) invokeUpstreamToolsCall(ctx context.Context, hostID json.RawMessage, b backendCaller, namespacedTool, native string, args json.RawMessage, muxStart time.Time) (*rpc.Response, error) {
+func (a *Multiplexer) invokeUpstreamToolsCall(ctx context.Context, hostID json.RawMessage, b upstreamCaller, namespacedTool, native string, args json.RawMessage, muxStart time.Time) (*rpc.Response, error) {
 	forwardParams, err := json.Marshal(map[string]any{
 		"name":      native,
 		"arguments": args,
@@ -207,7 +207,7 @@ func (a *Multiplexer) invokeUpstreamToolsCall(ctx context.Context, hostID json.R
 	defer cancel()
 	release, err := a.acquireGlobalCallSlot(callCtx)
 	if err != nil {
-		return rpc.NewError(hostID, errcodes.GatewayInternal, "backend call failed", nil), nil
+		return rpc.NewError(hostID, errcodes.GatewayInternal, "upstream call failed", nil), nil
 	}
 	defer release()
 	bctx, bspan := telemetry.StartSpan(callCtx, telemetry.SpanBackendCall)
@@ -225,12 +225,12 @@ func (a *Multiplexer) invokeUpstreamToolsCall(ctx context.Context, hostID json.R
 	resp, err := b.Call(bctx, req)
 	if err != nil {
 		bspan.RecordError(err)
-		bspan.SetStatus(codes.Error, "backend transport")
-		return rpc.NewError(hostID, errcodes.GatewayInternal, "backend call failed", nil), nil
+		bspan.SetStatus(codes.Error, "upstream transport")
+		return rpc.NewError(hostID, errcodes.GatewayInternal, "upstream call failed", nil), nil
 	}
 	if resp == nil {
 		bspan.SetStatus(codes.Error, "upstream empty response")
-		return rpc.NewError(hostID, errcodes.GatewayInternal, "backend call failed", nil), nil
+		return rpc.NewError(hostID, errcodes.GatewayInternal, "upstream call failed", nil), nil
 	}
 	if resp.Error != nil {
 		bspan.SetStatus(codes.Error, "upstream jsonrpc error")

@@ -60,12 +60,12 @@ func Split(namespaced string) (prefix, native string, err error) {
 	return prefix, native, nil
 }
 
-func resolveBackend(prefixToBackend map[string]string, namespaced string) (backendID, nativeName string, err error) {
+func resolveUpstream(prefixToUpstream map[string]string, namespaced string) (upstreamID, nativeName string, err error) {
 	prefix, native, err := Split(namespaced)
 	if err != nil {
 		return "", "", err
 	}
-	bid, ok := prefixToBackend[prefix]
+	bid, ok := prefixToUpstream[prefix]
 	if !ok {
 		return "", "", fmt.Errorf("%w: unknown prefix %q", ErrInvalidToolName, prefix)
 	}

@@ -7,14 +7,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 func TestMultiplexerPrefixMapAndTimeoutOptions(t *testing.T) {
 	b1 := mock.NewMockUpstream("id1", "alpha", []string{"echo"})
 	b2 := mock.NewMockUpstream("id2", "beta", []string{"ping"})
-	a, err := New(context.Background(), []backend.Upstream{b1, b2},
+	a, err := New(context.Background(), []upstream.Client{b1, b2},
 		WithInitTimeout(time.Millisecond),
 		WithListTimeout(2*time.Millisecond),
 		WithCallTimeout(3*time.Millisecond),

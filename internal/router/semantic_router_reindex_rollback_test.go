@@ -44,7 +44,7 @@ func TestReindexRollsBackNewCatalogVersionOnUpsertFailure(t *testing.T) {
 	cfg.Mode = mode.AssistList
 	sr := NewSemanticRouter(cfg, emb, st, 4)
 
-	tools := []IndexedTool{{ToolRow: index.ToolRow{Name: "a__one", Description: "one"}, UpstreamID: "b1"}}
+	tools := []CatalogEntry{{Tool: index.Tool{Name: "a__one", Description: "one"}, UpstreamID: "b1"}}
 	err := sr.Reindex(ctx, "v-fail", tools)
 	require.Error(t, err)
 	require.Contains(t, st.deletedVersions, "v-fail")

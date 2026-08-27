@@ -8,55 +8,55 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
-type initFailBackend struct {
-	inner backend.Upstream
+type initFailUpstream struct {
+	inner upstream.Client
 }
 
-func (f *initFailBackend) ID() string     { return f.inner.ID() }
-func (f *initFailBackend) Prefix() string { return f.inner.Prefix() }
-func (f *initFailBackend) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
+func (f *initFailUpstream) ID() string     { return f.inner.ID() }
+func (f *initFailUpstream) Prefix() string { return f.inner.Prefix() }
+func (f *initFailUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
 	if req.Method == "initialize" {
 		return nil, errors.New("simulated unreachable")
 	}
 	return f.inner.Call(ctx, req)
 }
 
-type listFailBackend struct {
-	inner backend.Upstream
+type listFailUpstream struct {
+	inner upstream.Client
 }
 
-func (f *listFailBackend) ID() string     { return f.inner.ID() }
-func (f *listFailBackend) Prefix() string { return f.inner.Prefix() }
-func (f *listFailBackend) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
+func (f *listFailUpstream) ID() string     { return f.inner.ID() }
+func (f *listFailUpstream) Prefix() string { return f.inner.Prefix() }
+func (f *listFailUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
 	if req.Method == "tools/list" {
 		return nil, errors.New("list down")
 	}
 	return f.inner.Call(ctx, req)
 }
 
-type errReplyBackend struct {
+type errReplyUpstream struct {
 	inner *mock.MockUpstream
 }
 
-func (e *errReplyBackend) ID() string     { return e.inner.ID() }
-func (e *errReplyBackend) Prefix() string { return e.inner.Prefix() }
-func (e *errReplyBackend) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
+func (e *errReplyUpstream) ID() string     { return e.inner.ID() }
+func (e *errReplyUpstream) Prefix() string { return e.inner.Prefix() }
+func (e *errReplyUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
 	if req.Method == "tools/call" {
-		return rpc.NewError(req.ID, 99, "backend says no", nil), nil
+		return rpc.NewError(req.ID, 99, "upstream says no", nil), nil
 	}
 	return e.inner.Call(ctx, req)
 }
 
-func TestInitializeMergeTwoBackends(t *testing.T) {
+func TestInitializeMergeTwoUpstreams(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
-	a, err := New(context.Background(), []backend.Upstream{b1, b2}, WithListTTL(0))
+	a, err := New(context.Background(), []upstream.Client{b1, b2}, WithListTTL(0))
 	require.NoError(t, err)
 
 	resp, err := a.Initialize(context.Background(), json.RawMessage(`1`))
@@ -66,16 +66,16 @@ func TestInitializeMergeTwoBackends(t *testing.T) {
 	var merged map[string]any
 	require.NoError(t, json.Unmarshal(resp.Result, &merged))
 	extras := merged["serverInfo"].(map[string]any)["extras"].(map[string]any)
-	backends := extras["backends"].([]any)
-	require.Len(t, backends, 2)
+	upstreams := extras["backends"].([]any)
+	require.Len(t, upstreams, 2)
 }
 
-func TestInitializeOmitsFailedBackend(t *testing.T) {
+func TestInitializeOmitsFailedUpstream(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
-	a, err := New(context.Background(), []backend.Upstream{
+	a, err := New(context.Background(), []upstream.Client{
 		b1,
-		&initFailBackend{inner: b2},
+		&initFailUpstream{inner: b2},
 	}, WithListTTL(0))
 	require.NoError(t, err)
 
@@ -86,17 +86,17 @@ func TestInitializeOmitsFailedBackend(t *testing.T) {
 	var merged map[string]any
 	require.NoError(t, json.Unmarshal(resp.Result, &merged))
 	extras := merged["serverInfo"].(map[string]any)["extras"].(map[string]any)
-	backends := extras["backends"].([]any)
-	require.Len(t, backends, 1)
-	require.Equal(t, "b1", backends[0])
+	upstreams := extras["backends"].([]any)
+	require.Len(t, upstreams, 1)
+	require.Equal(t, "b1", upstreams[0])
 }
 
-func TestInitializeAllBackendsFail(t *testing.T) {
+func TestInitializeAllUpstreamsFail(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
-	a, err := New(context.Background(), []backend.Upstream{
-		&initFailBackend{inner: b1},
-		&initFailBackend{inner: b2},
+	a, err := New(context.Background(), []upstream.Client{
+		&initFailUpstream{inner: b1},
+		&initFailUpstream{inner: b2},
 	}, WithListTTL(0))
 	require.NoError(t, err)
 
@@ -110,9 +110,9 @@ func TestInitializeAllBackendsFail(t *testing.T) {
 func TestInitializeAllFailReportsPartialFailuresWhenEnabled(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
-	a, err := New(context.Background(), []backend.Upstream{
-		&initFailBackend{inner: b1},
-		&initFailBackend{inner: b2},
+	a, err := New(context.Background(), []upstream.Client{
+		&initFailUpstream{inner: b1},
+		&initFailUpstream{inner: b2},
 	}, WithListTTL(0), WithReportPartialFailures(true))
 	require.NoError(t, err)
 
@@ -122,19 +122,19 @@ func TestInitializeAllFailReportsPartialFailuresWhenEnabled(t *testing.T) {
 	require.NotNil(t, resp.Error.Data)
 	var data struct {
 		PartialFailures []struct {
-			BackendID string `json:"backend_id"`
+			UpstreamID string `json:"backend_id"`
 		} `json:"partial_failures"`
 	}
 	require.NoError(t, json.Unmarshal(resp.Error.Data, &data))
 	require.Len(t, data.PartialFailures, 2)
 }
 
-func TestToolsListOmitsFailedBackend(t *testing.T) {
+func TestToolsListOmitsFailedUpstream(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
-	a, err := New(context.Background(), []backend.Upstream{
+	a, err := New(context.Background(), []upstream.Client{
 		b1,
-		&listFailBackend{inner: b2},
+		&listFailUpstream{inner: b2},
 	}, WithListTTL(0))
 	require.NoError(t, err)
 
@@ -155,7 +155,7 @@ func TestToolsListOmitsFailedBackend(t *testing.T) {
 func TestToolsListOrderByConfigThenNative(t *testing.T) {
 	z := mock.NewMockUpstream("z", "zebra", []string{"z2", "z1"})
 	ap := mock.NewMockUpstream("a", "apple", []string{"a1"})
-	a, err := New(context.Background(), []backend.Upstream{z, ap}, WithListTTL(0))
+	a, err := New(context.Background(), []upstream.Client{z, ap}, WithListTTL(0))
 	require.NoError(t, err)
 
 	resp, err := a.ToolsList(context.Background(), json.RawMessage(`2`))
@@ -178,7 +178,7 @@ func TestToolsListOrderByConfigThenNative(t *testing.T) {
 func TestToolsCallStripsPrefixPreservesID(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "p1", []string{"echo"})
 	b2 := mock.NewMockUpstream("b2", "p2", []string{"ping"})
-	a, err := New(context.Background(), []backend.Upstream{b1, b2}, WithListTTL(0))
+	a, err := New(context.Background(), []upstream.Client{b1, b2}, WithListTTL(0))
 	require.NoError(t, err)
 
 	params := map[string]any{
@@ -196,10 +196,10 @@ func TestToolsCallStripsPrefixPreservesID(t *testing.T) {
 	require.Equal(t, "", b1.LastNativeTool())
 }
 
-func TestToolsCallForwardsBackendJSONRPCErrorPreservesID(t *testing.T) {
+func TestToolsCallForwardsUpstreamJSONRPCErrorPreservesID(t *testing.T) {
 	good := mock.NewMockUpstream("b1", "p1", []string{"echo"})
-	errBack := &errReplyBackend{inner: mock.NewMockUpstream("b2", "p2", []string{"ping"})}
-	a, err := New(context.Background(), []backend.Upstream{good, errBack}, WithListTTL(0))
+	errBack := &errReplyUpstream{inner: mock.NewMockUpstream("b2", "p2", []string{"ping"})}
+	a, err := New(context.Background(), []upstream.Client{good, errBack}, WithListTTL(0))
 	require.NoError(t, err)
 
 	params := map[string]any{"name": "p2__ping", "arguments": map[string]any{}}

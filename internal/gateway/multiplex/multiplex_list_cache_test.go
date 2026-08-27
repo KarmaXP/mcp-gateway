@@ -9,20 +9,20 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
-type countingListBackend struct {
-	inner backend.Upstream
+type countingListUpstream struct {
+	inner upstream.Client
 	calls atomic.Int32
 }
 
-func (c *countingListBackend) ID() string     { return c.inner.ID() }
-func (c *countingListBackend) Prefix() string { return c.inner.Prefix() }
-func (c *countingListBackend) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
+func (c *countingListUpstream) ID() string     { return c.inner.ID() }
+func (c *countingListUpstream) Prefix() string { return c.inner.Prefix() }
+func (c *countingListUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
 	if req.Method == "tools/list" {
 		c.calls.Add(1)
 	}
@@ -31,8 +31,8 @@ func (c *countingListBackend) Call(ctx context.Context, req *rpc.Request) (*rpc.
 
 func TestToolsListCacheHitWhenTTLPositiveAndNoAllowList(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	b := &countingListBackend{inner: inner}
-	a, err := New(context.Background(), []backend.Upstream{b}, WithListTTL(time.Minute))
+	b := &countingListUpstream{inner: inner}
+	a, err := New(context.Background(), []upstream.Client{b}, WithListTTL(time.Minute))
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -52,11 +52,11 @@ func TestToolsListCacheHitWhenTTLPositiveAndNoAllowList(t *testing.T) {
 
 func TestToolsListCacheBypassedWithJWTAllowList(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	b := &countingListBackend{inner: inner}
-	a, err := New(context.Background(), []backend.Upstream{b}, WithListTTL(time.Minute))
+	b := &countingListUpstream{inner: inner}
+	a, err := New(context.Background(), []upstream.Client{b}, WithListTTL(time.Minute))
 	require.NoError(t, err)
 
-	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{"alpha__echo"})
+	ctx := hostctx.WithAllowList(context.Background(), []string{"alpha__echo"})
 	id := json.RawMessage(`1`)
 
 	resp1, err := a.ToolsList(ctx, id)
@@ -72,8 +72,8 @@ func TestToolsListCacheBypassedWithJWTAllowList(t *testing.T) {
 
 func TestToolsListCacheInvalidatedAfterListChanged(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	b := &countingListBackend{inner: inner}
-	a, err := New(context.Background(), []backend.Upstream{b}, WithListTTL(time.Minute))
+	b := &countingListUpstream{inner: inner}
+	a, err := New(context.Background(), []upstream.Client{b}, WithListTTL(time.Minute))
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -87,9 +87,9 @@ func TestToolsListCacheInvalidatedAfterListChanged(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int32(1), b.calls.Load())
 
-	a.InvalidateToolCache()
+	a.invalidateListCache()
 
 	_, err = a.ToolsList(ctx, id)
 	require.NoError(t, err)
-	require.Equal(t, int32(2), b.calls.Load(), "InvalidateToolCache must force upstream tools/list")
+	require.Equal(t, int32(2), b.calls.Load(), "invalidating the list cache must force an upstream tools/list")
 }

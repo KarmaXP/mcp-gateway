@@ -17,14 +17,14 @@ import (
 
 	"golang.org/x/sync/semaphore"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend/framing"
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/rpcconn"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/framing"
 )
 
 const (
 	weightedSemaphoreTickets int64 = 1
-	pendingJSONRPCChannelCap int = 1
 )
 
 type proc struct {
@@ -64,12 +64,8 @@ type StdioMCPUpstream struct {
 	writeWG sync.WaitGroup
 	stopped chan struct{}
 
-	droppedResponses atomic.Uint64
-
-	pendMu     sync.Mutex
-	pending    map[string]chan *rpc.Response
-	pendingErr map[string]error
-	readWG     sync.WaitGroup
+	calls  *rpcconn.Table
+	readWG sync.WaitGroup
 
 	onNotifMu sync.Mutex
 	onNotif   func(*rpc.Request)
@@ -86,26 +82,21 @@ func NewStdioMCPUpstream(lifecycle context.Context, id, prefix string, command, 
 		maxConcurrency = defaults.UpstreamMaxConcurrency
 	}
 	c := &StdioMCPUpstream{
-		id:         id,
-		prefix:     prefix,
-		command:    slices.Clone(command),
-		env:        slices.Clone(extraEnv),
-		lifecycle:  lifecycle,
-		sem:        semaphore.NewWeighted(maxConcurrency),
-		writes:     make(chan writeRequest, maxConcurrency),
-		stopped:    make(chan struct{}),
-		pending:    make(map[string]chan *rpc.Response),
-		pendingErr: make(map[string]error),
+		id:        id,
+		prefix:    prefix,
+		command:   slices.Clone(command),
+		env:       slices.Clone(extraEnv),
+		lifecycle: lifecycle,
+		sem:       semaphore.NewWeighted(maxConcurrency),
+		writes:    make(chan writeRequest, maxConcurrency),
+		stopped:   make(chan struct{}),
+		calls:     rpcconn.NewTable("mcpstdio " + id),
 	}
 	return c, func() { c.close() }, nil
 }
 
 func (c *StdioMCPUpstream) ID() string     { return c.id }
 func (c *StdioMCPUpstream) Prefix() string { return c.prefix }
-
-func (c *StdioMCPUpstream) DroppedResponses() uint64 {
-	return c.droppedResponses.Load()
-}
 
 func (c *StdioMCPUpstream) SetOnNotification(fn func(*rpc.Request)) {
 	c.onNotifMu.Lock()
@@ -139,17 +130,7 @@ func (c *StdioMCPUpstream) markDead(err error) {
 		c.deadErr = err
 	}
 	c.deadMu.Unlock()
-	c.failPending()
-}
-
-func (c *StdioMCPUpstream) failPending() {
-	c.pendMu.Lock()
-	defer c.pendMu.Unlock()
-	for key, ch := range c.pending {
-		delete(c.pending, key)
-		close(ch)
-	}
-	clear(c.pendingErr)
+	c.calls.FailAll(c.deadError())
 }
 
 func (c *StdioMCPUpstream) reapProcess() {
@@ -265,27 +246,7 @@ func (c *StdioMCPUpstream) onReaderExit() {
 func (c *StdioMCPUpstream) dispatch(raw []byte) {
 	resp, err := rpc.ParseResponse(raw)
 	if err == nil {
-		key, idErr := rpc.CanonicalIDKey(resp.ID)
-		if idErr != nil {
-			return
-		}
-		c.pendMu.Lock()
-		ch := c.pending[key]
-		delete(c.pending, key)
-		c.pendMu.Unlock()
-		if ch == nil {
-			return
-		}
-		select {
-		case ch <- resp:
-		default:
-			c.droppedResponses.Add(1)
-			deliverErr := fmt.Errorf("mcpstdio %s: pending channel full for id %s", c.id, key)
-			c.pendMu.Lock()
-			c.pendingErr[key] = deliverErr
-			c.pendMu.Unlock()
-			close(ch)
-		}
+		c.calls.Deliver(resp)
 		return
 	}
 	req, err := rpc.ParseRequest(raw)
@@ -363,47 +324,16 @@ func (c *StdioMCPUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Res
 		return nil, nil
 	}
 
-	key, err := rpc.CanonicalIDKey(req.ID)
+	call, err := c.calls.Register(req.ID)
 	if err != nil {
-		return nil, fmt.Errorf("mcpstdio %s: jsonrpc id: %w", c.id, err)
+		return nil, err
 	}
-	ch := make(chan *rpc.Response, pendingJSONRPCChannelCap)
-	c.pendMu.Lock()
-	if _, exists := c.pending[key]; exists {
-		c.pendMu.Unlock()
-		return nil, fmt.Errorf("mcpstdio %s: duplicate jsonrpc id %q", c.id, key)
-	}
-	c.pending[key] = ch
-	c.pendMu.Unlock()
-	defer func() {
-		c.pendMu.Lock()
-		if cur, ok := c.pending[key]; ok && cur == ch {
-			delete(c.pending, key)
-		}
-		delete(c.pendingErr, key)
-		c.pendMu.Unlock()
-	}()
+	defer call.Release()
 
 	if err := c.writeLine(ctx, body); err != nil {
 		return nil, err
 	}
-
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case resp, ok := <-ch:
-		c.pendMu.Lock()
-		deliverErr := c.pendingErr[key]
-		delete(c.pendingErr, key)
-		c.pendMu.Unlock()
-		if deliverErr != nil {
-			return nil, deliverErr
-		}
-		if !ok {
-			return nil, c.deadError()
-		}
-		return resp, nil
-	}
+	return call.Wait(ctx)
 }
 
 func (c *StdioMCPUpstream) close() {

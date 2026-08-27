@@ -35,15 +35,15 @@ type gatewaySettings struct {
 }
 
 type aggregationSettings struct {
-	StrictInitialize        bool   `yaml:"strict_initialize"`
-	StrictList              bool   `yaml:"strict_list"`
-	ReportPartialFailures   bool   `yaml:"report_partial_failures"`
-	ForwardToolsListChanged bool   `yaml:"forward_tools_list_changed"`
-	MaxInFlight             int    `yaml:"max_in_flight"`
-	InitTimeout             string `yaml:"init_timeout"`
-	ListTimeout             string `yaml:"list_timeout"`
-	CallTimeout             string `yaml:"call_timeout"`
-	ListCacheTTL            string `yaml:"list_cache_ttl"`
+	StrictInitialize        bool     `yaml:"strict_initialize"`
+	StrictList              bool     `yaml:"strict_list"`
+	ReportPartialFailures   bool     `yaml:"report_partial_failures"`
+	ForwardToolsListChanged bool     `yaml:"forward_tools_list_changed"`
+	MaxInFlight             int      `yaml:"max_in_flight"`
+	InitTimeout             Duration `yaml:"init_timeout"`
+	ListTimeout             Duration `yaml:"list_timeout"`
+	CallTimeout             Duration `yaml:"call_timeout"`
+	ListCacheTTL            Duration `yaml:"list_cache_ttl"`
 }
 
 type RateLimitSettings struct {
@@ -84,8 +84,8 @@ type SemanticRouterSettings struct {
 	ScoreMin        float64                   `yaml:"score_min"`
 	HybridAlpha     float64                   `yaml:"hybrid_alpha"`
 	AllowAutoRename bool                      `yaml:"allow_auto_rename"`
-	EmbedTimeout    string                    `yaml:"embed_timeout"`
-	QueryTimeout    string                    `yaml:"query_timeout"`
+	EmbedTimeout    Duration                  `yaml:"embed_timeout"`
+	QueryTimeout    Duration                  `yaml:"query_timeout"`
 	VectorDim       int                       `yaml:"vector_dim"`
 	Rules           deterministicRoutingRules `yaml:"rules"`
 }
@@ -150,7 +150,7 @@ func Load() (GatewayConfig, error) {
 	}
 
 	cfg.ApplyEnvOverrides()
-	if err := cfg.normalize(); err != nil {
+	if err := cfg.parseDurations(); err != nil {
 		return GatewayConfig{}, err
 	}
 	if err := cfg.Validate(); err != nil {
@@ -342,63 +342,42 @@ func (c *GatewayConfig) RouterEmbedTimeout() time.Duration {
 	if c == nil {
 		return defaults.RouterEmbedTimeout
 	}
-	if d, err := parseDurationString(c.SemanticRouter.EmbedTimeout); err == nil && d > 0 {
-		return d
-	}
-	return defaults.RouterEmbedTimeout
+	return c.SemanticRouter.EmbedTimeout.TimeoutOr(defaults.RouterEmbedTimeout)
 }
 
 func (c *GatewayConfig) RouterQueryTimeout() time.Duration {
 	if c == nil {
 		return defaults.RouterQueryTimeout
 	}
-	if d, err := parseDurationString(c.SemanticRouter.QueryTimeout); err == nil && d > 0 {
-		return d
-	}
-	return defaults.RouterQueryTimeout
+	return c.SemanticRouter.QueryTimeout.TimeoutOr(defaults.RouterQueryTimeout)
 }
 
 func (c *GatewayConfig) AggregationInitTimeout() time.Duration {
 	if c == nil {
 		return defaults.MultiplexInitTimeout
 	}
-	if d, err := parseDurationString(c.Aggregation.InitTimeout); err == nil && d > 0 {
-		return d
-	}
-	return defaults.MultiplexInitTimeout
+	return c.Aggregation.InitTimeout.TimeoutOr(defaults.MultiplexInitTimeout)
 }
 
 func (c *GatewayConfig) AggregationListTimeout() time.Duration {
 	if c == nil {
 		return defaults.MultiplexListTimeout
 	}
-	if d, err := parseDurationString(c.Aggregation.ListTimeout); err == nil && d > 0 {
-		return d
-	}
-	return defaults.MultiplexListTimeout
+	return c.Aggregation.ListTimeout.TimeoutOr(defaults.MultiplexListTimeout)
 }
 
 func (c *GatewayConfig) AggregationCallTimeout() time.Duration {
 	if c == nil {
 		return defaults.MultiplexCallTimeout
 	}
-	if d, err := parseDurationString(c.Aggregation.CallTimeout); err == nil && d > 0 {
-		return d
-	}
-	return defaults.MultiplexCallTimeout
+	return c.Aggregation.CallTimeout.TimeoutOr(defaults.MultiplexCallTimeout)
 }
 
 func (c *GatewayConfig) AggregationListCacheTTL() time.Duration {
 	if c == nil {
 		return defaults.MultiplexListCacheTTL
 	}
-	if strings.TrimSpace(c.Aggregation.ListCacheTTL) == "" {
-		return defaults.MultiplexListCacheTTL
-	}
-	if d, err := parseDurationString(c.Aggregation.ListCacheTTL); err == nil && d >= 0 {
-		return d
-	}
-	return defaults.MultiplexListCacheTTL
+	return c.Aggregation.ListCacheTTL.TTLOr(defaults.MultiplexListCacheTTL)
 }
 
 func (c *GatewayConfig) AggregationMaxInFlight() int {
@@ -411,43 +390,24 @@ func (c *GatewayConfig) AggregationMaxInFlight() int {
 	return c.Aggregation.MaxInFlight
 }
 
-// normalize resolves every duration field once, so a malformed value is a startup error
-// instead of a silent fall back to the default. Idempotent.
-func (c *GatewayConfig) normalize() error {
+func (c *GatewayConfig) parseDurations() error {
 	fields := []struct {
-		name     string
-		value    *string
-		fallback time.Duration
+		name  string
+		value *Duration
 	}{
-		{"router.embed_timeout", &c.SemanticRouter.EmbedTimeout, defaults.RouterEmbedTimeout},
-		{"router.query_timeout", &c.SemanticRouter.QueryTimeout, defaults.RouterQueryTimeout},
-		{"aggregation.init_timeout", &c.Aggregation.InitTimeout, defaults.MultiplexInitTimeout},
-		{"aggregation.list_timeout", &c.Aggregation.ListTimeout, defaults.MultiplexListTimeout},
-		{"aggregation.call_timeout", &c.Aggregation.CallTimeout, defaults.MultiplexCallTimeout},
-		{"aggregation.list_cache_ttl", &c.Aggregation.ListCacheTTL, defaults.MultiplexListCacheTTL},
+		{"router.embed_timeout", &c.SemanticRouter.EmbedTimeout},
+		{"router.query_timeout", &c.SemanticRouter.QueryTimeout},
+		{"aggregation.init_timeout", &c.Aggregation.InitTimeout},
+		{"aggregation.list_timeout", &c.Aggregation.ListTimeout},
+		{"aggregation.call_timeout", &c.Aggregation.CallTimeout},
+		{"aggregation.list_cache_ttl", &c.Aggregation.ListCacheTTL},
 	}
 	for _, f := range fields {
-		if strings.TrimSpace(*f.value) == "" {
-			*f.value = f.fallback.String()
-			continue
-		}
-		d, err := parseDurationString(*f.value)
-		if err != nil {
+		if err := f.value.parse(); err != nil {
 			return fmt.Errorf("config: %s: %w", f.name, err)
-		}
-		if d < 0 {
-			return fmt.Errorf("config: %s: must not be negative", f.name)
 		}
 	}
 	return nil
-}
-
-func parseDurationString(s string) (time.Duration, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return 0, errors.New("empty")
-	}
-	return time.ParseDuration(s)
 }
 
 func envBool(key string, target *bool) {

@@ -45,7 +45,7 @@ func TestHTTPMiddlewarePolicyIntersectsRARAndMcpTools(t *testing.T) {
 	holder := policy.NewHolder(eng)
 	var got []string
 	h := HTTPMiddleware(cfg, v, holder, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		got = hostctx.AllowedToolNamesFromContext(r.Context())
+		_, got = hostctx.AllowListModeFromContext(r.Context())
 		require.Equal(t, "user-1", hostctx.SubjectIDFromContext(r.Context()))
 		require.Equal(t, "v-test", hostctx.PolicyVersionFromContext(r.Context()))
 		w.WriteHeader(http.StatusOK)

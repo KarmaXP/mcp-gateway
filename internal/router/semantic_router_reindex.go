@@ -12,8 +12,8 @@ import (
 
 // Reindex embeds tools and upserts vectors for version. It does not update the
 // in-memory catalog; the multiplexer must call ApplyCatalog after a successful
-// Reindex in the same critical section as its catVer bump.
-func (sr *SemanticRouter) Reindex(ctx context.Context, version string, tools []IndexedTool) error {
+// Reindex in the same critical section as its catalogVersion bump.
+func (sr *SemanticRouter) Reindex(ctx context.Context, version string, tools []CatalogEntry) error {
 	if sr == nil || !sr.Enabled() {
 		return nil
 	}
@@ -30,7 +30,7 @@ func (sr *SemanticRouter) Reindex(ctx context.Context, version string, tools []I
 	return err
 }
 
-func (sr *SemanticRouter) reindexLocked(ctx context.Context, version string, tools []IndexedTool) error {
+func (sr *SemanticRouter) reindexLocked(ctx context.Context, version string, tools []CatalogEntry) error {
 	docs := sr.formatToolDocuments(tools)
 	allEmbeddings, err := sr.embedDocumentsInBatches(ctx, docs)
 	if err != nil {
@@ -53,20 +53,20 @@ func (sr *SemanticRouter) reindexLocked(ctx context.Context, version string, too
 }
 
 // ApplyCatalog swaps the in-memory catalog to version/tools. The multiplexer
-// must call this in the same critical section as its catVer update so clients
-// never observe mux.catVer ahead of (or behind) sr.catalogVer.
-func (sr *SemanticRouter) ApplyCatalog(ctx context.Context, version string, tools []IndexedTool) {
+// must call this in the same critical section as its catalogVersion update so clients
+// never observe mux.catalogVersion ahead of (or behind) sr.catalogVersion.
+func (sr *SemanticRouter) ApplyCatalog(ctx context.Context, version string, tools []CatalogEntry) {
 	if sr == nil || !sr.Enabled() || version == "" {
 		return
 	}
 
-	prevVer := sr.CatalogVersion()
+	previousCatalogVersion := sr.CatalogVersion()
 	docs := sr.formatToolDocuments(tools)
 	sr.replaceCatalogLocked(version, tools, docs)
 
-	if prevVer != "" && prevVer != version && sr.st != nil {
-		if err := sr.st.DeleteCatalogVersion(ctx, prevVer); err != nil {
-			slog.WarnContext(ctx, "router delete old catalog version failed", "version", prevVer, "err", err)
+	if previousCatalogVersion != "" && previousCatalogVersion != version && sr.st != nil {
+		if err := sr.st.DeleteCatalogVersion(ctx, previousCatalogVersion); err != nil {
+			slog.WarnContext(ctx, "router delete old catalog version failed", "version", previousCatalogVersion, "err", err)
 		}
 	}
 	slog.InfoContext(ctx, "router catalog applied", "catalog_version", version, "tools", len(tools))
@@ -82,10 +82,10 @@ func (sr *SemanticRouter) validateReindexPreconditions(version string) error {
 	return nil
 }
 
-func (sr *SemanticRouter) formatToolDocuments(tools []IndexedTool) []string {
+func (sr *SemanticRouter) formatToolDocuments(tools []CatalogEntry) []string {
 	docs := make([]string, len(tools))
 	for i, ent := range tools {
-		docs[i] = index.FormatDocument(ent.ToolRow)
+		docs[i] = index.FormatDocument(ent.Tool)
 	}
 	return docs
 }
@@ -113,7 +113,7 @@ func (sr *SemanticRouter) embedDocumentsInBatches(ctx context.Context, docs []st
 	return all, nil
 }
 
-func (sr *SemanticRouter) toolRecordsFromEmbeddings(version string, tools []IndexedTool, all [][]float32) ([]store.ToolVectorRecord, error) {
+func (sr *SemanticRouter) toolRecordsFromEmbeddings(version string, tools []CatalogEntry, all [][]float32) ([]store.ToolVectorRecord, error) {
 	records := make([]store.ToolVectorRecord, 0, len(tools))
 	for i, ent := range tools {
 		v := all[i]
@@ -121,11 +121,11 @@ func (sr *SemanticRouter) toolRecordsFromEmbeddings(version string, tools []Inde
 			return nil, fmt.Errorf("router: vector dim %d want %d", len(v), sr.dim)
 		}
 		store.L2Normalize(v)
-		id := fmt.Sprintf("%s::%s", version, ent.ToolRow.Name)
+		id := fmt.Sprintf("%s::%s", version, ent.Tool.Name)
 		records = append(records, store.ToolVectorRecord{
 			ID:             id,
 			Vector:         v,
-			ToolName:       ent.ToolRow.Name,
+			ToolName:       ent.Tool.Name,
 			UpstreamID:     ent.UpstreamID,
 			CatalogVersion: version,
 		})
@@ -133,16 +133,16 @@ func (sr *SemanticRouter) toolRecordsFromEmbeddings(version string, tools []Inde
 	return records, nil
 }
 
-func (sr *SemanticRouter) replaceCatalogLocked(version string, tools []IndexedTool, docs []string) {
+func (sr *SemanticRouter) replaceCatalogLocked(version string, tools []CatalogEntry, docs []string) {
 	sr.mu.Lock()
 	defer sr.mu.Unlock()
-	sr.catalogVer = version
+	sr.catalogVersion = version
 	sr.catalog = make(map[string]struct{}, len(tools))
 	sr.upstreamByTool = make(map[string]string, len(tools))
 	sr.toolDoc = make(map[string]string, len(tools))
 	for i, ent := range tools {
-		sr.catalog[ent.ToolRow.Name] = struct{}{}
-		sr.upstreamByTool[ent.ToolRow.Name] = ent.UpstreamID
-		sr.toolDoc[ent.ToolRow.Name] = docs[i]
+		sr.catalog[ent.Tool.Name] = struct{}{}
+		sr.upstreamByTool[ent.Tool.Name] = ent.UpstreamID
+		sr.toolDoc[ent.Tool.Name] = docs[i]
 	}
 }

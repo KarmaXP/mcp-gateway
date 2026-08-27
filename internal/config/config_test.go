@@ -12,7 +12,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 )
 
-func TestLoadYAMLAndEnvBackends(t *testing.T) {
+func TestLoadYAMLAndEnvUpstreams(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "g.yaml")
 	err := os.WriteFile(p, []byte(`
@@ -34,7 +34,7 @@ backends:
 	require.Equal(t, 2, cfg.Upstreams[0].MaxConcurrency)
 }
 
-func TestLoadBackendsJSONOnly(t *testing.T) {
+func TestLoadUpstreamsJSONOnly(t *testing.T) {
 	t.Setenv("MCP_GATEWAY_CONFIG", "")
 	t.Chdir(t.TempDir())
 	raw, _ := json.Marshal([]UpstreamDefinition{
@@ -128,15 +128,22 @@ func TestAggregationTimeoutsDefault(t *testing.T) {
 	require.Equal(t, defaults.MultiplexCallTimeout, c.AggregationCallTimeout())
 }
 
-func TestAggregationTimeoutsIgnoreInvalid(t *testing.T) {
-	c := GatewayConfig{Aggregation: aggregationSettings{
-		InitTimeout: "not-a-duration",
-		ListTimeout: "0s",
-		CallTimeout: "",
-	}}
-	require.Equal(t, defaults.MultiplexInitTimeout, c.AggregationInitTimeout())
-	require.Equal(t, defaults.MultiplexListTimeout, c.AggregationListTimeout())
-	require.Equal(t, defaults.MultiplexCallTimeout, c.AggregationCallTimeout())
+func TestAggregationTimeoutsFallBackWhenZeroOrAbsent(t *testing.T) {
+	cfg := loadWithAggregation(t, "list_timeout: 0s")
+	require.Equal(t, defaults.MultiplexListTimeout, cfg.AggregationListTimeout(),
+		"a zero timeout is a mistake, not an instruction to give up immediately")
+	require.Equal(t, defaults.MultiplexCallTimeout, cfg.AggregationCallTimeout())
+}
+
+func loadWithAggregation(t *testing.T, aggregation string) GatewayConfig {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "gateway.yaml")
+	body := "backends:\n  - id: one\n    prefix: a\n    url: http://example.invalid:9\naggregation:\n  " + aggregation + "\n"
+	require.NoError(t, os.WriteFile(path, []byte(body), 0o600))
+	t.Setenv("MCP_GATEWAY_CONFIG", path)
+	cfg, err := Load()
+	require.NoError(t, err)
+	return cfg
 }
 
 func TestAggregationMaxInFlightDefaultAndInvalid(t *testing.T) {

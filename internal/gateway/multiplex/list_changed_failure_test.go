@@ -9,11 +9,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/router"
 	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
 )
 
 type failableUpstream struct {
@@ -31,7 +31,7 @@ func (u *failableUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Res
 	return u.inner.Call(ctx, req)
 }
 
-func newListChangedMultiplexer(t *testing.T, ups ...backend.Upstream) *Multiplexer {
+func newListChangedMultiplexer(t *testing.T, ups ...upstream.Client) *Multiplexer {
 	t.Helper()
 	rcfg := router.DefaultSemanticRouterRuntimeConfig()
 	rcfg.Mode = mode.AssistList

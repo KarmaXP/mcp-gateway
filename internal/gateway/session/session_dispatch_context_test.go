@@ -8,8 +8,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
@@ -18,6 +16,8 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 type sessionTestMapEmbed struct {
@@ -45,8 +45,8 @@ func (m *sessionTestMapEmbed) Embed(ctx context.Context, texts []string) ([][]fl
 func TestSessionDispatchMergesPOSTIntentForToolsListFilter(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "p", []string{"echo", "list"})
 	base := &sessionTestMapEmbed{dim: 4, vecs: make(map[string][]float32)}
-	tEcho := index.ToolRow{Name: "p__echo", Description: "mock tool echo", ParamKeys: nil}
-	tList := index.ToolRow{Name: "p__list", Description: "mock tool list", ParamKeys: nil}
+	tEcho := index.Tool{Name: "p__echo", Description: "mock tool echo", ParamKeys: nil}
+	tList := index.Tool{Name: "p__list", Description: "mock tool list", ParamKeys: nil}
 	dEcho := index.FormatDocument(tEcho)
 	dList := index.FormatDocument(tList)
 	base.vecs[dEcho] = []float32{1, 0, 0, 0}
@@ -63,7 +63,7 @@ func TestSessionDispatchMergesPOSTIntentForToolsListFilter(t *testing.T) {
 	cfg.QueryTimeout = 5 * time.Second
 	sr := router.NewSemanticRouter(cfg, base, st, 4)
 
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0), multiplex.WithSemanticRouter(sr))
+	agg, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0), multiplex.WithSemanticRouter(sr))
 	require.NoError(t, err)
 
 	s := NewSession(context.Background(), "test-session", agg, nil)
@@ -117,7 +117,7 @@ func TestSessionSubjectMatchesBoundOwner(t *testing.T) {
 
 func TestSessionDispatchMergesPOSTAllowListForToolsCall(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo", "list"})
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	s := NewSession(context.Background(), "allow-session", agg, nil)
 
@@ -136,7 +136,7 @@ func TestSessionDispatchMergesPOSTAllowListForToolsCall(t *testing.T) {
 	}))
 	<-s.Out()
 
-	postCtx := hostctx.WithAllowedToolNames(context.Background(), []string{"alpha__echo"})
+	postCtx := hostctx.WithAllowList(context.Background(), []string{"alpha__echo"})
 	params, _ := json.Marshal(map[string]any{"name": "alpha__list", "arguments": map[string]any{}})
 	require.NoError(t, s.Dispatch(postCtx, &rpc.Request{
 		JSONRPC: rpc.JSONRPCVersion,

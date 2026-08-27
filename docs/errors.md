@@ -35,7 +35,7 @@ Gateway-specific codes use the implementation-defined range **-32000 … -32099*
 | **-32002** | `RequestRejected` | Optional session middleware hook rejected the request | Check logs; verify auth and request shape. |
 | **-32003** | `PermissionDenied` | Tool not allowed by JWT `mcp_tools` / RAR / policy | Adjust token claims or [policy](configuration.md#policy-block-policy-in-yaml); see [JWT scenario](evaluation/scenario-jwt-allowlist.md). |
 | **-32004** | `ToolRoutingAmbiguous` | Semantic router could not pick a single tool | Send an exact namespaced tool name, or a clearer `X-MCP-Intent` header. |
-| **-32005** | `StrictAggregationFailed` | `aggregation.strict_initialize` or `strict_list` and an upstream failed | Fix upstream health or disable strict mode; see [backend-down scenario](evaluation/scenario-backend-down.md). |
+| **-32005** | `StrictAggregationFailed` | `aggregation.strict_initialize` or `strict_list` and an upstream failed | Fix upstream health or disable strict mode; see [backend-down scenario](evaluation/scenario-upstream-down.md). |
 | **-32000** | `GatewayInternal` | Upstream call failed, multiplex error, or unexpected gateway fault | Check backend logs and traces (`mcp.backend.call`). |
 
 Standard JSON-RPC errors may also appear (from gateway or forwarded upstream):
@@ -74,6 +74,6 @@ When aggregating `tools/list`, the gateway may reuse a fixed JSON-RPC id per ups
 |---------|-----|
 | POST **202** but no SSE payload | SSE connection closed or not read in parallel. See [Connecting agents](CONNECTING_AGENTS.md). |
 | **401** on every RPC | JWT mode, keys, or `authorization_details`. See [configuration, Auth section](configuration.md#authentication). |
-| Tool missing from `tools/list` | Backend down, `MethodNotFound` on list, or JWT filter. See [Adding backends](ADDING_BACKENDS.md). |
+| Tool missing from `tools/list` | Backend down, `MethodNotFound` on list, or JWT filter. See [Adding upstreams](ADDING_UPSTREAMS.md). |
 | Router ignores intent | `ROUTER_MODE` off, or exact tool name shortcut. See [configuration, Router section](configuration.md#semantic-router). |
 | Concurrent loadtest errors under JWT | See [known limitations (multiplexing)](errors.md#known-limitations-multiplexing). |

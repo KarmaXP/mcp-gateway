@@ -24,11 +24,11 @@ import (
 
 	"github.com/KarmaXP/mcp-gateway/internal/auth"
 	"github.com/KarmaXP/mcp-gateway/internal/auth/ratelimit"
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/httpserver"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 func TestHTTPServerOptionsJWTAndOTelProduceSpans(t *testing.T) {
@@ -52,7 +52,7 @@ func TestHTTPServerOptionsJWTAndOTelProduceSpans(t *testing.T) {
 
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
 	b2 := mock.NewMockUpstream("b2", "beta", []string{"ping"})
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1, b2}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []upstream.Client{b1, b2}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
 	opts := HTTPServerOptions("mcp-gateway-test", cfg, v, nil, ratelimit.New(context.Background(), ratelimit.Config{}))

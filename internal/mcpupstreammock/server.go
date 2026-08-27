@@ -2,10 +2,11 @@
 package mcpupstreammock
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -13,12 +14,15 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
-	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
-const defaultEventChannelSize = 32
+const (
+	sessionEventBuffer = 32
+	readHeaderTimeout = 10 * time.Second
+)
 
 // Tool describes one tool exposed by the mock upstream (native name, before gateway prefix).
 type Tool struct {
@@ -33,87 +37,129 @@ type Config struct {
 	Tools      []Tool
 }
 
-func Run(cfg Config) error {
+// Server is a running mock upstream whose protocol behaviour is mock.MockUpstream's.
+type Server struct {
+	name     string
+	upstream *mock.MockUpstream
+	listener net.Listener
+	http     *http.Server
+	done     chan error
+
+	mu       sync.Mutex
+	sessions map[string]chan string
+}
+
+// Start listens and serves in the background. Addr reports the bound address, so ":0" works.
+func Start(cfg Config) (*Server, error) {
 	if cfg.ListenAddr == "" {
-		return fmt.Errorf("listen address required")
+		return nil, fmt.Errorf("listen address required")
 	}
 	if cfg.ServerName == "" {
 		cfg.ServerName = "mcp-upstream-mock"
 	}
 	if len(cfg.Tools) == 0 {
-		cfg.Tools = []Tool{{
-			Name:        "echo",
-			Description: "echo tool",
-			CallText:    "smoke-ok",
-		}}
+		cfg.Tools = []Tool{{Name: "echo", Description: "echo tool", CallText: "smoke-ok"}}
 	}
 
-	s := &server{
-		cfg:    cfg,
-		events: make(chan string, defaultEventChannelSize),
+	listener, err := net.Listen("tcp", cfg.ListenAddr)
+	if err != nil {
+		return nil, fmt.Errorf("listen %s: %w", cfg.ListenAddr, err)
+	}
+
+	s := &Server{
+		name:     cfg.ServerName,
+		upstream: upstreamFor(cfg),
+		listener: listener,
+		done:     make(chan error, 1),
+		sessions: make(map[string]chan string),
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /mcp/sse", s.handleSSE)
-	mux.HandleFunc("POST /mcp/rpc", s.handleRPC)
+	mux.HandleFunc("GET "+mcpwire.PathMCPSSE, s.handleSSE)
+	mux.HandleFunc("POST "+mcpwire.PathMCPRPC, s.handleRPC)
+	s.http = &http.Server{Handler: mux, ReadHeaderTimeout: readHeaderTimeout}
 
-	log.Printf("%s listening on http://%s (GET /mcp/sse POST /mcp/rpc)", cfg.ServerName, cfg.ListenAddr)
-	srv := &http.Server{
-		Addr:              cfg.ListenAddr,
-		Handler:           mux,
-		ReadHeaderTimeout: mockReadHeaderTimeout,
+	go func() { s.done <- s.http.Serve(listener) }()
+	return s, nil
+}
+
+// Run starts the server and blocks until it stops, for the script commands that own the process.
+func Run(cfg Config) error {
+	s, err := Start(cfg)
+	if err != nil {
+		return err
 	}
-	return srv.ListenAndServe()
+	log.Printf("%s listening on http://%s (GET /mcp/sse POST /mcp/rpc)", s.name, s.Addr())
+	return s.Wait()
 }
 
-const mockReadHeaderTimeout = 10 * time.Second
-
-type server struct {
-	cfg Config
-
-	mu     sync.Mutex
-	sessID string
-	events chan string
+func upstreamFor(cfg Config) *mock.MockUpstream {
+	names := make([]string, 0, len(cfg.Tools))
+	callText := make(map[string]string, len(cfg.Tools))
+	description := make(map[string]string, len(cfg.Tools))
+	for _, t := range cfg.Tools {
+		names = append(names, t.Name)
+		if t.CallText != "" {
+			callText[t.Name] = t.CallText
+		}
+		if t.Description != "" {
+			description[t.Name] = t.Description
+		}
+	}
+	return mock.NewMockUpstreamWith(cfg.ServerName, "", names, mock.Behaviour{
+		CallTextByTool:    callText,
+		DescriptionByTool: description,
+	})
 }
 
-func (s *server) handleSSE(w http.ResponseWriter, r *http.Request) {
-	fl, ok := w.(http.Flusher)
+func (s *Server) Addr() string {
+	return s.listener.Addr().String()
+}
+
+// Wait blocks until the server stops, and reports why unless the stop was deliberate.
+func (s *Server) Wait() error {
+	if err := <-s.done; !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
+}
+
+func (s *Server) Close() error {
+	return s.http.Close()
+}
+
+func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "no flush", http.StatusInternalServerError)
 		return
 	}
-	s.mu.Lock()
-	s.sessID = uuid.NewString()
-	sid := s.sessID
-	s.mu.Unlock()
+	sessionID, events := s.openSession()
+	defer s.closeSession(sessionID)
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Mcp-Session-Id", sid)
+	w.Header().Set("Mcp-Session-Id", sessionID)
 	w.WriteHeader(http.StatusOK)
-	fl.Flush()
+	flusher.Flush()
 
 	for {
 		select {
 		case <-r.Context().Done():
 			return
-		case msg, ok := <-s.events:
-			if !ok {
-				return
-			}
+		case msg := <-events:
 			if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", mcpwire.SSEJSONRPCEvent, msg); err != nil {
 				return
 			}
-			fl.Flush()
+			flusher.Flush()
 		}
 	}
 }
 
-func (s *server) handleRPC(w http.ResponseWriter, r *http.Request) {
-	s.mu.Lock()
-	want := s.sessID
-	s.mu.Unlock()
-	if got := r.Header.Get("Mcp-Session-Id"); got != want || want == "" {
+func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
+	sessionID := r.Header.Get(mcpwire.HeaderMCPSessionID)
+	events, ok := s.sessionEvents(sessionID)
+	if !ok {
 		http.Error(w, "bad session", http.StatusUnauthorized)
 		return
 	}
@@ -127,68 +173,50 @@ func (s *server) handleRPC(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	switch req.Method {
-	case mcpwire.MethodInitialize:
-		res := map[string]any{
-			"protocolVersion": mcpwire.MCPProtocolVersion,
-			"capabilities":    map[string]any{"tools": map[string]any{}},
-			"serverInfo":      map[string]any{"name": s.cfg.ServerName},
-		}
-		raw, _ := json.Marshal(res)
-		s.push(rpc.NewResult(req.ID, raw))
-	case mcpwire.MethodToolsList:
-		tools := make([]map[string]any, 0, len(s.cfg.Tools))
-		for _, t := range s.cfg.Tools {
-			tools = append(tools, map[string]any{
-				"name":        t.Name,
-				"description": t.Description,
-				"inputSchema": map[string]any{
-					"type": "object", "properties": map[string]any{},
-				},
-			})
-		}
-		raw, _ := json.Marshal(map[string]any{"tools": tools})
-		s.push(rpc.NewResult(req.ID, raw))
-	case "notifications/initialized", "initialized":
-		// Host notification; no JSON-RPC response on upstream SSE.
-	case mcpwire.MethodToolsCall:
-		var callParams struct {
-			Name string `json:"name"`
-		}
-		_ = json.Unmarshal(req.Params, &callParams)
-		text := s.callText(callParams.Name)
-		raw, _ := json.Marshal(map[string]any{
-			"content": []map[string]any{{"type": "text", "text": text}},
-			"isError": false,
-		})
-		s.push(rpc.NewResult(req.ID, raw))
-	default:
-		s.push(rpc.NewError(req.ID, errcodes.MethodNotFound, "not found: "+req.Method, nil))
+	if req.IsNotification() {
+		w.WriteHeader(http.StatusAccepted)
+		return
 	}
-	w.WriteHeader(http.StatusAccepted)
-}
 
-func (s *server) callText(toolName string) string {
-	for _, t := range s.cfg.Tools {
-		if t.Name == toolName {
-			if t.CallText != "" {
-				return t.CallText
-			}
-			return toolName + "-ok"
-		}
-	}
-	return "unknown-tool"
-}
-
-func (s *server) push(resp *rpc.Response) {
-	b, err := resp.Marshal()
+	resp, err := s.upstream.Call(r.Context(), req)
 	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	raw, err := resp.Marshal()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	select {
-	case s.events <- string(b):
-	default:
-		log.Printf("%s: event channel full, drop response", s.cfg.ServerName)
+	case events <- string(raw):
+		w.WriteHeader(http.StatusAccepted)
+	case <-r.Context().Done():
+		http.Error(w, "client gone before the response was queued", http.StatusServiceUnavailable)
 	}
+}
+
+func (s *Server) openSession() (string, chan string) {
+	sessionID := uuid.NewString()
+	events := make(chan string, sessionEventBuffer)
+	s.mu.Lock()
+	s.sessions[sessionID] = events
+	s.mu.Unlock()
+	return sessionID, events
+}
+
+func (s *Server) closeSession(sessionID string) {
+	s.mu.Lock()
+	delete(s.sessions, sessionID)
+	s.mu.Unlock()
+}
+
+func (s *Server) sessionEvents(sessionID string) (chan string, bool) {
+	if sessionID == "" {
+		return nil, false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	events, ok := s.sessions[sessionID]
+	return events, ok
 }

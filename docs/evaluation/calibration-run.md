@@ -104,11 +104,11 @@ Examples default to **`PORT=8080`**. To reproduce recorded multibackend and Lang
 
 ### Go MCP loadtest (`scripts/loadtest/main.go`)
 
-See also [scripts/loadtest/README.md](../../scripts/loadtest/README.md). Default direct tool is **`alpha__echo`** (`gateway.example.yaml` + `make demo-backends`).
+See also [scripts/loadtest/README.md](../../scripts/loadtest/README.md). Default direct tool is **`alpha__echo`** (`gateway.example.yaml` + `make demo-upstreams`).
 
 ```bash
 # Terminal 1: direct path (exact tool name), router off
-make demo-backends
+make demo-upstreams
 MCP_GATEWAY_CONFIG=deployments/gateway.example.yaml PORT=8080 make run
 ```
 
@@ -120,7 +120,7 @@ go run ./scripts/loadtest -url http://127.0.0.1:8080 -mode direct -workers 10 -d
 ```bash
 # Semantic path (vector router), router on + embed sidecar
 make docker-up
-make demo-backends
+make demo-upstreams
 ROUTER_MODE=on EMBED_URL=http://127.0.0.1:8001 QDRANT_URL=http://127.0.0.1:6333 \
   MCP_GATEWAY_CONFIG=deployments/gateway.example.yaml PORT=8080 make run
 ```
@@ -314,8 +314,8 @@ Canonical numbers live in [calibration-results.md](calibration-results.md):
 | Run | Date | Scenario |
 |-----|------|----------|
 | Calibration | 2026-05-18 | `gateway.example.yaml`, demo mocks, `AUTH_MODE=none`, recall + direct loadtest |
-| Multibackend benchmark | 2026-05-30 | `gateway.real.yaml`, stdio MCP, JWT, OTLP; see [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) |
-| LangGraph agent integration run | 2026-06-08 | Multibackend benchmark + MCP host demo, LangGraph agent, Tempo trace, JWT loadtest; see [integration-checklist.md](integration-checklist.md#langgraph-agent-integration-run) |
+| Multiupstream benchmark | 2026-05-30 | `gateway.real.yaml`, stdio MCP, JWT, OTLP; see [scenario-real-upstreams-jwt.md](scenario-real-upstreams-jwt.md) |
+| LangGraph agent integration run | 2026-06-08 | Multiupstream benchmark + MCP host demo, LangGraph agent, Tempo trace, JWT loadtest; see [integration-checklist.md](integration-checklist.md#langgraph-agent-integration-run) |
 
 **Internal 50 ms budget (multibackend benchmark):** evidence uses Prometheus **mean** latency per phase (`tools/call`), all ≪ 50 ms. Histogram p95 is **not used** when sub-ms samples fall into the first 5 s bucket (artefact ~4750 ms).
 

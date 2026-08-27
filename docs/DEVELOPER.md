@@ -10,7 +10,7 @@ For a non-technical overview, start with the [root README](../README.md).
 
 | Guide | Use when |
 |-------|----------|
-| [ADDING_BACKENDS.md](ADDING_BACKENDS.md) | Register HTTP or stdio MCP upstreams in YAML |
+| [ADDING_UPSTREAMS.md](ADDING_UPSTREAMS.md) | Register HTTP or stdio MCP upstreams in YAML |
 | [CONNECTING_AGENTS.md](CONNECTING_AGENTS.md) | Connect an MCP host, script, or LangGraph-style agent to the gateway |
 
 ## Architecture
@@ -77,8 +77,8 @@ make demo        # recommended first run: no Docker, E2E MCP on localhost
 | **18081** | Gateway (smoke auto-start only) | `make demo` / `make smoke` with `SMOKE_AUTO_START_GATEWAY=1` |
 | **18082** | Gateway (JWT smoke) | `scripts/smoke_jwt.sh`; freed by `make stop` |
 | **31400** | `scripts/smoke_upstream` | Default upstream for `deployments/gateway.demo.yaml` |
-| **3101** / **3102** | Alpha / beta mocks | Host: `gateway.example.yaml` + `make demo-backends`. Compose gateway: `gateway.example.docker.yaml` |
-| **3201, 3202, 3203** | SRE mocks (k8s / prom / gh) | `gateway.sre.example.yaml` after `make sre-backends` or `make docker-up-sre` |
+| **3101** / **3102** | Alpha / beta mocks | Host: `gateway.example.yaml` + `make demo-upstreams`. Compose gateway: `gateway.example.docker.yaml` |
+| **3201, 3202, 3203** | SRE mocks (k8s / prom / gh) | `gateway.sre.example.yaml` after `make sre-upstreams` or `make docker-up-sre` |
 
 See [`docs/local-ports.md`](local-ports.md) for the port and mock upstream reference.
 
@@ -87,7 +87,7 @@ Typical flows:
 ```bash
 make demo        # smoke upstream :31400 + gateway :18081 + MCP curl (no Docker)
 make demo-full     # alpha/beta mocks + gateway.example.yaml + alpha__echo (no Docker)
-make demo-backends   # only mocks on 3101/3102 (pair with make run + gateway.example.yaml)
+make demo-upstreams   # only mocks on 3101/3102 (pair with make run + gateway.example.yaml)
 make sre-up       # docker-up + SRE mocks on 3201–3203 (Qdrant + embed required for router on)
 make sre-smoke     # three tools/call: k8s__get_pod_logs, prom__query_instant, gh__list_prs
 make verify-e2e     # CI + demo + demo-full + sre-smoke (full local E2E check)
@@ -95,7 +95,7 @@ make bootstrap     # .env from .env.example if missing
 make docker-up     # Qdrant, embed sidecar, OTel collector, Tempo, Prometheus, Grafana
 make docker-up-demo   # compose profile demo: mock-alpha / mock-beta (3101/3102 on host)
 make run        # gateway on PORT from .env (default 8080); MCP_GATEWAY_CONFIG=gateway.demo.yaml unless set
-make stop       # kills gateway listeners only; use demo-backends-stop / sre-down for mocks
+make stop       # kills gateway listeners only; use demo-upstreams-stop / sre-down for mocks
 make test        # vet + race + unit tests
 make ci         # same as GitHub Actions lint-and-unit (lint + vet + race, -count=1)
 make test-integration  # needs compose (Qdrant + embed); see below
@@ -107,14 +107,14 @@ Default config for new users: [`deployments/gateway.demo.yaml`](../deployments/g
 
 ### Minimal config (semantic router on)
 
-For `router.mode: on` you need Qdrant and the embed sidecar (`make docker-up`), plus HTTP backends you can reach (e.g. `make demo-backends` for alpha/beta on **3101** / **3102**):
+For `router.mode: on` you need Qdrant and the embed sidecar (`make docker-up`), plus HTTP backends you can reach (e.g. `make demo-upstreams` for alpha/beta on **3101** / **3102**):
 
 ```yaml
 backends:
- - id: backend-alpha
+ - id: upstream-alpha
   prefix: alpha
   url: http://mock-alpha:3101   # in compose; on host use 127.0.0.1:3101 or /etc/hosts aliases
- - id: backend-beta
+ - id: upstream-beta
   prefix: beta
   url: http://mock-beta:3102
 router:
@@ -133,7 +133,7 @@ Required environment (in addition to `PORT` / `AUTH_MODE` as needed):
 | `QDRANT_URL` | `http://127.0.0.1:6333` |
 | `EMBED_URL` | `http://127.0.0.1:8001` |
 
-Host client against multi-backend: `make demo-backends`, then `MCP_GATEWAY_CONFIG=deployments/gateway.example.yaml make run` in another terminal, then `TOOL_NAME=alpha__echo go run ./scripts/mcp_host_demo` (see [`scripts/mcp_host_demo/README.md`](../scripts/mcp_host_demo/README.md)).
+Host client against multi-upstream: `make demo-upstreams`, then `MCP_GATEWAY_CONFIG=deployments/gateway.example.yaml make run` in another terminal, then `TOOL_NAME=alpha__echo go run ./scripts/mcp_host_demo` (see [`scripts/mcp_host_demo/README.md`](../scripts/mcp_host_demo/README.md)).
 
 ### OpenAPI
 
@@ -151,7 +151,7 @@ Full tables for environment variables, YAML blocks, example configs, and reload 
 
 Summary:
 
-- **Backends**, `MCP_GATEWAY_CONFIG` / `MCP_GATEWAY_BACKENDS`; HTTP (`url`) or stdio (`command`). See [ADDING_BACKENDS.md](ADDING_BACKENDS.md).
+- **Backends**, `MCP_GATEWAY_CONFIG` / `MCP_GATEWAY_BACKENDS`; HTTP (`url`) or stdio (`command`). See [ADDING_UPSTREAMS.md](ADDING_UPSTREAMS.md).
 - **MCP methods**, tools (merge + policy + router), resources/prompts (merge, AuthN only). See [mcp-capabilities.md](mcp-capabilities.md).
 - **Auth**, `AUTH_MODE=none|jwt`; tool allow-lists via JWT/RAR; errors in [errors.md](errors.md).
 - **Router**, `ROUTER_MODE` + `QDRANT_URL` + `EMBED_URL`; modes in [CONNECTING_AGENTS.md](CONNECTING_AGENTS.md#semantic-routing).
@@ -207,7 +207,7 @@ docker compose -f deployments/docker-compose.yaml --profile gateway --profile de
 curl -sf http://127.0.0.1:8080/healthz
 ```
 
-**Host-native gateway** (`make run`, `make demo-full`) with mocks on the host (`make demo-backends`): use `gateway.example.yaml` as-is (`127.0.0.1:3101/3102`).
+**Host-native gateway** (`make run`, `make demo-full`) with mocks on the host (`make demo-upstreams`): use `gateway.example.yaml` as-is (`127.0.0.1:3101/3102`).
 
 **Host gateway + compose mocks** (`make docker-up-demo` then `make run` on the host): mocks are on the host loopback via published ports — use `http://127.0.0.1:3101` / `3102` in your config (or the `/etc/hosts` alias above with the example YAML).
 
@@ -335,4 +335,4 @@ To rewrite **existing** commits that used another address, use `git filter-repo`
 - [Documentation index](README.md)
 - [Architecture overview](architecture/README.md) · [full specification](architecture/mcp_gateway.plan.md)
 - [ADRs](adr/): [0001](adr/0001-architecture-decisions.md), [0002](adr/0002-filter-list-mode.md), [0003](adr/0003-security-rar-jwt-merge-failmode.md), [0004](adr/0004-gateway-scope.md)
-- [Evaluation guides](evaluation/README.md) · [calibration runbook](evaluation/calibration-run.md) · [recorded results](evaluation/calibration-results.md) · [real backends + JWT lab](evaluation/scenario-real-backends-jwt.md)
+- [Evaluation guides](evaluation/README.md) · [calibration runbook](evaluation/calibration-run.md) · [recorded results](evaluation/calibration-results.md) · [real upstreams + JWT lab](evaluation/scenario-real-upstreams-jwt.md)

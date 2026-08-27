@@ -30,12 +30,10 @@ const (
 )
 
 type RoutingSignal struct {
-	SessionID       string
-	Method          string
 	ToolName        string
 	ArgumentsJSON   json.RawMessage
 	IntentText      string
-	AllowedTools    []string
+	AllowList       []string
 	AllowListAuthz  AllowListAuthz
 	CatalogVersion  string
 	RecentToolNames []string
@@ -45,7 +43,7 @@ type RoutingDecision struct {
 	Outcome            RoutingOutcome
 	UpstreamID         string
 	ToolNameNamespaced string
-	Confidence         float64
+	Score              float64
 	Candidates         []ScoredTool
 	FallbackLayer      string
 	LatencyMS          int64

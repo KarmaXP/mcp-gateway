@@ -1,4 +1,4 @@
-# SRE example: mocks on 3201–3203 (make sre-backends). Agents: docs/CONNECTING_AGENTS.md
+# SRE example: mocks on 3201–3203 (make sre-upstreams). Agents: docs/CONNECTING_AGENTS.md
 
 backends:
   - id: backend-k8s

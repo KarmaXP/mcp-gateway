@@ -13,7 +13,7 @@ Examples (from `mcp-gateway/`):
 
 ```bash
 # Terminal 1: alpha mock upstream + gateway (default direct tool is alpha__echo)
-make demo-backends
+make demo-upstreams
 MCP_GATEWAY_CONFIG=deployments/gateway.example.yaml make run
 
 # Terminal 2
@@ -25,7 +25,7 @@ Plain `go run ./cmd/gateway` without `MCP_GATEWAY_CONFIG` fails unless you have 
 ```bash
 # Semantic comparison (embed sidecar + example config; Qdrant optional for in-memory dev paths)
 make docker-up
-make demo-backends
+make demo-upstreams
 ROUTER_MODE=on EMBED_URL=http://127.0.0.1:8001 QDRANT_URL=http://127.0.0.1:6333 \
   MCP_GATEWAY_CONFIG=deployments/gateway.example.yaml make run
 

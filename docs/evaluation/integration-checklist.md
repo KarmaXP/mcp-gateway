@@ -1,6 +1,6 @@
 # Integration checklist (gateway + backends + optional agent)
 
-Reproducibility runbook for the three documented lab scenarios. **Canonical recorded results** for the multibackend and LangGraph agent integration runs are already in [calibration-results.md](calibration-results.md) (*Multibackend benchmark* 2026-05-30; *LangGraph agent integration run* 2026-06-08). Use this checklist to re-run or verify; you do not need to re-record unless you change stack or config.
+Reproducibility runbook for the three documented lab scenarios. **Canonical recorded results** for the multibackend and LangGraph agent integration runs are already in [calibration-results.md](calibration-results.md) (*Multiupstream benchmark* 2026-05-30; *LangGraph agent integration run* 2026-06-08). Use this checklist to re-run or verify; you do not need to re-record unless you change stack or config.
 
 Use a **single session** to validate the gateway (and optionally the full host stack) with one gateway process up; do not restart between steps unless noted.
 
@@ -11,8 +11,8 @@ Use a **single session** to validate the gateway (and optionally the full host s
 | Scenario | Config | Auth | Backends | Scope |
 |----------|--------|------|----------|--------|
 | **SRE mock multibackend** | `gateway.sre.example.yaml` | `AUTH_MODE=none` | HTTP mocks (`make sre-up`) | Gateway + loadtest without JWT |
-| **Multibackend benchmark** | `gateway.real.yaml` | `AUTH_MODE=jwt` | stdio MCP via `npx` | Gateway evidence (smoke, JWT, Prom means, recall) — [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) |
-| **LangGraph agent integration run** | Same as multibackend benchmark | `AUTH_MODE=jwt` | Same as multibackend benchmark | Multibackend benchmark **plus** MCP host demo, agent (e.g. LangGraph), Tempo capture, JWT load — section [LangGraph agent integration run](#langgraph-agent-integration-run) below |
+| **Multiupstream benchmark** | `gateway.real.yaml` | `AUTH_MODE=jwt` | stdio MCP via `npx` | Gateway evidence (smoke, JWT, Prom means, recall) — [scenario-real-upstreams-jwt.md](scenario-real-upstreams-jwt.md) |
+| **LangGraph agent integration run** | Same as multibackend benchmark | `AUTH_MODE=jwt` | Same as multibackend benchmark | Multiupstream benchmark **plus** MCP host demo, agent (e.g. LangGraph), Tempo capture, JWT load — section [LangGraph agent integration run](#langgraph-agent-integration-run) below |
 
 The multibackend benchmark **does not** use `make sre-up`. Its primary load evidence uses JWT smoke traffic + Prometheus internal means (documented in calibration-results). JWT-aware `scripts/loadtest` is supported via `-token` and was measured in the LangGraph agent integration run.
 
@@ -22,7 +22,7 @@ The LangGraph agent integration run **extends** the multibackend benchmark in th
 
 ## Prerequisites
 
-| Step | SRE mock | Multibackend benchmark |
+| Step | SRE mock | Multiupstream benchmark |
 |------|----------|-------------------|
 | Dependencies | `make docker-up` | `make docker-up` (no `sre-up`) |
 | Mocks (optional) | `make sre-up` | — |
@@ -44,9 +44,9 @@ export PORT=18080
 make run
 ```
 
-### Multibackend benchmark — start gateway
+### Multiupstream benchmark — start gateway
 
-See [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) (JWT keys, `PORT=18080`, macOS filesystem path).
+See [scenario-real-upstreams-jwt.md](scenario-real-upstreams-jwt.md) (JWT keys, `PORT=18080`, macOS filesystem path).
 
 Check: `curl -sf http://127.0.0.1:${PORT}/readyz` (or `/healthz`).
 
@@ -54,13 +54,13 @@ Check: `curl -sf http://127.0.0.1:${PORT}/readyz` (or `/healthz`).
 
 ## 1. Upstreams and namespaced tools
 
-| Check | SRE mock | Multibackend benchmark |
+| Check | SRE mock | Multiupstream benchmark |
 |-------|----------|-------------------|
 | `tools/list` returns `prefix__name` | ✓ | ✓ |
 | `tools/call` on three silos | `make sre-smoke` or manual | smoke_e2e ×3 (prom/k8s/gh) |
 | YAML documented | `gateway.sre.example.yaml` | `gateway.real.yaml` |
 
-Manual flow (SRE mock): [scenario-sre-multibackend.md](scenario-sre-multibackend.md).
+Manual flow (SRE mock): [scenario-sre-multiupstream.md](scenario-sre-multiupstream.md).
 
 ---
 
@@ -88,7 +88,7 @@ Details: [scripts/mcp_host_demo/README.md](../../scripts/mcp_host_demo/README.md
 | Scenario | Action |
 |----------|--------|
 | SRE mock | Skip if `AUTH_MODE=none`; document skip |
-| Multibackend benchmark | **Required** — [scenario-jwt-allowlist.md](scenario-jwt-allowlist.md) + [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) |
+| Multiupstream benchmark | **Required** — [scenario-jwt-allowlist.md](scenario-jwt-allowlist.md) + [scenario-real-upstreams-jwt.md](scenario-real-upstreams-jwt.md) |
 
 | Check | Expected (multibackend benchmark, recorded) |
 |-------|----------------------------------------|
@@ -108,11 +108,11 @@ go run ./scripts/loadtest -url http://127.0.0.1:${PORT} -mode semantic -workers 
 
 Copy `latency_p95_ms` into [calibration-results.md](calibration-results.md) (calibration section). Semantic mode needs a catalog matching your intents.
 
-### Multibackend benchmark — JWT smoke load
+### Multiupstream benchmark — JWT smoke load
 
 Repeat `scripts/smoke_e2e.sh` (parallel + sequential) with `SMOKE_JWT`. Record Prometheus **mean** internal latency per phase — see [calibration-results.md](calibration-results.md). Do **not** rely on histogram p95 for sub-ms phases.
 
-| Mode | Multibackend benchmark status (2026-05-30) |
+| Mode | Multiupstream benchmark status (2026-05-30) |
 |------|--------------------------------------|
 | loadtest direct/semantic under JWT | Not measured in that session (historical); measured in LangGraph agent integration run with `-token` |
 | JWT smoke | 60× parallel + 20× sequential |
@@ -129,7 +129,7 @@ With `make docker-up` and OTLP exported from the gateway:
 2. Query internal phase latency — **mean** recommended when samples are sub-ms ([calibration-results.md](calibration-results.md)).
 3. Optional Tempo: [router-trace-capture.md](router-trace-capture.md) (Tempo is in-cluster only in default Compose; host capture via Grafana).
 
-During a re-run, if Prometheus/Tempo steps are skipped, mark **Not measured** with reason in [calibration-results.md](calibration-results.md). Multibackend benchmark (2026-05-30) means are already recorded there.
+During a re-run, if Prometheus/Tempo steps are skipped, mark **Not measured** with reason in [calibration-results.md](calibration-results.md). Multiupstream benchmark (2026-05-30) means are already recorded there.
 
 ---
 
@@ -152,7 +152,7 @@ Run **after** multibackend benchmark checks (or repeat multibackend sanity first
 
 ### Prerequisites (same as multibackend benchmark)
 
-[scenario-real-backends-jwt.md](scenario-real-backends-jwt.md): `make docker-up`, JWT keys, `gateway.real.yaml`, `ROUTER_MODE=on`, OTLP, three stdio backends. Keep `PORT=18080` stable.
+[scenario-real-upstreams-jwt.md](scenario-real-upstreams-jwt.md): `make docker-up`, JWT keys, `gateway.real.yaml`, `ROUTER_MODE=on`, OTLP, three stdio upstreams. Keep `PORT=18080` stable.
 
 ### MCP host demo (no LLM)
 
@@ -210,9 +210,9 @@ When re-running the LangGraph agent integration run after stack or config change
 
 | Goal | Doc / command |
 |------|----------------|
-| Real stdio + JWT (multibackend benchmark) | [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) |
+| Real stdio + JWT (multibackend benchmark) | [scenario-real-upstreams-jwt.md](scenario-real-upstreams-jwt.md) |
 | LangGraph agent integration run (host + agent + Tempo + JWT load) | [LangGraph agent integration run](#langgraph-agent-integration-run) above |
-| Add a real upstream | [ADDING_BACKENDS.md](../ADDING_BACKENDS.md) |
-| SRE three-backend mocks | [scenario-sre-multibackend.md](scenario-sre-multibackend.md) |
+| Add a real upstream | [ADDING_UPSTREAMS.md](../ADDING_UPSTREAMS.md) |
+| SRE three-backend mocks | [scenario-sre-multiupstream.md](scenario-sre-multiupstream.md) |
 | Record recall/latency | [calibration-results.md](calibration-results.md) |
 | CI-style unit tests | `make ci` from `mcp-gateway/` |

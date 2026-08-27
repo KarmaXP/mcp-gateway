@@ -5,6 +5,7 @@ import "sync"
 type schemaRegistry struct {
 	mu         sync.RWMutex
 	byToolName map[string]toolSchema
+	byUpstream map[string]map[string]toolSchema
 }
 
 func (r *schemaRegistry) lookup(namespacedTool string) toolSchema {
@@ -13,8 +14,20 @@ func (r *schemaRegistry) lookup(namespacedTool string) toolSchema {
 	return r.byToolName[namespacedTool]
 }
 
-func (r *schemaRegistry) replace(byToolName map[string]toolSchema) {
+func (r *schemaRegistry) replaceReachable(answered map[string]map[string]toolSchema) {
 	r.mu.Lock()
-	r.byToolName = byToolName
-	r.mu.Unlock()
+	defer r.mu.Unlock()
+	if r.byUpstream == nil {
+		r.byUpstream = make(map[string]map[string]toolSchema, len(answered))
+	}
+	for upstreamID, tools := range answered {
+		r.byUpstream[upstreamID] = tools
+	}
+	flat := make(map[string]toolSchema)
+	for _, tools := range r.byUpstream {
+		for name, schema := range tools {
+			flat[name] = schema
+		}
+	}
+	r.byToolName = flat
 }

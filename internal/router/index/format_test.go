@@ -9,8 +9,8 @@ import (
 )
 
 func TestFormatDocumentStable(t *testing.T) {
-	a := FormatDocument(ToolRow{Name: "alpha__echo", Description: "d", ParamKeys: []string{"z", "a"}})
-	b := FormatDocument(ToolRow{Name: "alpha__echo", Description: "d", ParamKeys: []string{"a", "z"}})
+	a := FormatDocument(Tool{Name: "alpha__echo", Description: "d", ParamKeys: []string{"z", "a"}})
+	b := FormatDocument(Tool{Name: "alpha__echo", Description: "d", ParamKeys: []string{"a", "z"}})
 	require.Equal(t, a, b)
 	require.Contains(t, a, "alpha__echo")
 	require.Contains(t, a, "Template: v1")

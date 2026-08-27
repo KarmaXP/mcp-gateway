@@ -67,9 +67,9 @@ func TestSemanticVectorRoutingWithQdrantAndMiniLM(t *testing.T) {
 	indexed, err := BuildIndexedTools(listJSON, func(prefix string) (string, error) {
 		switch prefix {
 		case "alpha":
-			return "backend-alpha", nil
+			return "upstream-alpha", nil
 		case "beta":
-			return "backend-beta", nil
+			return "upstream-beta", nil
 		default:
 			return "", fmt.Errorf("unknown prefix %q", prefix)
 		}
@@ -86,7 +86,7 @@ func TestSemanticVectorRoutingWithQdrantAndMiniLM(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "alpha__echo", tool)
 	require.Equal(t, OutcomeVectorHit, dec.Outcome)
-	require.Equal(t, "backend-alpha", dec.UpstreamID)
+	require.Equal(t, "upstream-alpha", dec.UpstreamID)
 }
 
 func probeURL(ctx context.Context, u string) bool {

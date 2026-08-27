@@ -3,7 +3,7 @@ package policy
 import "fmt"
 
 // allowed nil -> any tool in catalog; non-nil empty -> deny-all.
-func AllowedListContains(namespacedTool string, allowed []string) (bool, error) {
+func AllowListPermits(namespacedTool string, allowed []string) (bool, error) {
 	if allowed == nil {
 		return true, nil
 	}

@@ -174,10 +174,10 @@ func (sm *SessionManager) BroadcastTasksDropped() uint64 {
 }
 
 type Session struct {
-	id       string
-	ownerSub string
-	ctx      context.Context
-	cancel   context.CancelFunc
+	id           string
+	ownerSubject string
+	ctx          context.Context
+	cancel       context.CancelFunc
 
 	multiplexer Multiplexer
 
@@ -199,23 +199,23 @@ type Session struct {
 func NewSession(parent context.Context, id string, mpx Multiplexer, mws []Middleware) *Session {
 	ctx, cancel := context.WithCancel(parent)
 	return &Session{
-		id:          id,
-		ownerSub:    hostctx.SubjectIDFromContext(parent),
-		ctx:         ctx,
-		cancel:      cancel,
-		multiplexer: mpx,
-		middlewares: append([]Middleware(nil), mws...),
-		out:         make(chan []byte, defaults.SessionOutboundChannelSize),
+		id:           id,
+		ownerSubject: hostctx.SubjectIDFromContext(parent),
+		ctx:          ctx,
+		cancel:       cancel,
+		multiplexer:  mpx,
+		middlewares:  append([]Middleware(nil), mws...),
+		out:          make(chan []byte, defaults.SessionOutboundChannelSize),
 	}
 }
 
 func (s *Session) ID() string { return s.id }
 
 func (s *Session) SubjectMatches(requestSub string) bool {
-	if s.ownerSub == "" && requestSub == "" {
+	if s.ownerSubject == "" && requestSub == "" {
 		return true
 	}
-	return s.ownerSub != "" && s.ownerSub == requestSub
+	return s.ownerSubject != "" && s.ownerSubject == requestSub
 }
 
 func (s *Session) RecordSuccessfulToolCall(namespaced string) {

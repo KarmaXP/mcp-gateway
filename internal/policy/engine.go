@@ -72,7 +72,7 @@ func (e *Engine) HardenSchemas() bool {
 }
 
 // Elevated tools must have a compiled input schema.
-func (e *Engine) RequiresStrictSchema(namespacedTool string) bool {
+func (e *Engine) RequiresInputSchema(namespacedTool string) bool {
 	if e == nil || namespacedTool == "" {
 		return false
 	}

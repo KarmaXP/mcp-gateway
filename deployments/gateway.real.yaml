@@ -1,4 +1,4 @@
-# Real stdio MCP upstreams (npx). Walkthrough: docs/evaluation/scenario-real-backends-jwt.md
+# Real stdio MCP upstreams (npx). Walkthrough: docs/evaluation/scenario-real-upstreams-jwt.md
 
 backends:
   - id: backend-everything

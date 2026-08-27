@@ -23,7 +23,7 @@ Results for requests with an `id` are delivered on the SSE stream as `event: jso
 
 ## Method matrix
 
-| MCP method | Aggregated across backends | Namespacing | JWT / RAR allow-list | Semantic router |
+| MCP method | Aggregated across upstreams | Namespacing | JWT / RAR allow-list | Semantic router |
 |------------|---------------------------|-------------|----------------------|-------------------|
 | `initialize` | Yes (merged) | N/A | AuthN only | No |
 | `notifications/initialized` | Forwarded | N/A | AuthN only | No |
@@ -65,7 +65,7 @@ Default: if an upstream fails during `initialize` or a **list** RPC, that upstre
 
 Optional strict mode (`aggregation.strict_initialize` / `strict_list`): any upstream failure → **`StrictAggregationFailed` (-32005)** to the host.
 
-Details: [Adding backends — Aggregation](ADDING_BACKENDS.md#aggregation-and-failures).
+Details: [Adding upstreams — Aggregation](ADDING_UPSTREAMS.md#aggregation-and-failures).
 
 ---
 
@@ -94,4 +94,4 @@ Details: [Adding backends — Aggregation](ADDING_BACKENDS.md#aggregation-and-fa
 
 - [configuration.md](configuration.md): enable router, policy, aggregation
 - [errors.md](errors.md): error codes
-- [ADDING_BACKENDS.md](ADDING_BACKENDS.md): register upstreams
+- [ADDING_UPSTREAMS.md](ADDING_UPSTREAMS.md): register upstreams

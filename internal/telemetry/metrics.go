@@ -37,7 +37,7 @@ func registerInstruments() error {
 		return fmt.Errorf("telemetry: semantic counter: %w", err)
 	}
 	semanticDuration, err = m.Float64Histogram("mcp.gateway.semantic_router.duration_seconds",
-		metric.WithDescription("Semantic router decision latency (excludes backend tools/call)"),
+		metric.WithDescription("Semantic router decision latency (excludes upstream tools/call)"),
 		metric.WithUnit("s"),
 	)
 	if err != nil {
@@ -71,7 +71,7 @@ func registerInstruments() error {
 	}
 
 	internalDuration, err = m.Float64Histogram("mcp.gateway.internal.duration_seconds",
-		metric.WithDescription("Internal hop latency histogram by gateway phase (excludes upstream MCP backend I/O)"),
+		metric.WithDescription("Internal hop latency histogram by gateway phase (excludes upstream MCP I/O)"),
 		metric.WithUnit("s"),
 	)
 	if err != nil {

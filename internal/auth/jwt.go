@@ -172,14 +172,6 @@ func (v *Validator) ParseTokenClaims(ctx context.Context, token string) (*TokenC
 	return &claims, nil
 }
 
-func (v *Validator) ValidateWithAllowedTools(ctx context.Context, token string) ([]string, error) {
-	c, err := v.ParseTokenClaims(ctx, token)
-	if err != nil {
-		return nil, err
-	}
-	return c.NormalizedMcpTools(), nil
-}
-
 func normalizeMcpToolNames(in []string) []string {
 	if len(in) == 0 {
 		return nil

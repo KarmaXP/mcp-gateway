@@ -46,7 +46,7 @@ func TestMatchToolRejectsUnsupportedPatternSyntax(t *testing.T) {
 func TestElevatedToolsHonourPatterns(t *testing.T) {
 	t.Parallel()
 	e := NewEngine(EngineInput{ElevatedTools: []string{"k8s__*"}})
-	require.True(t, e.RequiresStrictSchema("k8s__delete_pod"),
+	require.True(t, e.RequiresInputSchema("k8s__delete_pod"),
 		"an elevated pattern must gate the strict schema requirement it was written for")
-	require.False(t, e.RequiresStrictSchema("gh__list_prs"))
+	require.False(t, e.RequiresInputSchema("gh__list_prs"))
 }

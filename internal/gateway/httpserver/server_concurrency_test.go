@@ -13,14 +13,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 func TestConcurrentToolsListSameSession(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	srv := New(context.Background(), agg, "")
 	ts := httptest.NewServer(srv)
@@ -73,7 +73,7 @@ func TestConcurrentToolsListSameSession(t *testing.T) {
 
 func TestPostRPCClosesBodyOnAllPaths(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0))
+	agg, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 	srv := New(context.Background(), agg, "")
 	ts := httptest.NewServer(srv)
@@ -90,9 +90,10 @@ func TestPostRPCClosesBodyOnAllPaths(t *testing.T) {
 }
 
 func TestToolsCallAbortsWhenPostContextCancelled(t *testing.T) {
-	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	b1.ToolsCallDelay = 400 * time.Millisecond
-	agg, err := multiplex.New(context.Background(), []backend.Upstream{b1}, multiplex.WithListTTL(0), multiplex.WithCallTimeout(2*time.Second))
+	b1 := mock.NewMockUpstreamWith("b1", "alpha", []string{"echo"}, mock.Behaviour{
+		ToolsCallDelay: 400 * time.Millisecond,
+	})
+	agg, err := multiplex.New(context.Background(), []upstream.Client{b1}, multiplex.WithListTTL(0), multiplex.WithCallTimeout(2*time.Second))
 	require.NoError(t, err)
 	srv := New(context.Background(), agg, "")
 	ts := httptest.NewServer(srv)

@@ -2,7 +2,7 @@
 
 Guides for validating gateway behavior beyond unit tests: scripted scenarios, load tests, and router/latency measurement.
 
-**Multibackend benchmark (2026-05-30):** [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) + [calibration-results.md](calibration-results.md).
+**Multiupstream benchmark (2026-05-30):** [scenario-real-upstreams-jwt.md](scenario-real-upstreams-jwt.md) + [calibration-results.md](calibration-results.md).
 
 **LangGraph agent integration run (2026-06-08):** [integration-checklist.md](integration-checklist.md#langgraph-agent-integration-run) + calibration-results *LangGraph agent integration run*.
 
@@ -13,10 +13,10 @@ Guides for validating gateway behavior beyond unit tests: scripted scenarios, lo
 | Guide | What it exercises |
 |-------|-------------------|
 | [integration-checklist.md](integration-checklist.md) | **End-to-end validation** — SRE mocks, multibackend benchmark (real+JWT), LangGraph agent integration run |
-| [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md) | **Real stdio MCP** (everything, filesystem, memory) + JWT + OTLP + Prom |
-| [scenario-sre-multibackend.md](scenario-sre-multibackend.md) | Three HTTP mocks, namespaced tools, semantic router |
+| [scenario-real-upstreams-jwt.md](scenario-real-upstreams-jwt.md) | **Real stdio MCP** (everything, filesystem, memory) + JWT + OTLP + Prom |
+| [scenario-sre-multiupstream.md](scenario-sre-multiupstream.md) | Three HTTP mocks, namespaced tools, semantic router |
 | [scenario-jwt-allowlist.md](scenario-jwt-allowlist.md) | `AUTH_MODE=jwt`, `mcp_tools` filtering and deny on `tools/call` |
-| [scenario-backend-down.md](scenario-backend-down.md) | Partial catalog when an upstream is unavailable |
+| [scenario-upstream-down.md](scenario-upstream-down.md) | Partial catalog when an upstream is unavailable |
 
 Quick automated checks (from repo root):
 
@@ -26,7 +26,7 @@ make sre-smoke             # SRE mock: k8s/prom/gh HTTP mocks
 make smoke
 GATEWAY_URL=http://127.0.0.1:8080 bash scripts/smoke_e2e.sh
 
-# Multibackend benchmark (JWT + real stdio backends): see scenario-real-backends-jwt.md
+# Multiupstream benchmark (JWT + real stdio upstreams): see scenario-real-upstreams-jwt.md
 make demo-lab-preflight    # deps + fixture + JWT (no gateway)
 make demo-lab-verify        # full demo rehearsal (gateway up; optional ../langgraph-demo)
 bash scripts/demo_show_catalog.sh   # tools/list for demo (needs JWT + gateway)
@@ -44,7 +44,7 @@ Host client: [`scripts/mcp_host_demo/README.md`](../../scripts/mcp_host_demo/REA
 | [calibration-results.md](calibration-results.md) | **Canonical recorded numbers** — calibration 2026-05-18, multibackend benchmark 2026-05-30, LangGraph agent integration run 2026-06-08 |
 | [router-trace-capture.md](router-trace-capture.md) | Capture semantic-router spans in Tempo (optional) |
 
-Load testing: [`scripts/loadtest/README.md`](../../scripts/loadtest/README.md) (`AUTH_MODE=none` by default; pass `-token` or `LOADTEST_JWT` under JWT — see [scenario-real-backends-jwt.md](scenario-real-backends-jwt.md)).
+Load testing: [`scripts/loadtest/README.md`](../../scripts/loadtest/README.md) (`AUTH_MODE=none` by default; pass `-token` or `LOADTEST_JWT` under JWT — see [scenario-real-upstreams-jwt.md](scenario-real-upstreams-jwt.md)).
 
 ---
 

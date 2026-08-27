@@ -42,8 +42,8 @@ func TestConcurrentReindexSerialized(t *testing.T) {
 	cfg.Mode = mode.AssistList
 	sr := NewSemanticRouter(cfg, emb, st, 4)
 
-	toolsA := []IndexedTool{{ToolRow: index.ToolRow{Name: "a__one", Description: "one"}, UpstreamID: "b1"}}
-	toolsB := []IndexedTool{{ToolRow: index.ToolRow{Name: "a__two", Description: "two"}, UpstreamID: "b1"}}
+	toolsA := []CatalogEntry{{Tool: index.Tool{Name: "a__one", Description: "one"}, UpstreamID: "b1"}}
+	toolsB := []CatalogEntry{{Tool: index.Tool{Name: "a__two", Description: "two"}, UpstreamID: "b1"}}
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -72,11 +72,11 @@ func TestReindexDoesNotExposeCatalogVersionUntilApplyCatalog(t *testing.T) {
 	cfg.Mode = mode.AssistList
 	sr := NewSemanticRouter(cfg, emb, st, 4)
 
-	toolsV1 := []IndexedTool{{ToolRow: index.ToolRow{Name: "a__one", Description: "one"}, UpstreamID: "b1"}}
+	toolsV1 := []CatalogEntry{{Tool: index.Tool{Name: "a__one", Description: "one"}, UpstreamID: "b1"}}
 	reindexAndApply(t, sr, ctx, "v1", toolsV1)
 	require.Equal(t, "v1", sr.CatalogVersion())
 
-	toolsV2 := []IndexedTool{{ToolRow: index.ToolRow{Name: "a__two", Description: "two"}, UpstreamID: "b1"}}
+	toolsV2 := []CatalogEntry{{Tool: index.Tool{Name: "a__two", Description: "two"}, UpstreamID: "b1"}}
 	require.NoError(t, sr.Reindex(ctx, "v2", toolsV2))
 	require.Equal(t, "v1", sr.CatalogVersion(), "in-memory catalog must stay at v1 until ApplyCatalog")
 
@@ -96,10 +96,10 @@ func TestConcurrentReindexAndApplyCatalogUnderRace(t *testing.T) {
 	cfg.Mode = mode.AssistList
 	sr := NewSemanticRouter(cfg, emb, st, 4)
 
-	toolsV1 := []IndexedTool{{ToolRow: index.ToolRow{Name: "a__one", Description: "one"}, UpstreamID: "b1"}}
+	toolsV1 := []CatalogEntry{{Tool: index.Tool{Name: "a__one", Description: "one"}, UpstreamID: "b1"}}
 	reindexAndApply(t, sr, ctx, "v1", toolsV1)
 
-	toolsV2 := []IndexedTool{{ToolRow: index.ToolRow{Name: "a__two", Description: "two"}, UpstreamID: "b1"}}
+	toolsV2 := []CatalogEntry{{Tool: index.Tool{Name: "a__two", Description: "two"}, UpstreamID: "b1"}}
 
 	var wg sync.WaitGroup
 	wg.Add(2)

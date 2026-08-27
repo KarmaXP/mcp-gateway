@@ -9,6 +9,7 @@ import (
 )
 
 func TestJWTAuthFromEnvironment(t *testing.T) {
+	t.Setenv("JWT_PUBLIC_KEY_FILE", "")
 	t.Setenv("AUTH_MODE", "jwt")
 	t.Setenv("JWT_ISS", "https://issuer")
 	t.Setenv("JWT_AUD", "audience")
@@ -16,7 +17,8 @@ func TestJWTAuthFromEnvironment(t *testing.T) {
 	t.Setenv("JWT_PUBLIC_KEY_PEM", "-----BEGIN PUBLIC KEY-----\nMIIB\n-----END PUBLIC KEY-----")
 	t.Setenv("JWT_JWKS_CACHE_TTL", "2m")
 
-	c := JWTAuthFromEnvironment()
+	c, err := JWTAuthFromEnvironment()
+	require.NoError(t, err)
 	require.Equal(t, "jwt", c.Mode)
 	require.Equal(t, "https://issuer", c.Issuer)
 	require.Equal(t, "audience", c.Audience)
@@ -30,7 +32,8 @@ func TestJWTAuthFromEnvironmentPublicKeyFile(t *testing.T) {
 	t.Setenv("JWT_PUBLIC_KEY_FILE", t.TempDir()+"/jwt.pub.pem")
 	require.NoError(t, os.WriteFile(os.Getenv("JWT_PUBLIC_KEY_FILE"), []byte(testRSAPublicPEM), 0o600))
 
-	c := JWTAuthFromEnvironment()
+	c, err := JWTAuthFromEnvironment()
+	require.NoError(t, err)
 	require.Contains(t, c.PublicKeyPEM, "BEGIN PUBLIC KEY")
 }
 

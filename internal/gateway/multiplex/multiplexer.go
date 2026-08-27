@@ -7,14 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
-	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
@@ -24,6 +23,7 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/router"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
 	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
 	"github.com/KarmaXP/mcp-gateway/internal/validate"
 )
 
@@ -37,8 +37,8 @@ const (
 var emptyToolArguments = json.RawMessage(`{}`)
 
 type Multiplexer struct {
-	upstreams []backend.Upstream
-	byPrefix  map[string]backend.Upstream
+	upstreams []upstream.Client
+	byPrefix  map[string]upstream.Client
 
 	initTimeout time.Duration
 	listTimeout time.Duration
@@ -138,11 +138,11 @@ func withToolsListChangedDebounce(d time.Duration) Option {
 	return func(a *Multiplexer) { a.listChangedDebouncer.delay = d }
 }
 
-func New(lifecycle context.Context, upstreams []backend.Upstream, opts ...Option) (*Multiplexer, error) {
+func New(lifecycle context.Context, upstreams []upstream.Client, opts ...Option) (*Multiplexer, error) {
 	if lifecycle == nil {
 		lifecycle = context.Background()
 	}
-	byPrefix := make(map[string]backend.Upstream, len(upstreams))
+	byPrefix := make(map[string]upstream.Client, len(upstreams))
 	for _, b := range upstreams {
 		p := b.Prefix()
 		if err := namespace.ValidatePrefix(p); err != nil {
@@ -155,7 +155,7 @@ func New(lifecycle context.Context, upstreams []backend.Upstream, opts ...Option
 	}
 	a := &Multiplexer{
 		lifecycleCtx:         lifecycle,
-		upstreams:            append([]backend.Upstream(nil), upstreams...),
+		upstreams:            append([]upstream.Client(nil), upstreams...),
 		byPrefix:             byPrefix,
 		initTimeout:          defaults.MultiplexInitTimeout,
 		listTimeout:          defaults.MultiplexListTimeout,
@@ -187,7 +187,7 @@ func (a *Multiplexer) prefixToUpstreamID() map[string]string {
 	return m
 }
 
-func (a *Multiplexer) initializeUpstream(ctx context.Context, index int, b backend.Upstream, outcome *initializeOutcome) {
+func (a *Multiplexer) initializeUpstream(ctx context.Context, index int, b upstream.Client, outcome *initializeOutcome) {
 	callCtx, cancel := context.WithTimeout(ctx, a.initTimeout)
 	defer cancel()
 	release, err := a.acquireGlobalCallSlot(callCtx)
@@ -227,7 +227,7 @@ func (a *Multiplexer) initializeFailuresOrOmitted(outcome *initializeOutcome, me
 	}
 	for i, b := range a.upstreams {
 		if len(outcome.results[i]) == 0 {
-			all = append(all, PartialFailure{BackendID: b.ID(), Reason: PartialFailureOmitted})
+			all = append(all, PartialFailure{UpstreamID: b.ID(), Reason: PartialFailureOmitted})
 		}
 	}
 	return all
@@ -248,18 +248,15 @@ func (a *Multiplexer) Initialize(ctx context.Context, hostID json.RawMessage) (*
 
 	outcome := newInitializeOutcome(a.strictInit, len(a.upstreams))
 
-	g, ctx := errgroup.WithContext(tctx)
+	var wg sync.WaitGroup
 	for i, b := range a.upstreams {
-		i, b := i, b
-		g.Go(func() error {
-			a.initializeUpstream(ctx, i, b, outcome)
-			return nil
-		})
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			a.initializeUpstream(tctx, i, b, outcome)
+		}()
 	}
-	if err := g.Wait(); err != nil {
-		span.SetStatus(codes.Error, "initialize upstream group")
-		return nil, fmt.Errorf("multiplex: initialize upstreams: %w", err)
-	}
+	wg.Wait()
 
 	if a.strictInit && outcome.strictFailed {
 		span.SetStatus(codes.Error, "strict initialize aggregation")
@@ -349,7 +346,7 @@ func hostParams() json.RawMessage {
 	return b
 }
 
-func mergeInitializeResults(results []json.RawMessage, upstreams []backend.Upstream) (map[string]any, []PartialFailure, error) {
+func mergeInitializeResults(results []json.RawMessage, upstreams []upstream.Client) (map[string]any, []PartialFailure, error) {
 	merged := map[string]any{
 		"protocolVersion": mcpwire.MCPProtocolVersion,
 		"capabilities":    map[string]any{},
@@ -362,7 +359,7 @@ func mergeInitializeResults(results []json.RawMessage, upstreams []backend.Upstr
 		},
 	}
 	capRoot := merged["capabilities"].(map[string]any)
-	backendsList := merged["serverInfo"].(map[string]any)["extras"].(map[string]any)["backends"].([]string)
+	upstreamsList := merged["serverInfo"].(map[string]any)["extras"].(map[string]any)["backends"].([]string)
 
 	var mergeFailures []PartialFailure
 	anyOK := false
@@ -373,7 +370,7 @@ func mergeInitializeResults(results []json.RawMessage, upstreams []backend.Upstr
 		var one map[string]any
 		if err := json.Unmarshal(results[i], &one); err != nil {
 			slog.Warn("initialize merge: skip backend", "backend_id", b.ID(), "err", err)
-			mergeFailures = append(mergeFailures, PartialFailure{BackendID: b.ID(), Reason: PartialFailureOmitted})
+			mergeFailures = append(mergeFailures, PartialFailure{UpstreamID: b.ID(), Reason: PartialFailureOmitted})
 			continue
 		}
 		anyOK = true
@@ -381,12 +378,12 @@ func mergeInitializeResults(results []json.RawMessage, upstreams []backend.Upstr
 			merged["protocolVersion"] = pv
 		}
 		shallowMerge(capRoot, one["capabilities"])
-		backendsList = append(backendsList, b.ID())
+		upstreamsList = append(upstreamsList, b.ID())
 	}
 	if !anyOK {
 		return nil, nil, errNoUpstreamsResponded
 	}
-	merged["serverInfo"].(map[string]any)["extras"].(map[string]any)["backends"] = backendsList
+	merged["serverInfo"].(map[string]any)["extras"].(map[string]any)["backends"] = upstreamsList
 	return merged, mergeFailures, nil
 }
 
@@ -416,12 +413,6 @@ func cloneMap(m map[string]any) map[string]any {
 	return out
 }
 
-// InvalidateToolCache drops the cached tools/list payload. Compiled schemas survive, so
-// argument validation keeps working until the next successful refresh replaces them.
-func (a *Multiplexer) InvalidateToolCache() {
-	a.invalidateListCache()
-}
-
 func (a *Multiplexer) invalidateListCache() {
 	a.listCache.invalidate()
 }
@@ -437,12 +428,10 @@ func (a *Multiplexer) semanticRoutingSignal(ctx context.Context, toolName string
 	ver := a.catalogVersion.load()
 	allowMode, allowedList := hostctx.AllowListModeFromContext(ctx)
 	return router.RoutingSignal{
-		SessionID:       hostctx.MCPSessionIDFromContext(ctx),
-		Method:          mcpwire.MethodToolsCall,
 		ToolName:        toolName,
 		ArgumentsJSON:   args,
 		IntentText:      hostctx.ClientIntentFromContext(ctx),
-		AllowedTools:    allowedList,
+		AllowList:       allowedList,
 		AllowListAuthz:  routerAllowListAuthz(allowMode),
 		CatalogVersion:  ver,
 		RecentToolNames: hostctx.RecentToolNamesFromContext(ctx),

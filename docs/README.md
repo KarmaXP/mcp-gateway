@@ -8,7 +8,7 @@ Start with the [repository README](../README.md), then use this map.
 |------|----------|
 | Run the gateway locally in one command | [README — Run it in 30 seconds](../README.md#run-it-in-30-seconds) |
 | Understand local ports and example configs | [local-ports.md](local-ports.md) |
-| Register upstream MCP servers | [ADDING_BACKENDS.md](ADDING_BACKENDS.md) |
+| Register upstream MCP servers | [ADDING_UPSTREAMS.md](ADDING_UPSTREAMS.md) |
 | Contribute code (conventions, `make fmt`, definition of done) | [CONTRIBUTING.md](../CONTRIBUTING.md) |
 | Connect an IDE, script, or agent | [CONNECTING_AGENTS.md](CONNECTING_AGENTS.md) |
 
@@ -43,11 +43,11 @@ Start with the [repository README](../README.md), then use this map.
 |----------|----------|
 | Index of evaluation guides | [evaluation/README.md](evaluation/README.md) |
 | Pre-agent integration (one session) | [evaluation/integration-checklist.md](evaluation/integration-checklist.md) |
-| Real backends + JWT (multibackend benchmark) | [evaluation/scenario-real-backends-jwt.md](evaluation/scenario-real-backends-jwt.md) |
+| Real backends + JWT (multibackend benchmark) | [evaluation/scenario-real-upstreams-jwt.md](evaluation/scenario-real-upstreams-jwt.md) |
 | Recorded calibration numbers | [evaluation/calibration-results.md](evaluation/calibration-results.md) |
-| Multi-backend SRE routing | [evaluation/scenario-sre-multibackend.md](evaluation/scenario-sre-multibackend.md) |
+| Multi-backend SRE routing | [evaluation/scenario-sre-multiupstream.md](evaluation/scenario-sre-multiupstream.md) |
 | JWT tool allow-list | [evaluation/scenario-jwt-allowlist.md](evaluation/scenario-jwt-allowlist.md) |
-| Backend unavailable | [evaluation/scenario-backend-down.md](evaluation/scenario-backend-down.md) |
+| Backend unavailable | [evaluation/scenario-upstream-down.md](evaluation/scenario-upstream-down.md) |
 
 ## Tools in the repo
 

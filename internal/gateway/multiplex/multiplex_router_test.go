@@ -11,8 +11,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/hostctx"
 	"github.com/KarmaXP/mcp-gateway/internal/router"
@@ -21,6 +19,8 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 type mapEmbed struct {
@@ -126,7 +126,7 @@ func TestToolsListReindexAfterErrgroupDoesNotUseCanceledContext(t *testing.T) {
 	emb := &embedCtxDone{inner: base}
 	sr, _ := routerTestSemanticRouter(t, emb, 0.99, true)
 
-	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
+	a, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0), WithSemanticRouter(sr))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 	_, err = a.ToolsList(context.Background(), json.RawMessage(`2`))
@@ -144,7 +144,7 @@ func TestAggregateSemanticRouterExactMatch(t *testing.T) {
 	emb := &mapEmbed{dim: 4, vecs: map[string][]float32{}}
 	sr, _ := routerTestSemanticRouter(t, emb, 0.99, true)
 
-	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
+	a, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0), WithSemanticRouter(sr))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 	_, err = a.ToolsList(context.Background(), json.RawMessage(`2`))
@@ -160,8 +160,8 @@ func TestAggregateSemanticRouterExactMatch(t *testing.T) {
 func TestToolsListFilterListSubsetByIntent(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "p", []string{"echo", "list"})
 	base := &mapEmbed{dim: 4, vecs: make(map[string][]float32)}
-	tEcho := index.ToolRow{Name: "p__echo", Description: "mock tool echo", ParamKeys: nil}
-	tList := index.ToolRow{Name: "p__list", Description: "mock tool list", ParamKeys: nil}
+	tEcho := index.Tool{Name: "p__echo", Description: "mock tool echo", ParamKeys: nil}
+	tList := index.Tool{Name: "p__list", Description: "mock tool list", ParamKeys: nil}
 	dEcho := index.FormatDocument(tEcho)
 	dList := index.FormatDocument(tList)
 	base.vecs[dEcho] = []float32{1, 0, 0, 0}
@@ -178,7 +178,7 @@ func TestToolsListFilterListSubsetByIntent(t *testing.T) {
 	cfg.QueryTimeout = 5 * time.Second
 	sr := router.NewSemanticRouter(cfg, base, st, 4)
 
-	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
+	a, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0), WithSemanticRouter(sr))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 
@@ -203,7 +203,7 @@ func TestHandleToolsListChangedReindexesAndInvalidatesCache(t *testing.T) {
 
 	a, err := New(
 		context.Background(),
-		[]backend.Upstream{up},
+		[]upstream.Client{up},
 		WithListTTL(time.Minute),
 		WithSemanticRouter(sr),
 		withToolsListChangedDebounce(0),
@@ -233,20 +233,20 @@ func TestHandleToolsListChangedReindexesAndInvalidatesCache(t *testing.T) {
 func TestToolsCallRestrictedDisallowedNameReturnsPermissionDeniedWithRouter(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo", "list"})
 	base := &mapEmbed{dim: 4, vecs: make(map[string][]float32)}
-	tRowList := index.FormatDocument(index.ToolRow{Name: "alpha__list", Description: "list tool"})
-	tRowEcho := index.FormatDocument(index.ToolRow{Name: "alpha__echo", Description: "echo tool"})
+	tRowList := index.FormatDocument(index.Tool{Name: "alpha__list", Description: "list tool"})
+	tRowEcho := index.FormatDocument(index.Tool{Name: "alpha__echo", Description: "echo tool"})
 	base.vecs[tRowList] = []float32{1, 0, 0, 0}
 	base.vecs[tRowEcho] = []float32{0, 1, 0, 0}
 
 	sr, _ := routerTestSemanticRouter(t, base, 0.5, false)
-	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
+	a, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0), WithSemanticRouter(sr))
 	require.NoError(t, err)
 	_, err = a.Initialize(context.Background(), json.RawMessage(`1`))
 	require.NoError(t, err)
 	_, err = a.ToolsList(context.Background(), json.RawMessage(`2`))
 	require.NoError(t, err)
 
-	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{"alpha__echo"})
+	ctx := hostctx.WithAllowList(context.Background(), []string{"alpha__echo"})
 	params, _ := json.Marshal(map[string]any{"name": "alpha__list", "arguments": map[string]any{}})
 	resp, err := a.ToolsCall(ctx, json.RawMessage(`3`), params)
 	require.NoError(t, err)
@@ -258,20 +258,20 @@ func TestToolsCallRestrictedDisallowedNameReturnsPermissionDeniedWithRouter(t *t
 func TestToolsCallRestrictedAllowAutoRenameAuthzOnResolvedName(t *testing.T) {
 	b1 := mock.NewMockUpstream("b1", "alpha", []string{"echo", "list"})
 	base := &mapEmbed{dim: 4, vecs: make(map[string][]float32)}
-	tRowList := index.FormatDocument(index.ToolRow{Name: "alpha__list", Description: "list tool"})
-	tRowEcho := index.FormatDocument(index.ToolRow{Name: "alpha__echo", Description: "echo tool"})
+	tRowList := index.FormatDocument(index.Tool{Name: "alpha__list", Description: "list tool"})
+	tRowEcho := index.FormatDocument(index.Tool{Name: "alpha__echo", Description: "echo tool"})
 	base.vecs[tRowList] = []float32{1, 0, 0, 0}
 	base.vecs[tRowEcho] = []float32{0, 1, 0, 0}
 
 	sr, _ := routerTestSemanticRouter(t, base, 0.5, true)
-	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
+	a, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0), WithSemanticRouter(sr))
 	require.NoError(t, err)
 	_, err = a.Initialize(context.Background(), json.RawMessage(`1`))
 	require.NoError(t, err)
 	_, err = a.ToolsList(context.Background(), json.RawMessage(`2`))
 	require.NoError(t, err)
 
-	ctx := hostctx.WithAllowedToolNames(context.Background(), []string{"alpha__echo"})
+	ctx := hostctx.WithAllowList(context.Background(), []string{"alpha__echo"})
 	params, _ := json.Marshal(map[string]any{"name": "alpha__list", "arguments": map[string]any{}})
 	resp, err := a.ToolsCall(ctx, json.RawMessage(`3`), params)
 	require.NoError(t, err)
@@ -285,7 +285,7 @@ func TestAggregateSemanticRouterAmbiguousReturnsCode(t *testing.T) {
 	emb := &mapEmbed{dim: 4, vecs: map[string][]float32{}}
 	sr, _ := routerTestSemanticRouter(t, emb, 0.5, true)
 
-	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
+	a, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0), WithSemanticRouter(sr))
 	require.NoError(t, err)
 	_, _ = a.Initialize(context.Background(), json.RawMessage(`1`))
 	_, err = a.ToolsList(context.Background(), json.RawMessage(`2`))

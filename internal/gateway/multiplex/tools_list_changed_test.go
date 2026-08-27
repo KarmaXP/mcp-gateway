@@ -10,12 +10,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/router"
 	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
 )
 
 type failingToolsListUpstream struct {
@@ -47,7 +47,7 @@ func (u *failingToolsListUpstream) Call(ctx context.Context, req *rpc.Request) (
 
 func TestHandleToolsListChangedWithoutSemanticInvalidatesCache(t *testing.T) {
 	up := newDynamicToolsUpstream("b1", "p", []string{"echo"})
-	a, err := New(context.Background(), []backend.Upstream{up}, WithListTTL(time.Minute))
+	a, err := New(context.Background(), []upstream.Client{up}, WithListTTL(time.Minute))
 	require.NoError(t, err)
 
 	_, err = a.ToolsList(context.Background(), json.RawMessage(`1`))
@@ -76,7 +76,7 @@ func TestHandleToolsListChangedDebouncesUpstreamRefresh(t *testing.T) {
 
 	a, err := New(
 		context.Background(),
-		[]backend.Upstream{up},
+		[]upstream.Client{up},
 		WithListTTL(time.Minute),
 		WithSemanticRouter(sr),
 		withToolsListChangedDebounce(80*time.Millisecond),
@@ -106,7 +106,7 @@ func TestHandleToolsListChangedTimesOutOnStrictUpstreamFailure(t *testing.T) {
 
 	a, err := New(
 		context.Background(),
-		[]backend.Upstream{good, bad},
+		[]upstream.Client{good, bad},
 		WithSemanticRouter(sr),
 		WithListTimeout(20*time.Millisecond),
 		WithAggregationStrict(false, true),

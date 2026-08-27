@@ -22,13 +22,13 @@ func TestSplitRejectDoubleSeparatorInNative(t *testing.T) {
 	require.ErrorIs(t, err, ErrNativeContainsSep)
 }
 
-func TestResolveBackendOrder(t *testing.T) {
+func TestResolveUpstreamOrder(t *testing.T) {
 	m := map[string]string{"z": "id-z", "a": "id-a"}
-	bid, native, err := resolveBackend(m, "z__tool")
+	bid, native, err := resolveUpstream(m, "z__tool")
 	require.NoError(t, err)
 	require.Equal(t, "id-z", bid)
 	require.Equal(t, "tool", native)
-	_, _, err = resolveBackend(m, "unknown__x")
+	_, _, err = resolveUpstream(m, "unknown__x")
 	require.Error(t, err)
 }
 
@@ -44,7 +44,7 @@ func TestSplitRejectsMissingSeparator(t *testing.T) {
 
 func BenchmarkNamespaceAdd(b *testing.B) {
 	const (
-		prefix = "backend0"
+		prefix = "upstream0"
 		native = "search_documents"
 	)
 	b.ReportAllocs()
@@ -62,7 +62,7 @@ func BenchmarkNamespaceAdd(b *testing.B) {
 }
 
 func BenchmarkNamespaceStrip(b *testing.B) {
-	const namespaced = "backend0__search_documents"
+	const namespaced = "upstream0__search_documents"
 	b.ReportAllocs()
 	b.SetBytes(int64(len(namespaced)))
 

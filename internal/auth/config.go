@@ -24,14 +24,17 @@ type JWTAuthConfig struct {
 	SkipPathPrefixes []string
 }
 
-func JWTAuthFromEnvironment() JWTAuthConfig {
+func JWTAuthFromEnvironment() (JWTAuthConfig, error) {
 	ttl := defaults.DefaultJWKSCacheTTL
 	if v := os.Getenv("JWT_JWKS_CACHE_TTL"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			ttl = d
 		}
 	}
-	publicKeyPEM, _ := publicKeyPEMFromEnvironment()
+	publicKeyPEM, err := publicKeyPEMFromEnvironment()
+	if err != nil {
+		return JWTAuthConfig{}, err
+	}
 	return JWTAuthConfig{
 		Mode:             strings.ToLower(strings.TrimSpace(os.Getenv("AUTH_MODE"))),
 		Issuer:           strings.TrimSpace(os.Getenv("JWT_ISS")),
@@ -40,7 +43,7 @@ func JWTAuthFromEnvironment() JWTAuthConfig {
 		PublicKeyPEM:     publicKeyPEM,
 		JWKSCacheTTL:     ttl,
 		SkipPathPrefixes: []string{mcpwire.PathHealthz, mcpwire.PathReadyz},
-	}
+	}, nil
 }
 
 func publicKeyPEMFromEnvironment() (string, error) {

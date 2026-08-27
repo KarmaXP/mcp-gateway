@@ -8,20 +8,20 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 type recordingUpstream struct {
-	inner backend.Upstream
+	inner upstream.Client
 
 	mu      sync.Mutex
 	methods []string
 }
 
-func newRecordingUpstream(inner backend.Upstream) *recordingUpstream {
+func newRecordingUpstream(inner upstream.Client) *recordingUpstream {
 	return &recordingUpstream{inner: inner}
 }
 
@@ -41,21 +41,21 @@ func (r *recordingUpstream) Methods() []string {
 	return append([]string(nil), r.methods...)
 }
 
-type handshakeAwareBackend struct {
-	inner backend.Upstream
+type handshakeAwareUpstream struct {
+	inner upstream.Client
 
 	mu                  sync.Mutex
 	initializedNotified bool
 }
 
-func newHandshakeAwareBackend(inner backend.Upstream) *handshakeAwareBackend {
-	return &handshakeAwareBackend{inner: inner}
+func newHandshakeAwareUpstream(inner upstream.Client) *handshakeAwareUpstream {
+	return &handshakeAwareUpstream{inner: inner}
 }
 
-func (b *handshakeAwareBackend) ID() string     { return b.inner.ID() }
-func (b *handshakeAwareBackend) Prefix() string { return b.inner.Prefix() }
+func (b *handshakeAwareUpstream) ID() string     { return b.inner.ID() }
+func (b *handshakeAwareUpstream) Prefix() string { return b.inner.Prefix() }
 
-func (b *handshakeAwareBackend) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
+func (b *handshakeAwareUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
 	if req.IsNotification() && (req.Method == "notifications/initialized" || req.Method == "initialized") {
 		b.mu.Lock()
 		b.initializedNotified = true
@@ -76,7 +76,7 @@ func (b *handshakeAwareBackend) Call(ctx context.Context, req *rpc.Request) (*rp
 func TestNotifyHostInitializedFansOutToAllUpstreams(t *testing.T) {
 	rec1 := newRecordingUpstream(mock.NewMockUpstream("b1", "alpha", []string{"echo"}))
 	rec2 := newRecordingUpstream(mock.NewMockUpstream("b2", "beta", []string{"ping"}))
-	mpx, err := New(context.Background(), []backend.Upstream{rec1, rec2}, WithListTTL(0))
+	mpx, err := New(context.Background(), []upstream.Client{rec1, rec2}, WithListTTL(0))
 	require.NoError(t, err)
 
 	_, err = mpx.Initialize(context.Background(), json.RawMessage(`1`))
@@ -96,8 +96,8 @@ func TestNotifyHostInitializedFansOutToAllUpstreams(t *testing.T) {
 
 func TestNotifyHostInitializedUnlocksUpstreamToolsList(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	up := newHandshakeAwareBackend(inner)
-	mpx, err := New(context.Background(), []backend.Upstream{up}, WithListTTL(0))
+	up := newHandshakeAwareUpstream(inner)
+	mpx, err := New(context.Background(), []upstream.Client{up}, WithListTTL(0))
 	require.NoError(t, err)
 
 	_, err = mpx.Initialize(context.Background(), json.RawMessage(`1`))

@@ -116,7 +116,7 @@ func TestNewErrorPreservesIDAndPayload(t *testing.T) {
 }
 
 func BenchmarkParseRequest(b *testing.B) {
-	raw := []byte(`{"jsonrpc":"2.0","method":"tools/call","params":{"name":"backend__tool","arguments":{"query":"hello"}},"id":"bench-1"}`)
+	raw := []byte(`{"jsonrpc":"2.0","method":"tools/call","params":{"name":"upstream__tool","arguments":{"query":"hello"}},"id":"bench-1"}`)
 	b.ReportAllocs()
 	b.SetBytes(int64(len(raw)))
 

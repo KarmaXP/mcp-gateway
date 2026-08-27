@@ -17,15 +17,15 @@ func TestResolveToolsCallDenyAllSkipsVectorSearch(t *testing.T) {
 	st := &queryCountingStore{inner: inner}
 	emb := &mapEmbed{vecs: make(map[string][]float32), dim: dim}
 
-	aws := index.ToolRow{Name: "aws__list_buckets", Description: "s3 buckets"}
+	aws := index.Tool{Name: "aws__list_buckets", Description: "s3 buckets"}
 	doc := index.FormatDocument(aws)
 	emb.vecs[doc] = []float32{1, 0, 0, 0}
 
 	cfg := DefaultSemanticRouterRuntimeConfig()
 	cfg.Mode = mode.AssistList
 	sr := NewSemanticRouter(cfg, emb, st, dim)
-	reindexAndApply(t, sr, context.Background(), "v1", []IndexedTool{
-		{ToolRow: aws, UpstreamID: "b1"},
+	reindexAndApply(t, sr, context.Background(), "v1", []CatalogEntry{
+		{Tool: aws, UpstreamID: "b1"},
 	})
 
 	_, dec, err := sr.ResolveToolsCall(context.Background(), RoutingSignal{
@@ -48,8 +48,8 @@ func TestFilterToolsForListDenyAllSkipsEmbed(t *testing.T) {
 	cfg := DefaultSemanticRouterRuntimeConfig()
 	cfg.Mode = mode.FilterList
 	sr := NewSemanticRouter(cfg, emb, st, dim)
-	reindexAndApply(t, sr, context.Background(), "v1", []IndexedTool{
-		{ToolRow: index.ToolRow{Name: "p__echo", Description: "echo"}, UpstreamID: "b1"},
+	reindexAndApply(t, sr, context.Background(), "v1", []CatalogEntry{
+		{Tool: index.Tool{Name: "p__echo", Description: "echo"}, UpstreamID: "b1"},
 	})
 	emb.after = func() { embedCalls++ }
 

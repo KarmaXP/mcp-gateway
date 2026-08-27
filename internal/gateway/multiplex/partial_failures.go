@@ -13,8 +13,8 @@ const (
 )
 
 type PartialFailure struct {
-	BackendID string `json:"backend_id"`
-	Reason    string `json:"reason"`
+	UpstreamID string `json:"backend_id"`
+	Reason     string `json:"reason"`
 }
 
 func classifyCallFailure(err error) string {
@@ -31,7 +31,7 @@ func partialFailuresToMaps(failures []PartialFailure) []map[string]any {
 	out := make([]map[string]any, len(failures))
 	for i, f := range failures {
 		out[i] = map[string]any{
-			"backend_id": f.BackendID,
+			"backend_id": f.UpstreamID,
 			"reason":     f.Reason,
 		}
 	}

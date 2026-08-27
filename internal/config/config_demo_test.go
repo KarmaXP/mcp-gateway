@@ -40,10 +40,10 @@ func TestLoadGatewayExampleYAML(t *testing.T) {
 	cfg, err := Load()
 	require.NoError(t, err)
 	require.Len(t, cfg.Upstreams, 2)
-	require.Equal(t, "backend-alpha", cfg.Upstreams[0].ID)
+	require.Equal(t, "upstream-alpha", cfg.Upstreams[0].ID)
 	require.Equal(t, "alpha", cfg.Upstreams[0].Prefix)
 	require.Equal(t, "http://127.0.0.1:3101", cfg.Upstreams[0].URL)
-	require.Equal(t, "backend-beta", cfg.Upstreams[1].ID)
+	require.Equal(t, "upstream-beta", cfg.Upstreams[1].ID)
 	require.Equal(t, "beta", cfg.Upstreams[1].Prefix)
 	require.Equal(t, "http://127.0.0.1:3102", cfg.Upstreams[1].URL)
 }

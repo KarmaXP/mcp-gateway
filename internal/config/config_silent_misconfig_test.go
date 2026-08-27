@@ -88,6 +88,5 @@ func TestLoadResolvesAbsentDurationsToTheirDefaults(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, defaults.MultiplexInitTimeout, cfg.AggregationInitTimeout())
 	require.Equal(t, defaults.MultiplexListCacheTTL, cfg.AggregationListCacheTTL())
-	require.Equal(t, defaults.MultiplexCallTimeout.String(), cfg.Aggregation.CallTimeout,
-		"normalize resolves the field itself, so the getter is no longer where the default lives")
+	require.Equal(t, defaults.MultiplexCallTimeout, cfg.AggregationCallTimeout())
 }

@@ -8,17 +8,17 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/multiplex"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 func TestBroadcastWorkersStopWithTheLifecycleContext(t *testing.T) {
 	const managers = 4
 	expected := managers * defaults.SessionBroadcastMaxConcurrency
 
-	mpx, err := multiplex.New(context.Background(), []backend.Upstream{mock.NewMockUpstream("b1", "alpha", []string{"echo"})}, multiplex.WithListTTL(0))
+	mpx, err := multiplex.New(context.Background(), []upstream.Client{mock.NewMockUpstream("b1", "alpha", []string{"echo"})}, multiplex.WithListTTL(0))
 	require.NoError(t, err)
 
 	baseline := runtime.NumGoroutine()

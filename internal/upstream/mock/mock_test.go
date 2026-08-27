@@ -12,8 +12,9 @@ import (
 )
 
 func TestToolsCallErrPropagates(t *testing.T) {
-	b := NewMockUpstream("b1", "p", []string{"echo"})
-	b.ToolsCallErr = errors.New("upstream")
+	b := NewMockUpstreamWith("b1", "p", []string{"echo"}, Behaviour{
+		ToolsCallErr: errors.New("upstream"),
+	})
 	params, _ := json.Marshal(map[string]any{"name": "echo"})
 	_, err := b.Call(context.Background(), &rpc.Request{
 		JSONRPC: rpc.JSONRPCVersion,

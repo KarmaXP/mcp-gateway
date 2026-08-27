@@ -1,11 +1,14 @@
 package multiplex
 
 import (
+	"strings"
+
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/namespace"
 	"log/slog"
 	"net/url"
 
@@ -39,7 +42,7 @@ func keepAllowedTools(merged []map[string]any, policyList []string) ([]map[strin
 	out := make([]map[string]any, 0, len(merged))
 	for _, t := range merged {
 		name, _ := t["name"].(string)
-		ok, err := policy.AllowedListContains(name, policyList)
+		ok, err := policy.AllowListPermits(name, policyList)
 		if err != nil {
 			return nil, err
 		}
@@ -74,8 +77,8 @@ type toolSchema struct {
 	enumeratesProperties bool
 }
 
-func (a *Multiplexer) replaceToolSchemasFromMerged(merged []map[string]any) {
-	out := make(map[string]toolSchema)
+func (a *Multiplexer) replaceToolSchemasFromMerged(merged []map[string]any, failures []PartialFailure) {
+	answered := a.answeredUpstreamsByPrefix(failures)
 	var pol *policy.Engine
 	if a.policyHolder != nil {
 		pol = a.policyHolder.Load()
@@ -101,9 +104,34 @@ func (a *Multiplexer) replaceToolSchemasFromMerged(merged []map[string]any) {
 			slog.Warn("tool inputSchema compile skipped", "tool", name, "err", err)
 			continue
 		}
-		out[name] = toolSchema{validator: v, enumeratesProperties: enumeratesProperties(sch)}
+		if tools := answered[a.upstreamPrefixOf(name)]; tools != nil {
+			tools[name] = toolSchema{validator: v, enumeratesProperties: enumeratesProperties(sch)}
+		}
 	}
-	a.schemaRegistry.replace(out)
+	a.schemaRegistry.replaceReachable(answered)
+}
+
+func (a *Multiplexer) answeredUpstreamsByPrefix(failures []PartialFailure) map[string]map[string]toolSchema {
+	failed := make(map[string]struct{}, len(failures))
+	for _, f := range failures {
+		failed[f.UpstreamID] = struct{}{}
+	}
+	answered := make(map[string]map[string]toolSchema, len(a.upstreams))
+	for _, u := range a.upstreams {
+		if _, down := failed[u.ID()]; down {
+			continue
+		}
+		answered[u.Prefix()] = make(map[string]toolSchema)
+	}
+	return answered
+}
+
+func (a *Multiplexer) upstreamPrefixOf(namespacedTool string) string {
+	prefix, _, found := strings.Cut(namespacedTool, namespace.Separator)
+	if !found {
+		return ""
+	}
+	return prefix
 }
 
 func hardenObjectSchemasForValidation(v any) any {
@@ -202,7 +230,7 @@ func (a *Multiplexer) refreshToolSchemasFromListJSON(raw json.RawMessage) {
 	if err != nil {
 		return
 	}
-	a.replaceToolSchemasFromMerged(tools)
+	a.replaceToolSchemasFromMerged(tools, nil)
 }
 
 func parseToolsArrayFromListJSON(raw json.RawMessage) ([]map[string]any, error) {
@@ -240,7 +268,7 @@ func (a *Multiplexer) validateToolArgsWithSpan(ctx context.Context, hostID json.
 	if a.policyHolder != nil {
 		pol = a.policyHolder.Load()
 	}
-	if pol != nil && pol.RequiresStrictSchema(namespacedTool) && !sch.enumeratesProperties {
+	if pol != nil && pol.RequiresInputSchema(namespacedTool) && !sch.enumeratesProperties {
 		err := fmt.Errorf("tool %q requires an input schema that declares its properties (elevated policy)", namespacedTool)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "elevated schema required")

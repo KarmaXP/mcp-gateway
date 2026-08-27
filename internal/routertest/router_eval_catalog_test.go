@@ -27,7 +27,7 @@ func TestRouterEvalCatalogJSONLoads(t *testing.T) {
 
 	names := make(map[string]struct{}, len(catalog))
 	for _, tool := range catalog {
-		names[tool.ToolRow.Name] = struct{}{}
+		names[tool.Tool.Name] = struct{}{}
 	}
 	for _, want := range []string{"k8s__get_pod_logs", "prom__query_instant", "gh__list_prs"} {
 		_, ok := names[want]

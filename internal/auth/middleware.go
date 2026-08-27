@@ -110,7 +110,7 @@ func (m *authMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := hostctx.WithAllowedToolNames(att.ctx, tools)
+	ctx := hostctx.WithAllowList(att.ctx, tools)
 	if sub := claims.Subject(); sub != "" {
 		ctx = hostctx.WithSubjectID(ctx, sub)
 	}

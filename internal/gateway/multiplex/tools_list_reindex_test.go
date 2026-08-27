@@ -8,11 +8,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/router"
 	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 type countingEmbed struct {
@@ -41,7 +41,7 @@ func TestToolsListSkipsSemanticReindexWhenCatalogUnchanged(t *testing.T) {
 	rcfg.TopK = 8
 	sr := router.NewSemanticRouter(rcfg, emb, store.NewInMemoryVectorStore(4), 4)
 
-	a, err := New(context.Background(), []backend.Upstream{b1}, WithListTTL(0), WithSemanticRouter(sr))
+	a, err := New(context.Background(), []upstream.Client{b1}, WithListTTL(0), WithSemanticRouter(sr))
 	require.NoError(t, err)
 
 	_, err = a.ToolsList(context.Background(), json.RawMessage(`1`))

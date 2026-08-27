@@ -1,6 +1,6 @@
 # Connecting agents and MCP hosts
 
-This guide explains how any **MCP host** (IDE, script, or multi-step agent framework) talks to the gateway. The gateway is not an LLM; it multiplexes MCP traffic to your [backends](ADDING_BACKENDS.md).
+This guide explains how any **MCP host** (IDE, script, or multi-step agent framework) talks to the gateway. The gateway is not an LLM; it multiplexes MCP traffic to your [backends](ADDING_UPSTREAMS.md).
 
 **Contract reference:** [OpenAPI](artifacts/openapi/openapi.yaml) (authoritative for HTTP status, headers, and errors).
 
@@ -119,7 +119,7 @@ The repo ships a minimal MCP host in Go (not an LLM agent):
 
 ```bash
 # Terminal 1: gateway + backends
-make demo-backends
+make demo-upstreams
 MCP_GATEWAY_CONFIG=deployments/gateway.example.yaml AUTH_MODE=none make run
 
 # Terminal 2: host client
@@ -157,7 +157,7 @@ Local dev without auth: `AUTH_MODE=none` (default in examples).
 | `on` / `assist_list` | Full `tools/list`; router may rewrite ambiguous `tools/call` names when `allow_auto_rename` is true. |
 | `filter_list` | Narrowed `tools/list` when `X-MCP-Intent` is set; degrades to full catalog when routing is unavailable (JWT filter still applies). |
 
-Requires `QDRANT_URL` and embed sidecar (`make docker-up`). Integration tests probe **`POST /embed`**, not only `/healthz`. See [Adding backends — Semantic router](ADDING_BACKENDS.md#semantic-router-routermode-on).
+Requires `QDRANT_URL` and embed sidecar (`make docker-up`). Integration tests probe **`POST /embed`**, not only `/healthz`. See [Adding upstreams — Semantic router](ADDING_UPSTREAMS.md#semantic-router-routermode-on).
 
 **Exact names win:** if the host sends `k8s__get_pod_logs` exactly, the gateway uses the deterministic path without vector search.
 
@@ -169,14 +169,14 @@ Requires `QDRANT_URL` and embed sidecar (`make docker-up`). Integration tests pr
 
 ## SRE incident flow (target use case)
 
-With backends and mocks from [ADDING_BACKENDS.md](ADDING_BACKENDS.md):
+With backends and mocks from [ADDING_UPSTREAMS.md](ADDING_UPSTREAMS.md):
 
 ```bash
 make sre-up
 make sre-smoke
 ```
 
-Manual MCP validation (three sessions, one tool each): [scenario-sre-multibackend.md](evaluation/scenario-sre-multibackend.md) (`scripts/smoke_e2e.sh`).
+Manual MCP validation (three sessions, one tool each): [scenario-sre-multiupstream.md](evaluation/scenario-sre-multiupstream.md) (`scripts/smoke_e2e.sh`).
 
 Typical agent sequence (same MCP session):
 
@@ -200,7 +200,7 @@ sequenceDiagram
  GW-->>Agent: pull requests
 ```
 
-Walkthrough and traces: [evaluation/scenario-sre-multibackend.md](evaluation/scenario-sre-multibackend.md).
+Walkthrough and traces: [evaluation/scenario-sre-multiupstream.md](evaluation/scenario-sre-multiupstream.md).
 
 Canonical tool names: `k8s__get_pod_logs`, `prom__query_instant`, `gh__list_prs` (see [local-ports.md](local-ports.md)).
 
@@ -284,7 +284,7 @@ result = session.tools_call(
 
 Follow the **[integration checklist](evaluation/integration-checklist.md)** in one session (same gateway URL throughout):
 
-1. Confirm upstreams and `tools/call` — SRE mock: `make sre-smoke` or [scenario-sre-multibackend.md](evaluation/scenario-sre-multibackend.md); multibackend benchmark (real stdio + JWT): [scenario-real-backends-jwt.md](evaluation/scenario-real-backends-jwt.md).
+1. Confirm upstreams and `tools/call` — SRE mock: `make sre-smoke` or [scenario-sre-multiupstream.md](evaluation/scenario-sre-multiupstream.md); multibackend benchmark (real stdio + JWT): [scenario-real-upstreams-jwt.md](evaluation/scenario-real-upstreams-jwt.md).
 2. Run `go run ./scripts/mcp_host_demo` with your `GATEWAY_URL` (and JWT when required).
 3. JWT allow-list: [scenario-jwt-allowlist.md](evaluation/scenario-jwt-allowlist.md) / multibackend benchmark walkthrough.
 4. Loadtest (`AUTH_MODE=none`) or JWT loadtest (`-token` / `LOADTEST_JWT`, one worker) or JWT smoke + Prometheus. See [calibration-results.md](evaluation/calibration-results.md) and [errors.md](errors.md#known-limitations-multiplexing).
@@ -323,7 +323,7 @@ See also the **[error reference](errors.md)** for HTTP status codes and JSON-RPC
 
 ## Related docs
 
-- [ADDING_BACKENDS.md](ADDING_BACKENDS.md)
+- [ADDING_UPSTREAMS.md](ADDING_UPSTREAMS.md)
 - [configuration.md](configuration.md)
 - [errors.md](errors.md)
 - [mcp-capabilities.md](mcp-capabilities.md)

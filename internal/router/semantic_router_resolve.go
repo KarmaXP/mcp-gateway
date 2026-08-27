@@ -22,13 +22,13 @@ func (sr *SemanticRouter) ResolveToolsCall(ctx context.Context, sig RoutingSigna
 	start := time.Now()
 	dec := &RoutingDecision{FallbackLayer: "vector"}
 
-	serverVer := sr.CatalogVersion()
-	if sig.CatalogVersion != "" && serverVer != "" && sig.CatalogVersion != serverVer {
+	routerCatalogVersion := sr.CatalogVersion()
+	if sig.CatalogVersion != "" && routerCatalogVersion != "" && sig.CatalogVersion != routerCatalogVersion {
 		decStale, err := sr.staleCatalogDecisionResult(sig, start)
 		return "", decStale, err
 	}
-	if serverVer != "" {
-		sig.CatalogVersion = serverVer
+	if routerCatalogVersion != "" {
+		sig.CatalogVersion = routerCatalogVersion
 	}
 
 	if decStale, err := sr.staleCatalogDecision(sig, start); err != nil {
@@ -73,7 +73,7 @@ func (sr *SemanticRouter) routingAllowanceAndAlias(sig RoutingSignal) (allowed [
 		return nil, sig.ToolName, filter, rl, true
 	}
 
-	allowed = append([]string(nil), sig.AllowedTools...)
+	allowed = append([]string(nil), sig.AllowList...)
 	if rl != nil {
 		allowed, narrowed = rl.NarrowAllowed(sig.IntentText, allowed, sr.listCatalog())
 	}
@@ -108,7 +108,7 @@ func (sr *SemanticRouter) tryExactToolResolution(ctx context.Context, sig Routin
 
 	dec.UpstreamID = sr.upstreamID(toolForExact)
 	dec.ToolNameNamespaced = toolForExact
-	dec.Confidence = exactMatchConfidence
+	dec.Score = exactMatchConfidence
 
 	if rl != nil && strings.TrimSpace(sig.ToolName) != "" && toolForExact != sig.ToolName {
 		dec.FallbackLayer = "rules"
@@ -159,7 +159,7 @@ func (sr *SemanticRouter) resolveByVectorSearch(ctx context.Context, sig Routing
 	top := results[0]
 	dec.ToolNameNamespaced = top.ToolName
 	dec.UpstreamID = top.UpstreamID
-	dec.Confidence = top.Score
+	dec.Score = top.Score
 
 	if err := sr.validateVectorTop(ctx, sig, start, dec, results, top); err != nil {
 		return "", dec, err

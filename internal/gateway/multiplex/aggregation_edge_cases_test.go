@@ -8,18 +8,18 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/KarmaXP/mcp-gateway/internal/backend"
-	"github.com/KarmaXP/mcp-gateway/internal/backend/mock"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/errcodes"
 	"github.com/KarmaXP/mcp-gateway/internal/router"
 	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream"
+	"github.com/KarmaXP/mcp-gateway/internal/upstream/mock"
 )
 
 func TestToolsCallRejectsEmptyToolName(t *testing.T) {
 	b := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	mpx, err := New(context.Background(), []backend.Upstream{b}, WithListTTL(0))
+	mpx, err := New(context.Background(), []upstream.Client{b}, WithListTTL(0))
 	require.NoError(t, err)
 	_, err = mpx.Initialize(context.Background(), json.RawMessage(`0`))
 	require.NoError(t, err)
@@ -36,16 +36,16 @@ func TestMergeNamespacedToolListDeduplicatesByName(t *testing.T) {
 	per := [][]map[string]any{
 		{{"name": "echo"}, {"name": "echo"}},
 	}
-	merged := mergeNamespacedToolList([]backend.Upstream{alpha}, per)
+	merged := mergeNamespacedToolList([]upstream.Client{alpha}, per)
 	require.Len(t, merged, 1)
 	require.Equal(t, "alpha__echo", merged[0]["name"])
 }
 
-type nilListResponseBackend struct {
+type nilListResponseUpstream struct {
 	*mock.MockUpstream
 }
 
-func (n *nilListResponseBackend) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
+func (n *nilListResponseUpstream) Call(ctx context.Context, req *rpc.Request) (*rpc.Response, error) {
 	switch req.Method {
 	case "resources/list", "prompts/list", "resources/read", "prompts/get":
 		return nil, nil
@@ -56,8 +56,8 @@ func (n *nilListResponseBackend) Call(ctx context.Context, req *rpc.Request) (*r
 
 func TestResourcesListNilUpstreamResponseNoPanic(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", nil)
-	up := &nilListResponseBackend{MockUpstream: inner}
-	mpx, err := New(context.Background(), []backend.Upstream{up}, WithListTTL(0))
+	up := &nilListResponseUpstream{MockUpstream: inner}
+	mpx, err := New(context.Background(), []upstream.Client{up}, WithListTTL(0))
 	require.NoError(t, err)
 	_, err = mpx.Initialize(context.Background(), json.RawMessage(`0`))
 	require.NoError(t, err)
@@ -69,8 +69,8 @@ func TestResourcesListNilUpstreamResponseNoPanic(t *testing.T) {
 
 func TestInvokeUpstreamGenericNilResponse(t *testing.T) {
 	inner := mock.NewMockUpstream("b1", "alpha", []string{"echo"})
-	up := &nilListResponseBackend{MockUpstream: inner}
-	mpx, err := New(context.Background(), []backend.Upstream{up}, WithListTTL(0))
+	up := &nilListResponseUpstream{MockUpstream: inner}
+	mpx, err := New(context.Background(), []upstream.Client{up}, WithListTTL(0))
 	require.NoError(t, err)
 	_, err = mpx.Initialize(context.Background(), json.RawMessage(`0`))
 	require.NoError(t, err)
@@ -104,7 +104,7 @@ func TestHandleToolsListChangedRespectsCanceledLifecycleContext(t *testing.T) {
 
 	lifecycle, cancel := context.WithCancel(context.Background())
 	cancel()
-	mpx, err := New(lifecycle, []backend.Upstream{up},
+	mpx, err := New(lifecycle, []upstream.Client{up},
 		WithListTTL(0),
 		WithSemanticRouter(sr),
 		withToolsListChangedDebounce(0),

@@ -1,4 +1,4 @@
-// Command mock_upstream is a configurable MCP HTTP+SSE mock for multi-backend demos (alpha/beta).
+// Command mock_upstream is a configurable MCP HTTP+SSE mock for multi-upstream demos (alpha/beta).
 package main
 
 import (

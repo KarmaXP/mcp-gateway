@@ -49,7 +49,7 @@ func TestEngine_EffectiveAllowList_EmptyIntersectionDenyAll(t *testing.T) {
 	require.NotNil(t, got)
 	require.Empty(t, got)
 
-	ok, err := AllowedListContains("jwt__only", got)
+	ok, err := AllowListPermits("jwt__only", got)
 	require.NoError(t, err)
 	require.False(t, ok)
 }
@@ -112,8 +112,8 @@ func TestEngine_RequiresStrictSchema(t *testing.T) {
 	e := NewEngine(EngineInput{
 		ElevatedTools: []string{"a__danger"},
 	})
-	require.True(t, e.RequiresStrictSchema("a__danger"))
-	require.False(t, e.RequiresStrictSchema("a__safe"))
+	require.True(t, e.RequiresInputSchema("a__danger"))
+	require.False(t, e.RequiresInputSchema("a__safe"))
 }
 
 func TestEngine_HardenSchemas(t *testing.T) {
@@ -137,7 +137,7 @@ func TestEffectiveAllowListDeniesWhenNothingIsAuthorized(t *testing.T) {
 			require.NotNil(t, got, "a nil list means unrestricted downstream, which is the fail-open this closes")
 			require.Empty(t, got)
 
-			ok, err := AllowedListContains("alpha__echo", got)
+			ok, err := AllowListPermits("alpha__echo", got)
 			require.NoError(t, err)
 			require.False(t, ok)
 		})

@@ -558,7 +558,7 @@ Common Go ecosystem libraries in use: `github.com/golang-jwt/jwt/v5`, `github.co
 | Mode | Behavior |
 | ----- | -------------------------------------------------------------------------------------------------------------------------------- |
 | Local dev | `AUTH_MODE=none` or JWT without RAR: minimal validation only — **not** safe for public exposure ([DEVELOPER.md](../DEVELOPER.md)). |
-| Production-style | `AUTH_MODE=jwt` + RAR merge + JSON Schema + audit — implemented; use in multibackend benchmark ([scenario-real-backends-jwt.md](../evaluation/scenario-real-backends-jwt.md)). |
+| Production-style | `AUTH_MODE=jwt` + RAR merge + JSON Schema + audit — implemented; use in multibackend benchmark ([scenario-real-upstreams-jwt.md](../evaluation/scenario-real-upstreams-jwt.md)). |
 
 
 #### Security acceptance criteria — **met**
