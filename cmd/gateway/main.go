@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -10,14 +12,25 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/app"
 	"github.com/KarmaXP/mcp-gateway/internal/config"
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
+	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
 	"github.com/KarmaXP/mcp-gateway/internal/telemetry"
 )
 
 func main() {
+	showVersion := flag.Bool("version", false, "print the gateway version and exit")
+	flag.Parse()
+	if *showVersion {
+		fmt.Println(versionLine())
+		return
+	}
 	if err := run(); err != nil {
 		slog.Error("fatal", "err", err)
 		os.Exit(1)
 	}
+}
+
+func versionLine() string {
+	return mcpwire.GatewayClientName + " " + mcpwire.GatewayClientVersion
 }
 
 func run() error {

@@ -97,7 +97,7 @@ JWKS or signature failure → **401** (fail-closed). There is no bypass when JWK
 | `elevated_tools` | Tools that require compiled JSON Schema (elevated-tools policy) |
 | `tool_groups` | Named groups for JWT `mcp_tool_groups` |
 | `allow_on_eval_failure` / `POLICY_ALLOW_ON_EVAL_FAILURE` | If `true`, a malformed RAR degrades the principal to deny-all instead of returning 401. Covers RAR parsing only |
-| `harden_schemas` / `POLICY_HARDEN_SCHEMAS` | **Default true.** Completes every tool schema that enumerates properties with `additionalProperties: false`; a schema that enumerates none is left open. Set false to accept undeclared arguments |
+| `harden_schemas` / `POLICY_HARDEN_SCHEMAS` | **Default true.** Completes every tool schema that enumerates properties with `additionalProperties: false`, both in the `tools/list` the host is served and in the validator that enforces it; a schema that enumerates none is left open. Set false to accept undeclared arguments |
 | `max_argument_*` | Size/depth/key limits before schema validation |
 | `audit_sink` / `POLICY_AUDIT_*` | `slog` (default) or `syslog` |
 | _(env only)_ `POLICY_AUDIT_SUBJECT_PEPPER` | Secret that keys the subject pseudonym in audit records. Keep it stable for a deployment, or pseudonyms stop correlating across restarts. Absent means unkeyed |

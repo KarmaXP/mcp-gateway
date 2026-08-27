@@ -6,7 +6,7 @@
 # Use the floating alpine tag so the image resolves regardless of which Alpine
 # version ships with Go 1.26 (currently 3.22; avoid pinning the alpine minor
 # here since CGO_ENABLED=0 produces a fully static binary anyway).
-FROM golang:1.26-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 
 WORKDIR /src
 
@@ -16,7 +16,10 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+# Hardcoding amd64 here put an amd64 binary in an arm64 image, which runs only under emulation.
+ARG TARGETOS
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
     go build \
       -trimpath \
       -ldflags="-s -w" \
