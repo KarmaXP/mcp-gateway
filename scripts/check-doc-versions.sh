@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Fails when the dependency table in docs/DEVELOPER.md disagrees with go.mod.
+# Fails when a version the documentation states disagrees with the source it came from:
+# the dependency table in docs/DEVELOPER.md against go.mod, and the README's MCP badge
+# against mcpwire.MCPProtocolVersion.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -33,4 +35,24 @@ if [[ "${stale}" -gt 0 ]]; then
   echo "check-doc-versions: ${stale} stale version(s) in the dependency table." >&2
   exit 1
 fi
-echo "check-doc-versions: the dependency table matches go.mod."
+
+readme="README.md"
+source_version="$(grep -oE 'MCPProtocolVersion = "[^"]+"' internal/gateway/mcpwire/protocol.go \
+  | head -1 | sed -E 's|.*"(.*)"|\1|')"
+badge_version="$( { grep -oE 'img\.shields\.io/badge/MCP-[0-9]{4}(--[0-9]{2}){2}' "${readme}" || true; } \
+  | head -1 | sed -E 's|.*/MCP-||; s|--|-|g')"
+
+if [[ -z "${source_version}" ]]; then
+  echo "check-doc-versions: MCPProtocolVersion not found in mcpwire; the badge check is checking nothing." >&2
+  exit 1
+fi
+if [[ -z "${badge_version}" ]]; then
+  echo "check-doc-versions: no MCP protocol badge found in ${readme}; the badge check is checking nothing." >&2
+  exit 1
+fi
+if [[ "${badge_version}" != "${source_version}" ]]; then
+  echo "check-doc-versions: ${readme} shows MCP ${badge_version}, mcpwire speaks ${source_version}" >&2
+  exit 1
+fi
+
+echo "check-doc-versions: the dependency table matches go.mod, and the MCP badge says ${source_version}."

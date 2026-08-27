@@ -23,4 +23,20 @@ if awk -v t="${total}" -v f="${FLOOR}" 'BEGIN { exit !(t < f) }'; then
   echo "check-coverage: ${total}% is below the ${FLOOR}% floor" >&2
   exit 1
 fi
-echo "check-coverage: ${total}% (floor ${FLOOR}%)"
+
+# The README states a number a reader will believe, so it may understate but never overstate.
+README="${COVERAGE_README:-README.md}"
+claimed="$( { grep -oE 'img\.shields\.io/badge/coverage-[0-9]+(\.[0-9]+)?%25' "${README}" || true; } \
+  | head -1 | sed -E 's|.*/coverage-||; s|%25$||')"
+
+if [[ -z "${claimed}" ]]; then
+  echo "check-coverage: no coverage badge found in ${README}; the badge check is checking nothing." >&2
+  exit 1
+fi
+
+if awk -v c="${claimed}" -v t="${total}" 'BEGIN { exit !(c > t) }'; then
+  echo "check-coverage: ${README} claims ${claimed}% but coverage is ${total}%" >&2
+  exit 1
+fi
+
+echo "check-coverage: ${total}% (floor ${FLOOR}%, README claims ${claimed}%)"
