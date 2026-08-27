@@ -22,6 +22,28 @@ func TestSplitRejectDoubleSeparatorInNative(t *testing.T) {
 	require.ErrorIs(t, err, ErrNativeContainsSep)
 }
 
+func TestJoinRejectsSeparatorInNativeName(t *testing.T) {
+	_, err := Join("a", "foo__bar")
+	require.ErrorIs(t, err, ErrNativeContainsSep)
+}
+
+func TestJoinNeverProducesANameSplitCannotRead(t *testing.T) {
+	natives := []string{"foo__bar", "__lead", "trail__", "a__b__c"}
+	for _, native := range natives {
+		t.Run(native, func(t *testing.T) {
+			joined, err := Join("a", native)
+			if err != nil {
+				require.ErrorIs(t, err, ErrNativeContainsSep)
+				return
+			}
+			_, back, splitErr := Split(joined)
+			require.NoError(t, splitErr,
+				"Join published %q, which Split rejects, so the catalog would advertise an uncallable tool", joined)
+			require.Equal(t, native, back)
+		})
+	}
+}
+
 func TestResolveUpstreamOrder(t *testing.T) {
 	m := map[string]string{"z": "id-z", "a": "id-a"}
 	bid, native, err := resolveUpstream(m, "z__tool")
