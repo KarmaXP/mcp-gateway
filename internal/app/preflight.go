@@ -3,10 +3,13 @@ package app
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/KarmaXP/mcp-gateway/internal/config"
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
@@ -15,7 +18,10 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/router/store"
 )
 
-const readinessProbeTimeout = 2 * time.Second
+const (
+	readinessProbeTimeout = 2 * time.Second
+	probeBodyDrainLimit   int64 = 4 << 10
+)
 
 type dependencyReadinessChecker struct {
 	httpClient *http.Client
@@ -24,13 +30,20 @@ type dependencyReadinessChecker struct {
 }
 
 func (c *dependencyReadinessChecker) CheckReadiness(ctx context.Context) error {
-	if err := probeAnyHealthPath(ctx, c.httpClient, c.qdrantURL, "/readyz", "/healthz"); err != nil {
-		return fmt.Errorf("qdrant dependency unhealthy: %w", err)
-	}
-	if err := probeAnyHealthPath(ctx, c.httpClient, c.embedURL, "/healthz"); err != nil {
-		return fmt.Errorf("embed dependency unhealthy: %w", err)
-	}
-	return nil
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		if err := probeAnyHealthPath(gctx, c.httpClient, c.qdrantURL, "/readyz", "/healthz"); err != nil {
+			return fmt.Errorf("qdrant dependency unhealthy: %w", err)
+		}
+		return nil
+	})
+	g.Go(func() error {
+		if err := probeAnyHealthPath(gctx, c.httpClient, c.embedURL, "/healthz"); err != nil {
+			return fmt.Errorf("embed dependency unhealthy: %w", err)
+		}
+		return nil
+	})
+	return g.Wait()
 }
 
 func probeAnyHealthPath(ctx context.Context, client *http.Client, baseURL string, paths ...string) error {
@@ -60,7 +73,10 @@ func probeHealthPath(ctx context.Context, client *http.Client, baseURL, path str
 	if err != nil {
 		return fmt.Errorf("probe %s failed: %w", u, err)
 	}
-	defer res.Body.Close()
+	defer func() {
+		_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, probeBodyDrainLimit))
+		_ = res.Body.Close()
+	}()
 	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
 		return fmt.Errorf("probe %s returned status %d", u, res.StatusCode)
 	}
