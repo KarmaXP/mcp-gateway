@@ -93,7 +93,7 @@ func (a *Multiplexer) replaceToolSchemasFromMerged(merged []map[string]any, fail
 			continue
 		}
 		if pol.HardenSchemas() {
-			sch = hardenObjectSchemasForValidation(sch)
+			hardenObjectSchemas(sch)
 		}
 		raw, err := json.Marshal(sch)
 		if err != nil || len(raw) == 0 || string(raw) == jsonNullLiteral {
@@ -132,31 +132,6 @@ func (a *Multiplexer) upstreamPrefixOf(namespacedTool string) string {
 		return ""
 	}
 	return prefix
-}
-
-func hardenObjectSchemasForValidation(v any) any {
-	cp := cloneJSONLikeValue(v)
-	hardenObjectSchemas(cp)
-	return cp
-}
-
-func cloneJSONLikeValue(v any) any {
-	switch x := v.(type) {
-	case map[string]any:
-		out := make(map[string]any, len(x))
-		for k, vv := range x {
-			out[k] = cloneJSONLikeValue(vv)
-		}
-		return out
-	case []any:
-		out := make([]any, len(x))
-		for i := range x {
-			out[i] = cloneJSONLikeValue(x[i])
-		}
-		return out
-	default:
-		return v
-	}
 }
 
 var schemaCombinatorKeys = []string{"allOf", "anyOf", "oneOf", "not", "if", "then", "else", "items", "prefixItems", "contains", "propertyNames"}

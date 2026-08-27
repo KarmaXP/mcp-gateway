@@ -71,7 +71,7 @@ info:
     | YAML key | Env var(s) | Type | Behavior / notes |
     |---|---|---|---|
     | `policy.allow_on_eval_failure` | `POLICY_ALLOW_ON_EVAL_FAILURE` | `bool` | Opt-in degradation for a malformed or unparseable JWT `authorization_details` (RAR): when true the request is not rejected, but the principal is degraded to **deny-all**, never to their `mcp_tools` / `mcp_tool_groups` list. Covers RAR parsing only. Default is fail-closed (401). |
-    | `policy.harden_schemas` | `POLICY_HARDEN_SCHEMAS` | `bool` | **Default true.** Every tool schema that enumerates properties is completed with `additionalProperties: false` before compilation (SEC4); a schema enumerating none stays open. Set false to accept undeclared arguments. |
+    | `policy.harden_schemas` | `POLICY_HARDEN_SCHEMAS` | `bool` | **Default true.** Every tool schema that enumerates properties is completed with `additionalProperties: false` (SEC4), in the published `tools/list` and in the validator alike; a schema enumerating none stays open. Set false to accept undeclared arguments. |
     | `policy.max_argument_bytes` | _(none)_ | `int` | Maximum serialized argument bytes accepted by policy argument validator. |
     | `policy.max_argument_depth` | _(none)_ | `int` | Maximum nested object/array depth accepted by policy argument validator. |
     | `policy.max_argument_keys` | _(none)_ | `int` | Maximum number of object keys accepted by policy argument validator. |
