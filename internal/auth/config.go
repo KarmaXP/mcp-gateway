@@ -24,6 +24,8 @@ type JWTAuthConfig struct {
 	SkipPathPrefixes []string
 }
 
+const authModeJWT = "jwt"
+
 func JWTAuthFromEnvironment() (JWTAuthConfig, error) {
 	ttl := defaults.DefaultJWKSCacheTTL
 	if v := os.Getenv("JWT_JWKS_CACHE_TTL"); v != "" {
@@ -31,12 +33,13 @@ func JWTAuthFromEnvironment() (JWTAuthConfig, error) {
 			ttl = d
 		}
 	}
+	mode := strings.ToLower(strings.TrimSpace(os.Getenv("AUTH_MODE")))
 	publicKeyPEM, err := publicKeyPEMFromEnvironment()
-	if err != nil {
+	if err != nil && mode == authModeJWT {
 		return JWTAuthConfig{}, err
 	}
 	return JWTAuthConfig{
-		Mode:             strings.ToLower(strings.TrimSpace(os.Getenv("AUTH_MODE"))),
+		Mode:             mode,
 		Issuer:           strings.TrimSpace(os.Getenv("JWT_ISS")),
 		Audience:         strings.TrimSpace(os.Getenv("JWT_AUD")),
 		JWKSURL:          strings.TrimSpace(os.Getenv("JWT_JWKS_URL")),

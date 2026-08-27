@@ -34,7 +34,7 @@ func NewValidator(cfg JWTAuthConfig) (*Validator, error) {
 	if cfg.Mode == "" || cfg.Mode == "none" {
 		return nil, nil
 	}
-	if cfg.Mode != "jwt" {
+	if cfg.Mode != authModeJWT {
 		return nil, fmt.Errorf("auth: unknown AUTH_MODE %q", cfg.Mode)
 	}
 	if err := checkRequiredJWTSettings(cfg); err != nil {
