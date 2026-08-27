@@ -5,7 +5,7 @@ This scenario validates JWT-based tool authorization in gateway mode:
 - `tools/list` is filtered to the effective allow-list.
 - `tools/call` is denied (`PermissionDenied`, `-32003`) for tools outside that allow-list.
 
-**Full multibackend benchmark** (real stdio upstreams + OTLP + Prometheus): [scenario-real-upstreams-jwt.md](scenario-real-upstreams-jwt.md).
+**Full multiupstream benchmark** (real stdio upstreams + OTLP + Prometheus): [scenario-real-upstreams-jwt.md](scenario-real-upstreams-jwt.md).
 
 The claim model follows [ADR 0003](../adr/0003-security-rar-jwt-merge-failmode.md):
 
@@ -32,15 +32,15 @@ export JWT_ISS="https://dev.local"
 export JWT_AUD="mcp-gateway"
 ```
 
-## Step 2: Generate a base token with `tools/gen-jwt`
+## Step 2: Generate a base token with `cmd/gen-jwt`
 
 ```bash
 # From the mcp-gateway module root:
-BASE_JWT="$(go run ./tools/gen-jwt -issuer "${JWT_ISS}" -audience "${JWT_AUD}" -key /tmp/mcp-jwt.key)"
+BASE_JWT="$(go run ./cmd/gen-jwt -issuer "${JWT_ISS}" -audience "${JWT_AUD}" -key /tmp/mcp-jwt.key)"
 echo "${BASE_JWT}" | cut -c1-32
 ```
 
-`tools/gen-jwt` gives a signed RS256 token with registered claims (`iss`, `aud`, `exp`, `iat`).
+`cmd/gen-jwt` gives a signed RS256 token with registered claims (`iss`, `aud`, `exp`, `iat`).
 
 ## Step 3: Use JWT claims for this scenario (ADR 0003 shape)
 
@@ -136,7 +136,7 @@ Expected:
 
 - HTTP `202` on POST (transport accepted).
 - SSE JSON-RPC error for `id: 7` with code `-32003` (`PermissionDenied`).
-- Backend tool execution is skipped for that denied call.
+- Upstream tool execution is skipped for that denied call.
 
 ## Cleanup
 

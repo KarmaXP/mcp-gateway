@@ -1,4 +1,4 @@
-# Minimal plug-and-play config: one local MCP upstream (scripts/smoke_upstream on :31400).
+# Minimal plug-and-play config: one local MCP upstream (cmd/smoke_upstream on :31400).
 # Used by: make demo, make run (default), MCP_GATEWAY_CONFIG in quick start.
 #
 # Multi-backend example: deployments/gateway.example.yaml (run make demo-upstreams first).

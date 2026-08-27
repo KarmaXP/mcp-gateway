@@ -1,6 +1,6 @@
 # Connecting agents and MCP hosts
 
-This guide explains how any **MCP host** (IDE, script, or multi-step agent framework) talks to the gateway. The gateway is not an LLM; it multiplexes MCP traffic to your [backends](ADDING_UPSTREAMS.md).
+This guide explains how any **MCP host** (IDE, script, or multi-step agent framework) talks to the gateway. The gateway is not an LLM; it multiplexes MCP traffic to your [upstreams](ADDING_UPSTREAMS.md).
 
 **Contract reference:** [OpenAPI](artifacts/openapi/openapi.yaml) (authoritative for HTTP status, headers, and errors).
 
@@ -15,7 +15,7 @@ flowchart LR
  k8s[k8s MCP]
  prom[prom MCP]
  gh[gh MCP]
- other[other backends…]
+ other[other upstreams…]
 
  host <-->|SSE + POST /mcp/rpc| gw
  gw <-->|prefix__ tools| k8s
@@ -28,7 +28,7 @@ flowchart LR
 |------|----------------|
 | **Host / agent** | Reasoning, tool choice, session with the gateway (this doc). |
 | **Gateway** | Auth, merge catalogs, route ambiguous `tools/call`, forward RPCs. |
-| **Backend** | Real MCP tools (cluster API, metrics, GitHub, …). |
+| **Upstream** | Real MCP tools (cluster API, metrics, GitHub, …). |
 
 In the intended SRE setup, an external agent framework (for example LangGraph) acts as the host: graph nodes issue MCP calls through one gateway base URL. Implement the host in your own repository; this project supplies the gateway and reference clients only.
 
@@ -75,7 +75,7 @@ Skipping step 4 causes **`HandshakeIncomplete` (-32001)** on later tool RPCs.
 sequenceDiagram
  participant Host as MCP host
  participant GW as mcp-gateway
- participant BE as Backends
+ participant BE as Upstreams
 
  Host->>GW: GET /mcp/sse
  GW-->>Host: 200 + Mcp-Session-Id
@@ -118,17 +118,17 @@ sequenceDiagram
 The repo ships a minimal MCP host in Go (not an LLM agent):
 
 ```bash
-# Terminal 1: gateway + backends
+# Terminal 1: gateway + upstreams
 make demo-upstreams
 MCP_GATEWAY_CONFIG=deployments/gateway.example.yaml AUTH_MODE=none make run
 
 # Terminal 2: host client
 GATEWAY_URL=http://127.0.0.1:8080 \
  TOOL_NAME=alpha__echo \
- go run ./scripts/mcp_host_demo
+ go run ./cmd/mcp_host_demo
 ```
 
-Details: [`scripts/mcp_host_demo/README.md`](../scripts/mcp_host_demo/README.md).
+Details: [`cmd/mcp_host_demo/README.md`](../cmd/mcp_host_demo/README.md).
 
 Smoke scripts (curl-based): `scripts/smoke_test.sh`, `scripts/smoke_e2e.sh`, `make sre-smoke`.
 
@@ -169,7 +169,7 @@ Requires `QDRANT_URL` and embed sidecar (`make docker-up`). Integration tests pr
 
 ## SRE incident flow (target use case)
 
-With backends and mocks from [ADDING_UPSTREAMS.md](ADDING_UPSTREAMS.md):
+With upstreams and mocks from [ADDING_UPSTREAMS.md](ADDING_UPSTREAMS.md):
 
 ```bash
 make sre-up
@@ -245,9 +245,9 @@ flowchart TB
  coord --> gw
  diag --> gw
  chg --> gw
- gw --> k8s[k8s backend]
- gw --> prom[prom backend]
- gw --> gh[gh backend]
+ gw --> k8s[k8s upstream]
+ gw --> prom[prom upstream]
+ gw --> gh[gh upstream]
 ```
 
 | Agent node | Typical tools (via gateway) |
@@ -284,9 +284,9 @@ result = session.tools_call(
 
 Follow the **[integration checklist](evaluation/integration-checklist.md)** in one session (same gateway URL throughout):
 
-1. Confirm upstreams and `tools/call` — SRE mock: `make sre-smoke` or [scenario-sre-multiupstream.md](evaluation/scenario-sre-multiupstream.md); multibackend benchmark (real stdio + JWT): [scenario-real-upstreams-jwt.md](evaluation/scenario-real-upstreams-jwt.md).
-2. Run `go run ./scripts/mcp_host_demo` with your `GATEWAY_URL` (and JWT when required).
-3. JWT allow-list: [scenario-jwt-allowlist.md](evaluation/scenario-jwt-allowlist.md) / multibackend benchmark walkthrough.
+1. Confirm upstreams and `tools/call` — SRE mock: `make sre-smoke` or [scenario-sre-multiupstream.md](evaluation/scenario-sre-multiupstream.md); multiupstream benchmark (real stdio + JWT): [scenario-real-upstreams-jwt.md](evaluation/scenario-real-upstreams-jwt.md).
+2. Run `go run ./cmd/mcp_host_demo` with your `GATEWAY_URL` (and JWT when required).
+3. JWT allow-list: [scenario-jwt-allowlist.md](evaluation/scenario-jwt-allowlist.md) / multiupstream benchmark walkthrough.
 4. Loadtest (`AUTH_MODE=none`) or JWT loadtest (`-token` / `LOADTEST_JWT`, one worker) or JWT smoke + Prometheus. See [calibration-results.md](evaluation/calibration-results.md) and [errors.md](errors.md#known-limitations-multiplexing).
 5. Wire your host to the same base URL, SSE session, and headers documented above.
 
@@ -315,7 +315,7 @@ See also the **[error reference](errors.md)** for HTTP status codes and JSON-RPC
 | `401` | JWT missing/invalid or policy merge failed. |
 | `-32003` PermissionDenied | Tool not in JWT/RAR allow-list. |
 | `-32004` ToolRoutingAmbiguous | Router could not pick one tool; use exact name or clearer `X-MCP-Intent`. |
-| Empty `tools/list` entry | Backend down or returned `MethodNotFound` for list. |
+| Empty `tools/list` entry | Upstream down or returned `MethodNotFound` for list. |
 | POST `202` but no SSE result | SSE connection closed or not read in parallel. |
 | High loadtest errors under JWT with many workers | Concurrent `tools/list` fan-out; use `-workers 1`. See [errors.md](errors.md#known-limitations-multiplexing). |
 

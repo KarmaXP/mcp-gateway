@@ -48,7 +48,7 @@ To bring the stack up, `make bootstrap` **then** `make docker-up` — compose is
 | `internal/gateway/` | Multiplexer, session, HTTP/SSE server, namespacing, wire constants |
 | `internal/router/` | Semantic router: embeddings, vector store, BM25, deterministic rules |
 | `internal/auth/`, `policy/`, `validate/` | JWT, allow-lists and RAR, argument limits |
-| `internal/backend/` | Upstream transports (HTTP+SSE, stdio) and test doubles |
+| `internal/upstream/` | Upstream transports (HTTP+SSE, stdio) and test doubles |
 | `internal/telemetry/` | OpenTelemetry setup, spans, metrics |
 | `internal/defaults/` | Every cross-package tunable — new timeouts, limits and sizes go here |
 | `internal/gateway/mcpwire/` | MCP and HTTP protocol strings — never duplicate a wire literal |
@@ -58,13 +58,13 @@ To bring the stack up, `make bootstrap` **then** `make docker-up` — compose is
 
 An MCP server the gateway proxies to is an **upstream**, in Go identifiers, log keys and messages.
 
-Four external names keep the older `backend` spelling because they are observable outside the
+Four external names keep the older `upstream` spelling because they are observable outside the
 process: renaming one silently breaks deployed configuration, a host, or someone's saved query. They
 are frozen — rename the Go identifier around them instead.
 
 | Contract | Where | Breaks if renamed |
 |---|---|---|
-| YAML key `backends:` | [`internal/config/config.go:21`](internal/config/config.go:21), every `deployments/*.yaml` | deployed config files |
+| YAML key `upstreams:` | [`internal/config/config.go:21`](internal/config/config.go:21), every `deployments/*.yaml` | deployed config files |
 | Env var `MCP_GATEWAY_BACKENDS` | [`internal/config/config.go`](internal/config/config.go) | deployment environment |
 | OTel span `mcp.backend.call`, attribute `mcp.backend.id` | [`spans.go:16`](internal/telemetry/spans.go:16), [`attrs.go:17`](internal/telemetry/attrs.go:17) | exported traces — any Tempo query or dashboard built on them |
 | JSON `backend_id`, `serverInfo.extras.backends` | [`multiplexer.go:431`](internal/gateway/multiplex/multiplexer.go:431) | responses hosts parse |

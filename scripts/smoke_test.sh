@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end smoke: MCP HTTP+SSE through the gateway to scripts/smoke_upstream.
+# End-to-end smoke: MCP HTTP+SSE through the gateway to cmd/smoke_upstream.
 #
 # Usage:
 #   make smoke
@@ -129,7 +129,7 @@ fi
 
 UPSTREAM_BIN="${SMOKE_UPSTREAM_BIN:-}"
 if [[ -z "${UPSTREAM_BIN}" ]]; then
-  UPSTREAM_BIN="go run ./scripts/smoke_upstream"
+  UPSTREAM_BIN="go run ./cmd/smoke_upstream"
 fi
 GATEWAY_BIN="${SMOKE_GATEWAY_BIN:-}"
 if [[ -z "${GATEWAY_BIN}" ]]; then

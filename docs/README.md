@@ -25,9 +25,10 @@ Start with the [repository README](../README.md), then use this map.
 
 | Goal | Document |
 |------|----------|
+| What depends on what, and one `tools/call` end to end | [architecture/package-layers.md](architecture/package-layers.md) |
+| Decisions and why, one per record | [adr/README.md](adr/README.md) |
 | Overview and where to read next | [architecture/README.md](architecture/README.md) |
 | Full technical specification | [architecture/mcp_gateway.plan.md](architecture/mcp_gateway.plan.md) |
-| Design decisions (ADRs) | [adr/](adr/) |
 
 ## Operations
 
@@ -43,17 +44,17 @@ Start with the [repository README](../README.md), then use this map.
 |----------|----------|
 | Index of evaluation guides | [evaluation/README.md](evaluation/README.md) |
 | Pre-agent integration (one session) | [evaluation/integration-checklist.md](evaluation/integration-checklist.md) |
-| Real backends + JWT (multibackend benchmark) | [evaluation/scenario-real-upstreams-jwt.md](evaluation/scenario-real-upstreams-jwt.md) |
+| Real upstreams + JWT (multiupstream benchmark) | [evaluation/scenario-real-upstreams-jwt.md](evaluation/scenario-real-upstreams-jwt.md) |
 | Recorded calibration numbers | [evaluation/calibration-results.md](evaluation/calibration-results.md) |
-| Multi-backend SRE routing | [evaluation/scenario-sre-multiupstream.md](evaluation/scenario-sre-multiupstream.md) |
+| Multi-upstream SRE routing | [evaluation/scenario-sre-multiupstream.md](evaluation/scenario-sre-multiupstream.md) |
 | JWT tool allow-list | [evaluation/scenario-jwt-allowlist.md](evaluation/scenario-jwt-allowlist.md) |
-| Backend unavailable | [evaluation/scenario-upstream-down.md](evaluation/scenario-upstream-down.md) |
+| Upstream unavailable | [evaluation/scenario-upstream-down.md](evaluation/scenario-upstream-down.md) |
 
 ## Tools in the repo
 
 | Tool | Location |
 |------|----------|
-| Minimal MCP host client | [scripts/mcp_host_demo/README.md](../scripts/mcp_host_demo/README.md) |
+| Minimal MCP host client | [cmd/mcp_host_demo/README.md](../cmd/mcp_host_demo/README.md) |
 | MCP smoke (curl) | `make demo`, `scripts/smoke_test.sh`, `scripts/smoke_e2e.sh` |
-| Load testing | [scripts/loadtest/README.md](../scripts/loadtest/README.md) |
+| Load testing | [cmd/loadtest/README.md](../cmd/loadtest/README.md) |
 | Regenerate router eval catalog JSON | `make gen-router-eval-catalog` |

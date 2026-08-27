@@ -3,7 +3,7 @@
 #
 #   bash scripts/smoke_e2e.sh
 #   GATEWAY_URL=http://127.0.0.1:8080 SMOKE_EXPECT_TOOL=alpha__echo SMOKE_EXPECT_TEXT=ok bash scripts/smoke_e2e.sh
-#   SMOKE_JWT="$(go run ./tools/gen-jwt ...)" bash scripts/smoke_e2e.sh
+#   SMOKE_JWT="$(go run ./cmd/gen-jwt ...)" bash scripts/smoke_e2e.sh
 #   SMOKE_EXPECT_RPC_ERROR=-32003 ...  # JWT deny
 set -euo pipefail
 

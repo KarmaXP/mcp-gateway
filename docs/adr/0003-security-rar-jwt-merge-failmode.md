@@ -40,7 +40,7 @@ Merge rules:
 
 Unknown **`mcp_tool_groups`** entries are an error from `EffectiveAllowList` (fail closed unless degradation is enabled; see Decision 3).
 
-### Scope note (A13.2): JWT/RAR allow-list applies to `tools/*` only
+### Scope note: JWT/RAR allow-list applies to `tools/*` only
 
 The effective allow-list derived from `mcp_tools`, `mcp_tool_groups`, and `authorization_details` is enforced on **`tools/list`** and **`tools/call`** only. It does **not** currently filter or deny **`resources/*`** or **`prompts/*`** gateway methods; those remain pass-through after AuthN in the current scope (see ADR 0004).
 
@@ -56,13 +56,13 @@ Implementation: `internal/policy/engine.go` (`allowOnEvalFail` / `AllowOnEvalFai
 - **Audit:** Allow/deny audit lines are emitted through a pluggable **`policy.AuditSink`** (`Emit(ctx, AuditRecord)`). The default **`SlogAuditSink`** preserves prior behavior: structured **`slog`** (with `mcp_security_audit`, pseudonymised subject, no tokens/args) plus **`telemetry.RecordPolicyDecision`**. The sink is chosen once, at startup, by the composition root (`policy.audit_sink`), wrapped in a **`policy.Auditor`** and handed to the multiplexer with **`multiplex.WithAuditor`**. There is no process-wide sink to swap: an `Auditor` owns its sink, so two gateways in one process do not share an audit trail, and a test injects its own. **Both allow and deny decisions are emitted**, so the trail can answer who successfully called what, and the metric is emitted from the same place as the record. The subject is pseudonymised with **HMAC-SHA256 keyed by `POLICY_AUDIT_SUBJECT_PEPPER`**, 64 bits wide.
 - **Reload:** The active **`policy.Engine`** is held in a **`policy.Holder`** (`Load` / `Store` with **`atomic.Pointer`**). **`SIGHUP`** triggers **`config.Load()`** and **`holder.Store(policy.NewEngine(cfg.Policy))`**. JWT middleware and multiplex read the engine via **`holder.Load()`** on each use, so **new `POST /mcp/rpc`** requests see the updated policy as soon as the swap completes. An existing **SSE** connection does not by itself block policy updates: every RPC still passes through HTTP middleware. Clients that **cache** `tools/list` or tool metadata **in-process** may observe stale catalog or assumptions until they refresh or reconnect.
 
-## Decision 5 (A7.4 addendum): JWKS unavailability remains fail-closed
+## Decision 5: JWKS unavailability remains fail-closed
 
 - JWKS fetch/lookup/verification failures continue to return **401** in JWT mode (fail closed).
 - The gateway does **not** provide `auth.allow_jwks_unavailable` / `AUTH_ALLOW_JWKS_UNAVAILABLE` bypass semantics.
 - The only explicit insecure bypass for local development remains `AUTH_MODE=none`, which disables JWT validation by configuration rather than silently degrading an otherwise JWT-protected deployment.
 
-## Decision 6 (I1/I3 addendum): an empty allow list is deny-all, and patterns are not paths
+## Decision 6: an empty allow list is deny-all, and patterns are not paths
 
 - **Deny-all replaces "no restriction".** In `AUTH_MODE=jwt`, a token with no `mcp_tools`, no `mcp_tool_groups` and no `authorization_details` now receives an **empty** effective allow list, which denies every tool. `EffectiveAllowList` never returns `nil`.
 - **The full catalog is requested explicitly**, with an `mcp_tools` entry of `"*"`. This keeps the intent in the token, per principal and auditable, instead of in a server-wide switch that would weaken every principal at once.

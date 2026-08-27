@@ -6,13 +6,13 @@ Accepted
 
 ## Context
 
-The gateway is positioned as an SRE/platform MCP broker that aggregates backend capabilities while preserving transparent MCP behavior for hosts. Recent features (JWT/RAR policy, list aggregation, list-change forwarding) require an explicit scope boundary so operators and reviewers understand which methods are policy-enforced, forwarded, or intentionally unsupported.
+The gateway is positioned as an SRE/platform MCP broker that aggregates upstream capabilities while preserving transparent MCP behavior for hosts. Recent features (JWT/RAR policy, list aggregation, list-change forwarding) require an explicit scope boundary so operators and reviewers understand which methods are policy-enforced, forwarded, or intentionally unsupported.
 
 ## Decision
 
 ### 1) Product scope: SRE tools broker
 
-- The gateway's primary role is brokering and observing MCP access to operational tool backends (Kubernetes, metrics, GitHub, runbook/RAG, etc.).
+- The gateway's primary role is brokering and observing MCP access to operational tool upstreams (Kubernetes, metrics, GitHub, runbook/RAG, etc.).
 - It is not a generic policy engine for every MCP primitive in this phase; method-level enforcement is intentionally scoped.
 
 ### 2) AuthN vs AuthZ boundary
@@ -51,7 +51,7 @@ Equivalent side-effects for `resources/*` and `prompts/*` list-change notificati
 ## Consequences
 
 - Security and consent semantics stay clear: granular least-privilege is guaranteed for tool execution, while resources/prompts remain transport pass-through once authenticated.
-- Operators treat `resources/*` and `prompts/*` access control as backend-side responsibility in this phase; gateway-level AuthZ for those method families is **out of scope** (see table above).
+- Operators treat `resources/*` and `prompts/*` access control as upstream-side responsibility in this phase; gateway-level AuthZ for those method families is **out of scope** (see table above).
 - Method support and notification behavior are now explicit for OpenAPI, deployment comments, and security review references.
 
 ## References

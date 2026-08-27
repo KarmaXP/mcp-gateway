@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-The MCP gateway sits between AI hosts and multiple MCP backends. It must push JSON-RPC results to hosts efficiently, route `tools/call` when names do not match the aggregated catalog exactly, and run in environments where reliability, cost, and data governance matter as much as raw model quality.
+The MCP gateway sits between AI hosts and multiple MCP upstreams. It must push JSON-RPC results to hosts efficiently, route `tools/call` when names do not match the aggregated catalog exactly, and run in environments where reliability, cost, and data governance matter as much as raw model quality.
 
 ## Decision 1: Server-Sent Events (SSE) instead of WebSockets
 
@@ -40,12 +40,21 @@ Embeddings are produced by a sidecar (e.g. all-MiniLM-L6-v2) behind `POST /embed
 
 ## Decision 3: Qdrant for vector search
 
-Qdrant provides filtered cosine search over tool vectors with payload fields for catalog version and backend id, supporting explainable routing and versioned indexes.
+Qdrant provides filtered cosine search over tool vectors with payload fields for catalog version and upstream id, supporting explainable routing and versioned indexes.
 
 ### Rationale
 
 - **Performance:** HNSW-style ANN with payload filters matches “many tools, host-selected allow-lists” without post-filtering everything in application memory.
 - **SRE:** HTTP API, clear health endpoints, and first-class Docker/Compose fit for integration tests and local stacks.
+
+### Consequences
+
+- Semantic routing needs a running Qdrant. Without one the gateway still serves, but `router.mode`
+  must be `off`, so the feature is unavailable rather than degraded.
+- The payload carries `catalog_version`, so a reindex writes a new version and the old one is
+  deleted afterwards; a crash between the two leaves points nothing reads.
+- The payload key naming an upstream is frozen at `backend`, since renaming it orphans every
+  indexed point. See [ADR 0006](0006-one-term-upstream.md).
 
 ## References
 

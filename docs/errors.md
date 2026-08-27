@@ -35,8 +35,8 @@ Gateway-specific codes use the implementation-defined range **-32000 … -32099*
 | **-32002** | `RequestRejected` | Optional session middleware hook rejected the request | Check logs; verify auth and request shape. |
 | **-32003** | `PermissionDenied` | Tool not allowed by JWT `mcp_tools` / RAR / policy | Adjust token claims or [policy](configuration.md#policy-block-policy-in-yaml); see [JWT scenario](evaluation/scenario-jwt-allowlist.md). |
 | **-32004** | `ToolRoutingAmbiguous` | Semantic router could not pick a single tool | Send an exact namespaced tool name, or a clearer `X-MCP-Intent` header. |
-| **-32005** | `StrictAggregationFailed` | `aggregation.strict_initialize` or `strict_list` and an upstream failed | Fix upstream health or disable strict mode; see [backend-down scenario](evaluation/scenario-upstream-down.md). |
-| **-32000** | `GatewayInternal` | Upstream call failed, multiplex error, or unexpected gateway fault | Check backend logs and traces (`mcp.backend.call`). |
+| **-32005** | `StrictAggregationFailed` | `aggregation.strict_initialize` or `strict_list` and an upstream failed | Fix upstream health or disable strict mode; see [upstream-down scenario](evaluation/scenario-upstream-down.md). |
+| **-32000** | `GatewayInternal` | Upstream call failed, multiplex error, or unexpected gateway fault | Check upstream logs and traces (`mcp.backend.call`). |
 
 Standard JSON-RPC errors may also appear (from gateway or forwarded upstream):
 
@@ -56,13 +56,13 @@ These behaviors are documented for operators running reference clients and load 
 
 ### Upstream JSON-RPC id forwarding (`tools/call`)
 
-The multiplexor forwards the host JSON-RPC `id` verbatim to upstream MCP servers. Node-based MCP servers parse JSON numbers as IEEE-754 doubles, so ids above 2^53 lose precision and the gateway may fail to match the upstream response (`-32000` backend call failed).
+The multiplexor forwards the host JSON-RPC `id` verbatim to upstream MCP servers. Node-based MCP servers parse JSON numbers as IEEE-754 doubles, so ids above 2^53 lose precision and the gateway may fail to match the upstream response (`-32000` upstream call failed).
 
-**Workaround:** use small monotonic ids in your host client. The in-repo reference clients (`scripts/mcp_host_demo`, `scripts/loadtest`) and `scripts/smoke_e2e.sh` follow this pattern.
+**Workaround:** use small monotonic ids in your host client. The in-repo reference clients (`cmd/mcp_host_demo`, `cmd/loadtest`) and `scripts/smoke_e2e.sh` follow this pattern.
 
 ### Concurrent `tools/list` fan-out
 
-When aggregating `tools/list`, the gateway may reuse a fixed JSON-RPC id per upstream backend within a single fan-out. Concurrent `tools/list` requests targeting the same upstream can collide (`duplicate jsonrpc id`).
+When aggregating `tools/list`, the gateway may reuse a fixed JSON-RPC id per upstream within a single fan-out. Concurrent `tools/list` requests targeting the same upstream can collide (`duplicate jsonrpc id`).
 
 **Workaround:** serialize `tools/list` per session or cap loadtest workers to 1 under JWT. Sequential smoke traffic is unaffected.
 
@@ -74,6 +74,6 @@ When aggregating `tools/list`, the gateway may reuse a fixed JSON-RPC id per ups
 |---------|-----|
 | POST **202** but no SSE payload | SSE connection closed or not read in parallel. See [Connecting agents](CONNECTING_AGENTS.md). |
 | **401** on every RPC | JWT mode, keys, or `authorization_details`. See [configuration, Auth section](configuration.md#authentication). |
-| Tool missing from `tools/list` | Backend down, `MethodNotFound` on list, or JWT filter. See [Adding upstreams](ADDING_UPSTREAMS.md). |
+| Tool missing from `tools/list` | Upstream down, `MethodNotFound` on list, or JWT filter. See [Adding upstreams](ADDING_UPSTREAMS.md). |
 | Router ignores intent | `ROUTER_MODE` off, or exact tool name shortcut. See [configuration, Router section](configuration.md#semantic-router). |
 | Concurrent loadtest errors under JWT | See [known limitations (multiplexing)](errors.md#known-limitations-multiplexing). |

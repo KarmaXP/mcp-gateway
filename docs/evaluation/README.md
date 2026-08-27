@@ -12,7 +12,7 @@ Guides for validating gateway behavior beyond unit tests: scripted scenarios, lo
 
 | Guide | What it exercises |
 |-------|-------------------|
-| [integration-checklist.md](integration-checklist.md) | **End-to-end validation** — SRE mocks, multibackend benchmark (real+JWT), LangGraph agent integration run |
+| [integration-checklist.md](integration-checklist.md) | **End-to-end validation** — SRE mocks, multiupstream benchmark (real+JWT), LangGraph agent integration run |
 | [scenario-real-upstreams-jwt.md](scenario-real-upstreams-jwt.md) | **Real stdio MCP** (everything, filesystem, memory) + JWT + OTLP + Prom |
 | [scenario-sre-multiupstream.md](scenario-sre-multiupstream.md) | Three HTTP mocks, namespaced tools, semantic router |
 | [scenario-jwt-allowlist.md](scenario-jwt-allowlist.md) | `AUTH_MODE=jwt`, `mcp_tools` filtering and deny on `tools/call` |
@@ -32,7 +32,7 @@ make demo-lab-verify        # full demo rehearsal (gateway up; optional ../langg
 bash scripts/demo_show_catalog.sh   # tools/list for demo (needs JWT + gateway)
 ```
 
-Host client: [`scripts/mcp_host_demo/README.md`](../../scripts/mcp_host_demo/README.md).
+Host client: [`cmd/mcp_host_demo/README.md`](../../cmd/mcp_host_demo/README.md).
 
 ---
 
@@ -41,10 +41,10 @@ Host client: [`scripts/mcp_host_demo/README.md`](../../scripts/mcp_host_demo/REA
 | Guide | Purpose |
 |-------|---------|
 | [calibration-run.md](calibration-run.md) | Procedure: Qdrant + embed + gateway + metrics (calibration, mocks) |
-| [calibration-results.md](calibration-results.md) | **Canonical recorded numbers** — calibration 2026-05-18, multibackend benchmark 2026-05-30, LangGraph agent integration run 2026-06-08 |
+| [calibration-results.md](calibration-results.md) | **Canonical recorded numbers** — calibration 2026-05-18, multiupstream benchmark 2026-05-30, LangGraph agent integration run 2026-06-08 |
 | [router-trace-capture.md](router-trace-capture.md) | Capture semantic-router spans in Tempo (optional) |
 
-Load testing: [`scripts/loadtest/README.md`](../../scripts/loadtest/README.md) (`AUTH_MODE=none` by default; pass `-token` or `LOADTEST_JWT` under JWT — see [scenario-real-upstreams-jwt.md](scenario-real-upstreams-jwt.md)).
+Load testing: [`cmd/loadtest/README.md`](../../cmd/loadtest/README.md) (`AUTH_MODE=none` by default; pass `-token` or `LOADTEST_JWT` under JWT — see [scenario-real-upstreams-jwt.md](scenario-real-upstreams-jwt.md)).
 
 ---
 

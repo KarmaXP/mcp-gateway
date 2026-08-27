@@ -2,6 +2,12 @@
 
 How the MCP Gateway is designed and which documents to read.
 
+- [package-layers.md](package-layers.md) — what depends on what, and one request end to end. Both generated from the code.
+- [mcp_gateway.plan.md](mcp_gateway.plan.md) — the full technical specification.
+- [../adr/](../adr/README.md) — one decision per record.
+
+The diagram below is deployment topology. For code layers, read `package-layers.md`.
+
 ---
 
 ## Start here
@@ -70,10 +76,10 @@ When prose differs, **the ADR for that topic wins** (for example AuthZ scope in 
 |---------|------|
 | `internal/gateway/httpserver` | HTTP ingress |
 | `internal/gateway/session` | Per-SSE session state |
-| `internal/gateway/multiplex` | Backend merge and forward |
+| `internal/gateway/multiplex` | Upstream merge and forward |
 | `internal/router` | Semantic routing and catalog index |
 | `internal/auth`, `internal/policy` | Authentication and authorization |
-| `internal/backend/mcphttp`, `mcpstdio` | Upstream clients |
+| `internal/upstream/mcphttp`, `mcpstdio` | Upstream clients |
 | `internal/telemetry` | OTel, metrics, structured logs |
 
 ---

@@ -1,6 +1,6 @@
-# Real MCP backends + JWT (multibackend benchmark)
+# Real MCP upstreams + JWT (multiupstream benchmark)
 
-Walkthrough for validating the gateway with **stdio MCP servers** (not HTTP mocks), **semantic router**, **JWT**, and **OTLP → Prometheus**. Recorded numbers: [calibration-results.md](calibration-results.md) (multibackend benchmark, 2026-05-30).
+Walkthrough for validating the gateway with **stdio MCP servers** (not HTTP mocks), **semantic router**, **JWT**, and **OTLP → Prometheus**. Recorded numbers: [calibration-results.md](calibration-results.md) (multiupstream benchmark, 2026-05-30).
 
 For mocks-only validation, use [scenario-sre-multiupstream.md](scenario-sre-multiupstream.md) or the **SRE mock** scenario in [integration-checklist.md](integration-checklist.md).
 
@@ -42,7 +42,7 @@ openssl genrsa -out /tmp/mcp-lab-jwt.key 2048
 openssl rsa -in /tmp/mcp-lab-jwt.key -pubout -out /tmp/mcp-lab-jwt.pub.pem
 ```
 
-Filesystem backend root (macOS): create allowed directory and a sample file:
+Filesystem upstream root (macOS): create allowed directory and a sample file:
 
 ```bash
 mkdir -p /private/tmp/mcp-gateway-lab
@@ -110,10 +110,10 @@ eval "$(bash scripts/lab_jwt_keys.sh env)"
 Manual equivalent:
 
 ```bash
-export JWT_ADMIN="$(go run ./tools/gen-jwt \
+export JWT_ADMIN="$(go run ./cmd/gen-jwt \
   -key /tmp/mcp-lab-jwt.key -iss https://lab.local -aud mcp-gateway \
   -sub lab-admin -mcp-tools 'prom__read_text_file,k8s__echo,gh__create_entities')"
-export JWT_RESTRICTED="$(go run ./tools/gen-jwt \
+export JWT_RESTRICTED="$(go run ./cmd/gen-jwt \
   -key /tmp/mcp-lab-jwt.key -iss https://lab.local -aud mcp-gateway \
   -sub lab-restricted -mcp-tools prom__read_text_file)"
 ```
@@ -159,12 +159,12 @@ Expect JSON-RPC **-32003** (`tool "prom__list_directory" not allowed for this pr
 
 ## Load for Prometheus (JWT)
 
-**LangGraph agent integration run only** — the multibackend benchmark (2026-05-30) uses 60× parallel + 20× sequential smoke (below) and Prometheus **mean** phase latency. The LangGraph agent integration run adds JWT `loadtest` with `-token` ([calibration-results.md](calibration-results.md), [integration-checklist.md](integration-checklist.md#langgraph-agent-integration-run)).
+**LangGraph agent integration run only** — the multiupstream benchmark (2026-05-30) uses 60× parallel + 20× sequential smoke (below) and Prometheus **mean** phase latency. The LangGraph agent integration run adds JWT `loadtest` with `-token` ([calibration-results.md](calibration-results.md), [integration-checklist.md](integration-checklist.md#langgraph-agent-integration-run)).
 
-`scripts/loadtest` sends `Authorization: Bearer` when you pass `-token` or set `LOADTEST_JWT`. Use **one worker** under JWT because concurrent `tools/list` fan-out can collide on upstream JSON-RPC ids (see [known limitations](../errors.md#known-limitations-multiplexing)).
+`cmd/loadtest` sends `Authorization: Bearer` when you pass `-token` or set `LOADTEST_JWT`. Use **one worker** under JWT because concurrent `tools/list` fan-out can collide on upstream JSON-RPC ids (see [known limitations](../errors.md#known-limitations-multiplexing)).
 
 ```bash
-go run ./scripts/loadtest -url http://127.0.0.1:18080 -mode direct -workers 1 -duration 30s \
+go run ./cmd/loadtest -url http://127.0.0.1:18080 -mode direct -workers 1 -duration 30s \
   -token "$JWT_ADMIN" \
   -tool prom__read_text_file \
   -args '{"path":"/private/tmp/mcp-gateway-lab/readme.txt"}'
@@ -216,5 +216,5 @@ Copy measured values into [calibration-results.md](calibration-results.md) → *
 
 - [scenario-jwt-allowlist.md](scenario-jwt-allowlist.md) — JWT mechanics
 - [calibration-run.md](calibration-run.md) — calibration (mocks, `AUTH_MODE=none`)
-- [integration-checklist.md](integration-checklist.md) — SRE mock (mocks) vs multibackend benchmark (this doc)
-- [scripts/loadtest/README.md](../../scripts/loadtest/README.md) — JWT loadtest flags
+- [integration-checklist.md](integration-checklist.md) — SRE mock (mocks) vs multiupstream benchmark (this doc)
+- [cmd/loadtest/README.md](../../cmd/loadtest/README.md) — JWT loadtest flags

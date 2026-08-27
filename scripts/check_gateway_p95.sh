@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Checks gateway p95 latency against a threshold.
 # Preferred source: Prometheus histogram (gateway internal phases).
-# Fallback source: scripts/loadtest client-side latency_p95_ms approximation.
+# Fallback source: cmd/loadtest client-side latency_p95_ms approximation.
 
 P95_THRESHOLD_MS="${P95_THRESHOLD_MS:-50}"
 PROMETHEUS_URL="${PROMETHEUS_URL:-http://127.0.0.1:9090}"
@@ -91,7 +91,7 @@ prometheus_query() {
 run_loadtest_fallback() {
   log "Running loadtest fallback against ${GATEWAY_URL}"
   local output
-  output="$(cd "${REPO_ROOT}" && go run ./scripts/loadtest \
+  output="$(cd "${REPO_ROOT}" && go run ./cmd/loadtest \
     -url "${GATEWAY_URL}" \
     -mode "${LOADTEST_MODE}" \
     -workers "${LOADTEST_WORKERS}" \
