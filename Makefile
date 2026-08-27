@@ -274,6 +274,7 @@ lint:
 	@bash scripts/check-referenced-paths.sh
 	@bash scripts/check-doc-versions.sh
 	@bash scripts/check-docker-target-arch.sh
+	@bash scripts/check-demo-example.sh
 
 tidy:
 	@echo "Tidying Go modules..."
