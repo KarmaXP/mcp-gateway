@@ -1,12 +1,12 @@
 /**
  * k6 baseline: /healthz and /readyz throughput + latency percentiles.
  *
- * Full MCP (SSE + JSON-RPC) is covered by the Go loadtest (scripts/loadtest/main.go)
+ * Full MCP (SSE + JSON-RPC) is covered by the Go loadtest (cmd/loadtest/main.go)
  * because k6 does not reliably stream SSE for bidirectional MCP sessions.
  *
  * Usage:
- *   k6 run --vus 20 --duration 60s scripts/loadtest/k6_http_baseline.js
- *   BASE_URL=http://127.0.0.1:8080 k6 run scripts/loadtest/k6_http_baseline.js
+ *   k6 run --vus 20 --duration 60s cmd/loadtest/k6_http_baseline.js
+ *   BASE_URL=http://127.0.0.1:8080 k6 run cmd/loadtest/k6_http_baseline.js
  */
 import http from "k6/http";
 import { check, sleep } from "k6";

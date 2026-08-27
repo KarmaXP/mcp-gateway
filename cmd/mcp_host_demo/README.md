@@ -15,7 +15,7 @@ The script reads `Mcp-Session-Id` from the SSE response headers, keeps the strea
 From `mcp-gateway/`:
 
 ```bash
-GATEWAY_URL=http://127.0.0.1:8080 go run ./scripts/mcp_host_demo
+GATEWAY_URL=http://127.0.0.1:8080 go run ./cmd/mcp_host_demo
 ```
 
 Multi-backend (`gateway.example.yaml`):
@@ -23,7 +23,7 @@ Multi-backend (`gateway.example.yaml`):
 ```bash
 make demo-upstreams
 MCP_GATEWAY_CONFIG=deployments/gateway.example.yaml make run   # other terminal
-TOOL_NAME=alpha__echo GATEWAY_URL=http://127.0.0.1:8080 go run ./scripts/mcp_host_demo
+TOOL_NAME=alpha__echo GATEWAY_URL=http://127.0.0.1:8080 go run ./cmd/mcp_host_demo
 ```
 
 Or one shot: `make demo-full`.
@@ -41,7 +41,7 @@ TOOL_NAME=prom__read_text_file \
 TOOL_ARGS='{"path":"/private/tmp/mcp-gateway-lab/readme.txt"}' \
 GATEWAY_URL=http://127.0.0.1:${PORT} \
 GATEWAY_JWT="$JWT_ADMIN" \
-go run ./scripts/mcp_host_demo
+go run ./cmd/mcp_host_demo
 ```
 
 Without `GATEWAY_JWT` against a JWT-mode gateway the SSE GET returns `401`.

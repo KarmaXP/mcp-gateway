@@ -3,21 +3,16 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"strings"
-	"sync/atomic"
 	"time"
 
-	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
-	"github.com/KarmaXP/mcp-gateway/internal/rpc"
+	"github.com/KarmaXP/mcp-gateway/internal/mcphostclient"
 )
 
 const (
@@ -25,11 +20,7 @@ const (
 	defaultTimeout = 15 * time.Second
 
 	exitStatusError = 1
-
-	sseChannelBuffer = 64
 )
-
-var idSeq atomic.Int64
 
 func main() {
 	if err := run(); err != nil {
@@ -43,69 +34,41 @@ func run() error {
 	if baseURL == "" {
 		baseURL = defaultGatewayURL
 	}
-	baseURL = strings.TrimRight(baseURL, "/")
 
 	toolNameOverride := strings.TrimSpace(os.Getenv("TOOL_NAME"))
-
 	toolArgs, err := parseToolArgs(os.Getenv("TOOL_ARGS"))
 	if err != nil {
 		return fmt.Errorf("parse TOOL_ARGS: %w", err)
 	}
 
-	// Required when the gateway runs with AUTH_MODE=jwt; sent on SSE and every POST.
 	bearer := strings.TrimSpace(os.Getenv("GATEWAY_JWT"))
 
-	client := &http.Client{Timeout: 0}
 	ctx := context.Background()
-
-	sid, events, cancel, err := openSSE(ctx, client, baseURL+"/mcp/sse", bearer)
+	conn, err := mcphostclient.Dial(ctx, &http.Client{Timeout: 0}, baseURL, bearer)
 	if err != nil {
 		return fmt.Errorf("open sse: %w", err)
 	}
-	defer cancel()
-	fmt.Println("session:", sid)
+	defer conn.Close()
+	fmt.Println("session:", conn.SessionID())
 
-	initializeID := nextID()
-	if err := postRPC(client, baseURL+"/mcp/rpc", sid, bearer, map[string]any{
-		"jsonrpc": rpc.JSONRPCVersion,
-		"id":      initializeID,
-		"method":  mcpwire.MethodInitialize,
-		"params": map[string]any{
-			"protocolVersion": mcpwire.MCPProtocolVersion,
-			"capabilities":    map[string]any{},
-			"clientInfo": map[string]any{
-				"name":    "mcp-host-demo",
-				"version": "1.0.0",
-			},
-		},
-	}); err != nil {
-		return fmt.Errorf("initialize post: %w", err)
-	}
-	initializeRaw, err := waitJSONRPCByID(events, initializeID, defaultTimeout)
+	initializeRaw, err := conn.Call(ctx, mcpwire.MethodInitialize, map[string]any{
+		"protocolVersion": mcpwire.MCPProtocolVersion,
+		"capabilities":    map[string]any{},
+		"clientInfo":      map[string]any{"name": "mcp-host-demo", "version": "1.0.0"},
+	}, defaultTimeout)
 	if err != nil {
-		return fmt.Errorf("wait initialize response: %w", err)
+		return fmt.Errorf("initialize: %w", err)
 	}
 	fmt.Println("initialize response:", string(initializeRaw))
 
-	if err := postRPC(client, baseURL+"/mcp/rpc", sid, bearer, map[string]any{
-		"jsonrpc": rpc.JSONRPCVersion,
-		"method":  "notifications/initialized",
-	}); err != nil {
-		return fmt.Errorf("initialized notification post: %w", err)
+	if err := conn.Notify(ctx, "notifications/initialized", nil); err != nil {
+		return fmt.Errorf("initialized notification: %w", err)
 	}
 	fmt.Println("sent notifications/initialized")
 
-	toolsListID := nextID()
-	if err := postRPC(client, baseURL+"/mcp/rpc", sid, bearer, map[string]any{
-		"jsonrpc": rpc.JSONRPCVersion,
-		"id":      toolsListID,
-		"method":  mcpwire.MethodToolsList,
-	}); err != nil {
-		return fmt.Errorf("tools/list post: %w", err)
-	}
-	toolsListRaw, err := waitJSONRPCByID(events, toolsListID, defaultTimeout)
+	toolsListRaw, err := conn.Call(ctx, mcpwire.MethodToolsList, nil, defaultTimeout)
 	if err != nil {
-		return fmt.Errorf("wait tools/list response: %w", err)
+		return fmt.Errorf("tools/list: %w", err)
 	}
 	fmt.Println("tools/list response:", string(toolsListRaw))
 
@@ -115,154 +78,16 @@ func run() error {
 	}
 	fmt.Println("tools/call name:", toolName)
 
-	toolsCallID := nextID()
-	if err := postRPC(client, baseURL+"/mcp/rpc", sid, bearer, map[string]any{
-		"jsonrpc": rpc.JSONRPCVersion,
-		"id":      toolsCallID,
-		"method":  mcpwire.MethodToolsCall,
-		"params": map[string]any{
-			"name":      toolName,
-			"arguments": toolArgs,
-		},
-	}); err != nil {
-		return fmt.Errorf("tools/call post: %w", err)
-	}
-	toolsCallRaw, err := waitJSONRPCByID(events, toolsCallID, defaultTimeout)
+	toolsCallRaw, err := conn.Call(ctx, mcpwire.MethodToolsCall, map[string]any{
+		"name":      toolName,
+		"arguments": toolArgs,
+	}, defaultTimeout)
 	if err != nil {
-		return fmt.Errorf("wait tools/call response: %w", err)
+		return fmt.Errorf("tools/call: %w", err)
 	}
 	fmt.Println("tools/call response:", string(toolsCallRaw))
 
 	return nil
-}
-
-func nextID() int64 {
-	return idSeq.Add(1)
-}
-
-func openSSE(ctx context.Context, client *http.Client, endpoint, bearer string) (sid string, out <-chan string, cancel func(), err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return "", nil, nil, err
-	}
-	req.Header.Set("Accept", "text/event-stream")
-	if bearer != "" {
-		req.Header.Set("Authorization", "Bearer "+bearer)
-	}
-	resp, err := client.Do(req) //nolint:bodyclose // Body is closed by goroutine on context cancellation.
-	if err != nil {
-		return "", nil, nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, defaults.MaxHTTPUpstreamErrorBody))
-		_ = resp.Body.Close()
-		return "", nil, nil, fmt.Errorf("sse status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-	sid = strings.TrimSpace(resp.Header.Get("Mcp-Session-Id"))
-	if sid == "" {
-		_ = resp.Body.Close()
-		return "", nil, nil, fmt.Errorf("missing Mcp-Session-Id header")
-	}
-
-	ch := make(chan string, sseChannelBuffer)
-	cctx, cfn := context.WithCancel(ctx)
-	go func() {
-		defer resp.Body.Close()
-		defer close(ch)
-
-		reader := bufio.NewReader(resp.Body)
-		for {
-			select {
-			case <-cctx.Done():
-				return
-			default:
-			}
-			line, readErr := reader.ReadString('\n')
-			if readErr != nil {
-				return
-			}
-			trimmed := strings.TrimSpace(line)
-			if !strings.HasPrefix(trimmed, mcpwire.SSEDataLinePrefix) {
-				continue
-			}
-			payload := strings.TrimSpace(strings.TrimPrefix(trimmed, mcpwire.SSEDataLinePrefix))
-			select {
-			case ch <- payload:
-			case <-cctx.Done():
-				return
-			}
-		}
-	}()
-	return sid, ch, cfn, nil
-}
-
-func postRPC(client *http.Client, endpoint, sid, bearer string, reqBody map[string]any) error {
-	body, err := json.Marshal(reqBody)
-	if err != nil {
-		return fmt.Errorf("marshal request body: %w", err)
-	}
-	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Mcp-Session-Id", sid)
-	if bearer != "" {
-		req.Header.Set("Authorization", "Bearer "+bearer)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusAccepted {
-		responseBody, _ := io.ReadAll(io.LimitReader(resp.Body, defaults.MaxHTTPUpstreamErrorBody))
-		return fmt.Errorf("rpc status %d: %s", resp.StatusCode, strings.TrimSpace(string(responseBody)))
-	}
-	return nil
-}
-
-func waitJSONRPCByID(events <-chan string, id int64, timeout time.Duration) ([]byte, error) {
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-
-	for {
-		select {
-		case <-timer.C:
-			return nil, fmt.Errorf("timeout waiting for id %d", id)
-		case payload, ok := <-events:
-			if !ok {
-				return nil, fmt.Errorf("sse closed while waiting for id %d", id)
-			}
-			if payload == "" {
-				continue
-			}
-			raw := []byte(payload)
-			if !matchesID(raw, id) {
-				continue
-			}
-			return raw, nil
-		}
-	}
-}
-
-func matchesID(raw []byte, id int64) bool {
-	var envelope struct {
-		ID json.RawMessage `json:"id"`
-	}
-	if err := json.Unmarshal(raw, &envelope); err != nil {
-		return false
-	}
-
-	var numericID int64
-	if err := json.Unmarshal(envelope.ID, &numericID); err == nil && numericID == id {
-		return true
-	}
-	var stringID string
-	if err := json.Unmarshal(envelope.ID, &stringID); err == nil && stringID == fmt.Sprintf("%d", id) {
-		return true
-	}
-	return false
 }
 
 func parseToolArgs(raw string) (map[string]any, error) {

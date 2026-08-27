@@ -33,3 +33,12 @@ tmp/
 Thumbs.db
 # golangci-lint migrate leaves this behind
 .golangci.bck.yml
+
+# Binaries left by `go build ./cmd/<name>` in the repository root.
+/gateway
+/gen-jwt
+/gen-router-eval-catalog
+/loadtest
+/mcp_host_demo
+/mock_upstream
+/smoke_upstream
