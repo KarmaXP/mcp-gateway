@@ -85,9 +85,14 @@ func (sr *SemanticRouter) routingAllowanceAndAlias(sig RoutingSignal) (allowed [
 		}
 	}
 
+	concrete := sr.expandAllowedToolNames(allowed)
+	if len(allowed) > 0 && len(concrete) == 0 {
+		narrowed = true
+	}
+
 	filter = store.VectorSearchFilter{
 		CatalogVersion:   sr.CatalogVersion(),
-		AllowedToolNames: vectorToolNameFilter(allowed, narrowed),
+		AllowedToolNames: vectorToolNameFilter(concrete, narrowed),
 	}
 	return allowed, toolForExact, filter, rl, narrowed
 }

@@ -6,12 +6,14 @@ import (
 	"github.com/KarmaXP/mcp-gateway/internal/router/mode"
 	"log/slog"
 	"sort"
+	"strings"
 	"sync"
 
 	"golang.org/x/sync/singleflight"
 
 	"github.com/KarmaXP/mcp-gateway/internal/defaults"
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/namespace"
+	"github.com/KarmaXP/mcp-gateway/internal/policy"
 	"github.com/KarmaXP/mcp-gateway/internal/router/bm25"
 	"github.com/KarmaXP/mcp-gateway/internal/router/embed"
 	"github.com/KarmaXP/mcp-gateway/internal/router/index"
@@ -171,8 +173,27 @@ func (sr *SemanticRouter) allowed(tool string, allowed []string, narrowed bool) 
 	if len(allowed) == 0 {
 		return !narrowed
 	}
+	ok, err := policy.AllowListPermits(tool, allowed)
+	return err == nil && ok
+}
+
+func (sr *SemanticRouter) expandAllowedToolNames(allowed []string) []string {
+	if len(allowed) == 0 || !containsToolPattern(allowed) {
+		return allowed
+	}
+	catalog := sr.listCatalog()
+	out := make([]string, 0, len(catalog))
+	for _, tool := range catalog {
+		if ok, err := policy.AllowListPermits(tool, allowed); err == nil && ok {
+			out = append(out, tool)
+		}
+	}
+	return out
+}
+
+func containsToolPattern(allowed []string) bool {
 	for _, a := range allowed {
-		if a == tool {
+		if strings.ContainsAny(a, "*?") {
 			return true
 		}
 	}

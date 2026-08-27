@@ -64,6 +64,7 @@ graph TD
   rpcconn --> rpc
   upstream --> rpc
   router --> namespace
+  router --> policy
   multiplex --> namespace
   httpserver --> hostctx
   config --> mcpwire
