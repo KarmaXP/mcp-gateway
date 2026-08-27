@@ -2,8 +2,10 @@ package app
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -51,4 +53,29 @@ func TestReadinessReportsWhichDependencyIsUnhealthy(t *testing.T) {
 
 	checker := &dependencyReadinessChecker{httpClient: down.Client(), qdrantURL: healthy.URL, embedURL: down.URL}
 	require.ErrorContains(t, checker.CheckReadiness(context.Background()), "embed dependency unhealthy")
+}
+
+func TestReadinessProbesReuseTheConnection(t *testing.T) {
+	var opened atomic.Int32
+	body := strings.Repeat("healthy ", 64)
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(body))
+	}))
+	srv.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			opened.Add(1)
+		}
+	}
+	srv.Start()
+	t.Cleanup(srv.Close)
+
+	client := srv.Client()
+	for i := 0; i < 4; i++ {
+		require.NoError(t, probeHealthPath(context.Background(), client, srv.URL, "/healthz"))
+	}
+
+	require.EqualValues(t, 1, opened.Load(),
+		"a probe that closes the response body without reading it cannot reuse the connection, "+
+			"so every readiness check pays a fresh handshake")
 }
