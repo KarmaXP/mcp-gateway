@@ -44,7 +44,7 @@ gen_jwt() {
   if [[ -n "$tools" ]]; then
     args+=(-mcp-tools "$tools")
   fi
-  (cd "$ROOT" && go run ./tools/gen-jwt "${args[@]}")
+  (cd "$ROOT" && go run ./cmd/gen-jwt "${args[@]}")
 }
 
 cmd="${1:-keys}"
@@ -80,7 +80,7 @@ case "$cmd" in
   verify)
     ensure_keys
     LAB_JWT_PRIVATE_KEY="$KEY" LAB_JWT_PUBLIC_KEY="$PUB" \
-      go test -count=1 -run TestDevJWTPairOnDisk ./tools/gen-jwt/
+      go test -count=1 -run TestDevJWTPairOnDisk ./cmd/gen-jwt/
     echo "verify OK: lab JWT pair matches gateway validator (iss=$ISS aud=$AUD)"
     ;;
   -h|--help|help)

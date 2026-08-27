@@ -17,7 +17,7 @@ make demo-upstreams
 MCP_GATEWAY_CONFIG=deployments/gateway.example.yaml make run
 
 # Terminal 2
-go run ./scripts/loadtest -url http://127.0.0.1:8080 -mode direct -workers 10 -duration 45s
+go run ./cmd/loadtest -url http://127.0.0.1:8080 -mode direct -workers 10 -duration 45s
 ```
 
 Plain `go run ./cmd/gateway` without `MCP_GATEWAY_CONFIG` fails unless you have `gateway.yaml` in the cwd. `make run` defaults to `deployments/gateway.demo.yaml` (`smoke__echo`); override with `-tool smoke__echo` or use the example config above.
@@ -29,7 +29,7 @@ make demo-upstreams
 ROUTER_MODE=on EMBED_URL=http://127.0.0.1:8001 QDRANT_URL=http://127.0.0.1:6333 \
   MCP_GATEWAY_CONFIG=deployments/gateway.example.yaml make run
 
-go run ./scripts/loadtest -url http://127.0.0.1:8080 -mode semantic -workers 10 -duration 45s
+go run ./cmd/loadtest -url http://127.0.0.1:8080 -mode semantic -workers 10 -duration 45s
 ```
 
 Compare the printed **p95 / p99** lines across runs. Throughput is approximate (successful iterations / wall time).
@@ -42,7 +42,7 @@ Pass `-token` (or set `LOADTEST_JWT`) to send `Authorization: Bearer` on the SSE
 GET and every POST, and `-tool` / `-args` to target a real namespaced tool:
 
 ```bash
-go run ./scripts/loadtest -url http://127.0.0.1:18080 -mode direct -workers 1 -duration 30s \
+go run ./cmd/loadtest -url http://127.0.0.1:18080 -mode direct -workers 1 -duration 30s \
   -token "$JWT_ADMIN" \
   -tool prom__read_text_file \
   -args '{"path":"/private/tmp/mcp-gateway-lab/readme.txt"}'
@@ -68,6 +68,6 @@ the documented substitute is repeated `scripts/smoke_e2e.sh` traffic + those mea
 Exercises **GET /healthz** and **GET /readyz** with default k6 percentile summaries (`http_req_duration`).
 
 ```bash
-k6 run --vus 30 --duration 60s scripts/loadtest/k6_http_baseline.js
-BASE_URL=http://127.0.0.1:8080 k6 run --vus 30 --duration 60s scripts/loadtest/k6_http_baseline.js
+k6 run --vus 30 --duration 60s cmd/loadtest/k6_http_baseline.js
+BASE_URL=http://127.0.0.1:8080 k6 run --vus 30 --duration 60s cmd/loadtest/k6_http_baseline.js
 ```

@@ -1,10 +1,10 @@
-# Backend unavailable walkthrough
+# Upstream unavailable walkthrough
 
-Reproducible evaluation scenario for **one backend down** during `tools/list` and `tools/call`, with `aggregation.report_partial_failures: true`.
+Reproducible evaluation scenario for **one upstream down** during `tools/list` and `tools/call`, with `aggregation.report_partial_failures: true`.
 
 This validates:
 - Host-visible partial failure metadata on aggregated list methods.
-- Host-visible error behavior on direct `tools/call` to the down backend.
+- Host-visible error behavior on direct `tools/call` to the down upstream.
 - Trace and metric signals for incident correlation in Tempo/Prometheus.
 
 ## References in tests
@@ -18,19 +18,19 @@ This validates:
 
 ## Preconditions
 
-- Gateway running with at least 2 configured backends (example: `alpha`, `beta`).
+- Gateway running with at least 2 configured upstreams (example: `alpha`, `beta`).
 - `aggregation.report_partial_failures: true` (or `AGGREGATION_REPORT_PARTIAL_FAILURES=true`).
 - `aggregation.strict_list: false` (default fail-open behavior for this scenario).
 - Tempo and Prometheus receiving gateway telemetry.
-- Known tool on each backend (example namespaced tools `alpha__echo`, `beta__ping`).
+- Known tool on each upstream (example namespaced tools `alpha__echo`, `beta__ping`).
 
 ## Fault injection
 
-Bring one backend down (example: `beta`) before calling `tools/list` and `tools/call`:
-- Stop the backend process/container, or
-- Block network connectivity from gateway to that backend.
+Bring one upstream down (example: `beta`) before calling `tools/list` and `tools/call`:
+- Stop the upstream process/container, or
+- Block network connectivity from gateway to that upstream.
 
-## Step 1: tools/list while one backend is down
+## Step 1: tools/list while one upstream is down
 
 Send `tools/list` from the host:
 
@@ -61,14 +61,14 @@ Expected host JSON-RPC result:
 ```
 
 Notes:
-- `result.tools` excludes tools from the down backend.
+- `result.tools` excludes tools from the down upstream.
 - `result.extras.partial_failures` exists only when `aggregation.report_partial_failures` is enabled.
 - `reason` is one of stable codes: `transport_error`, `jsonrpc_error`, `timeout`, `omitted`.
 - If you force timeout instead of hard-down, expect `reason: "timeout"` (covered by `TestToolsListReportsTimeoutPartialFailure`).
 
-## Step 2: tools/call to tool on down backend
+## Step 2: tools/call to tool on down upstream
 
-Send `tools/call` targeting the down backend's namespaced tool:
+Send `tools/call` targeting the down upstream's namespaced tool:
 
 ```json
 {
@@ -87,7 +87,7 @@ Expected host JSON-RPC error:
   "id": 102,
   "error": {
     "code": -32000,
-    "message": "backend call failed"
+    "message": "upstream call failed"
   }
 }
 ```
@@ -105,7 +105,7 @@ For the same test window/session, confirm:
 - `mcp.backend.call` span exists for failing `tools/call` with:
   - `mcp.method="tools/call"`
   - `mcp.backend.id="beta"`
-  - span status `ERROR` (backend transport failure path).
+  - span status `ERROR` (upstream transport failure path).
 - Optional parent span correlation: `mcp.host.request` enclosing request handling.
 
 ### Prometheus (metrics)
@@ -128,11 +128,11 @@ histogram_quantile(0.95, sum by (le, method, phase) (rate(mcp_gateway_internal_d
 
 Expected signal interpretation:
 - `tools/list` still emits normal internal-duration samples while host result carries `extras.partial_failures`.
-- `tools/call` to the down backend emits internal-duration samples and a failed backend span in traces.
+- `tools/call` to the down upstream emits internal-duration samples and a failed upstream span in traces.
 
 ## Pass criteria
 
 - Host sees `extras.partial_failures` on `tools/list` with correct `backend_id` and stable `reason`.
-- Host receives `-32000 backend call failed` on `tools/call` to the down backend.
-- Tempo shows failed backend span for `tools/call`, correlated with the test request.
+- Host receives `-32000 upstream call failed` on `tools/call` to the down upstream.
+- Tempo shows failed upstream span for `tools/call`, correlated with the test request.
 - Prometheus shows internal-duration activity for both methods during the scenario window.

@@ -92,7 +92,7 @@ wait_sse_contains() {
 gen_token() {
   local allowed_tools="$1"
   local token=""
-  local gen_jwt="go run ./tools/gen-jwt"
+  local gen_jwt="go run ./cmd/gen-jwt"
   if command -v gen-jwt >/dev/null 2>&1; then
     gen_jwt="gen-jwt"
   fi
@@ -165,7 +165,7 @@ ALLOW_JWT="$(gen_token "${ALLOW_TOOL}")"
 
 UPSTREAM_BIN="${SMOKE_UPSTREAM_BIN:-}"
 if [[ -z "${UPSTREAM_BIN}" ]]; then
-  UPSTREAM_BIN="go run ./scripts/smoke_upstream"
+  UPSTREAM_BIN="go run ./cmd/smoke_upstream"
 else
   UPSTREAM_BIN="${UPSTREAM_BIN}"
 fi

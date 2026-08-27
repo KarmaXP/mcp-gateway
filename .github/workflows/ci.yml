@@ -64,7 +64,7 @@ jobs:
           set -euo pipefail
           mkdir -p .ci-bin
           go build -o .ci-bin/mcp-gateway ./cmd/gateway
-          go build -o .ci-bin/smoke_upstream ./scripts/smoke_upstream
+          go build -o .ci-bin/smoke_upstream ./cmd/smoke_upstream
 
       - name: MCP e2e smoke (router mode off, no docker)
         run: |
@@ -89,8 +89,8 @@ jobs:
           set -euo pipefail
           mkdir -p .ci-bin
           go build -o .ci-bin/mcp-gateway ./cmd/gateway
-          go build -o .ci-bin/smoke_upstream ./scripts/smoke_upstream
-          go build -o .ci-bin/gen-jwt ./tools/gen-jwt
+          go build -o .ci-bin/smoke_upstream ./cmd/smoke_upstream
+          go build -o .ci-bin/gen-jwt ./cmd/gen-jwt
 
       - name: MCP e2e JWT smoke (router mode off, no docker)
         run: |

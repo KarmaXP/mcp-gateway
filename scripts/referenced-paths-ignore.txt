@@ -1,0 +1,2 @@
+# Paths named in docs as something the reader creates, so they do not exist here.
+deployments/my-gateway.yaml

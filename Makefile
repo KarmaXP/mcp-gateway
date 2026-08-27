@@ -75,7 +75,7 @@ help:
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test" "Run all unit tests with race detection"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test-cover" "go test -race with coverage report (internal/*)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "test-integration" "go test -tags=integration (JWT policy + optional Qdrant/embed/OTLP; see docs/DEVELOPER.md)"
-	@printf "  $(CYAN)%-20s$(RESET) %s\n" "smoke" "curl MCP flow against gateway + scripts/smoke_upstream (sets SMOKE_AUTO_START_GATEWAY=1)"
+	@printf "  $(CYAN)%-20s$(RESET) %s\n" "smoke" "curl MCP flow against gateway + cmd/smoke_upstream (sets SMOKE_AUTO_START_GATEWAY=1)"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "smoke-jwt" "MCP smoke with JWT auth, what the CI smoke-jwt check runs"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "smoke-e2e" "curl MCP handshake/tools flow against an already-running gateway"
 	@printf "  $(CYAN)%-20s$(RESET) %s\n" "fmt" "gofmt -w . then normalize const/var '=' spacing (gofmt re-aligns)"
@@ -170,7 +170,7 @@ sre-smoke:
 	@MCP_GATEWAY_CONFIG=$(SRE_CONFIG) bash scripts/scenario_smoke.sh sre
 
 gen-router-eval-catalog:
-	@go run ./tools/gen-router-eval-catalog/main.go > docs/evaluation/router-eval-catalog.json
+	@go run ./cmd/gen-router-eval-catalog/main.go > docs/evaluation/router-eval-catalog.json
 	@echo "Wrote docs/evaluation/router-eval-catalog.json"
 
 run:
@@ -271,6 +271,8 @@ lint:
 	@chmod +x scripts/check-go-eq-spacing.sh
 	@./scripts/check-go-eq-spacing.sh
 	@bash scripts/check-added-comments.sh
+	@bash scripts/check-referenced-paths.sh
+	@bash scripts/check-doc-versions.sh
 
 tidy:
 	@echo "Tidying Go modules..."

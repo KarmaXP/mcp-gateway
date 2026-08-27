@@ -1,4 +1,4 @@
-# Adding MCP backends
+# Adding MCP upstreams
 
 This guide explains how to register upstream MCP servers with the gateway so hosts see a single merged catalog (`prefix__tool` names).
 
@@ -6,11 +6,11 @@ This guide explains how to register upstream MCP servers with the gateway so hos
 
 ---
 
-## How backends appear to hosts
+## How upstreams appear to hosts
 
 | Concept | Meaning |
 |---------|---------|
-| **Backend** | One upstream MCP server (HTTP+SSE or stdio). |
+| **Upstream** | One upstream MCP server (HTTP+SSE or stdio). |
 | **`id`** | Stable gateway identifier (logs, traces, config). |
 | **`prefix`** | Namespace for tools, e.g. `k8s` → `k8s__get_pod_logs`. |
 | **Native tool name** | Name the upstream exposes, e.g. `get_pod_logs`. |
@@ -22,8 +22,8 @@ The gateway strips the prefix on `tools/call` before forwarding to the upstream.
 flowchart LR
  host[MCP host]
  gw[mcp-gateway]
- b1["backend alpha<br/>prefix: alpha"]
- b2["backend beta<br/>prefix: beta"]
+ b1["upstream alpha<br/>prefix: alpha"]
+ b2["upstream beta<br/>prefix: beta"]
 
  host -->|"tools/list sees<br/>alpha__echo, beta__ping"| gw
  gw -->|"tools/call echo"| b1
@@ -80,16 +80,16 @@ backends:
   max_concurrency: 2
 ```
 
-The gateway spawns and manages the process per backend configuration.
+The gateway spawns and manages the process per upstream configuration.
 
 ---
 
 ## Configuration file
 
 1. Copy a template:
-  - Single backend, no router: [`deployments/gateway.demo.yaml`](../deployments/gateway.demo.yaml)
-  - Two backends: [`deployments/gateway.example.yaml`](../deployments/gateway.example.yaml)
-  - SRE-style three backends: [`deployments/gateway.sre.example.yaml`](../deployments/gateway.sre.example.yaml)
+  - Single upstream, no router: [`deployments/gateway.demo.yaml`](../deployments/gateway.demo.yaml)
+  - Two upstreams: [`deployments/gateway.example.yaml`](../deployments/gateway.example.yaml)
+  - SRE-style three upstreams: [`deployments/gateway.sre.example.yaml`](../deployments/gateway.sre.example.yaml)
 
 2. Point the gateway at your file:
 
@@ -102,7 +102,7 @@ Or set `MCP_GATEWAY_CONFIG` in `.env` (see `make bootstrap`).
 
 ### Inline JSON (optional)
 
-You can append backends via env (merged after YAML):
+You can append upstreams via env (merged after YAML):
 
 ```bash
 export MCP_GATEWAY_BACKENDS='[{"id":"alpha","prefix":"alpha","url":"http://127.0.0.1:3101","max_concurrency":8}]'
@@ -112,7 +112,7 @@ Prefer YAML for anything non-trivial.
 
 ---
 
-## Step-by-step: add one HTTP backend
+## Step-by-step: add one HTTP upstream
 
 **Goal:** expose tools from `http://127.0.0.1:9000` under prefix `billing`.
 
@@ -154,7 +154,7 @@ MCP_GATEWAY_CONFIG=deployments/my-gateway.yaml AUTH_MODE=none make run
 4. **Verify from the host side** (see [CONNECTING_AGENTS.md](CONNECTING_AGENTS.md)) or use the included client:
 
 ```bash
-GATEWAY_URL=http://127.0.0.1:8080 go run ./scripts/mcp_host_demo
+GATEWAY_URL=http://127.0.0.1:8080 go run ./cmd/mcp_host_demo
 ```
 
 Expect `tools/list` to include names like `billing__<native_tool>`.
@@ -162,7 +162,7 @@ Expect `tools/list` to include names like `billing__<native_tool>`.
 5. **Call a tool:**
 
 ```bash
-TOOL_NAME=billing__your_tool GATEWAY_URL=http://127.0.0.1:8080 go run ./scripts/mcp_host_demo
+TOOL_NAME=billing__your_tool GATEWAY_URL=http://127.0.0.1:8080 go run ./cmd/mcp_host_demo
 ```
 
 ---
@@ -174,15 +174,15 @@ TOOL_NAME=billing__your_tool GATEWAY_URL=http://127.0.0.1:8080 go run ./scripts/
 | Single smoke upstream | (started by `make demo`) | `gateway.demo.yaml` |
 | Alpha + beta | `make demo-upstreams` | `gateway.example.yaml` |
 | k8s + prom + gh | `make sre-upstreams` | `gateway.sre.example.yaml` |
-| Real stdio MCP (multibackend benchmark) | `npx` servers via YAML `command` | [`gateway.real.yaml`](../deployments/gateway.real.yaml) |
+| Real stdio MCP (multiupstream benchmark) | `npx` servers via YAML `command` | [`gateway.real.yaml`](../deployments/gateway.real.yaml) |
 
-Real-backend walkthrough: [scenario-real-upstreams-jwt.md](evaluation/scenario-real-upstreams-jwt.md).
+Real-upstream walkthrough: [scenario-real-upstreams-jwt.md](evaluation/scenario-real-upstreams-jwt.md).
 
 ```bash
 make demo-upstreams
 MCP_GATEWAY_CONFIG=deployments/gateway.example.yaml make run
 # other terminal:
-TOOL_NAME=alpha__echo go run ./scripts/mcp_host_demo
+TOOL_NAME=alpha__echo go run ./cmd/mcp_host_demo
 ```
 
 One-shot check: `make demo-full`.
@@ -196,7 +196,7 @@ flowchart LR
  gw[mcp-gateway]
  emb[embed sidecar]
  qd[(Qdrant)]
- b1[backends]
+ b1[upstreams]
 
  gw --> emb
  gw --> qd
@@ -208,9 +208,9 @@ When the router is enabled, the gateway needs:
 - `QDRANT_URL` (e.g. `http://127.0.0.1:6333`)
 - `EMBED_URL` (e.g. `http://127.0.0.1:8001`)
 
-Start dependencies: `make docker-up`, then your backends, then `make run`.
+Start dependencies: `make docker-up`, then your upstreams, then `make run`.
 
-After backends change, the gateway re-indexes the tool catalog on the next `tools/list` (and when `forward_tools_list_changed` is configured). See [DEVELOPER.md — Configuration](DEVELOPER.md#configuration).
+After upstreams change, the gateway re-indexes the tool catalog on the next `tools/list` (and when `forward_tools_list_changed` is configured). See [DEVELOPER.md — Configuration](DEVELOPER.md#configuration).
 
 Minimal router-on YAML: [DEVELOPER.md — Minimal config](DEVELOPER.md#minimal-config-semantic-router-on).
 
@@ -222,7 +222,7 @@ Optional `aggregation:` block in YAML (see comments in `gateway.example.yaml`):
 
 | Setting | Effect |
 |---------|--------|
-| Default | Failed upstreams omitted from `initialize` / list results; calls fail per backend. |
+| Default | Failed upstreams omitted from `initialize` / list results; calls fail per upstream. |
 | `strict_initialize: true` | Any upstream init failure → error `-32005` to host. |
 | `strict_list: true` | Any list failure → error `-32005`. |
 | `report_partial_failures: true` | Successful merges include `extras.partial_failures`. |
@@ -243,7 +243,7 @@ Optional `aggregation:` block in YAML (see comments in `gateway.example.yaml`):
 
 ## Verification steps
 
-- Unique `id` and `prefix` per backend.
+- Unique `id` and `prefix` per upstream.
 - Upstream reachable (`url` or `command` works).
 - Tools appear in `tools/list` with correct `prefix__` names.
 - `tools/call` with namespaced name succeeds.

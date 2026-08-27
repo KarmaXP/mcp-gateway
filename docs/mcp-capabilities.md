@@ -28,7 +28,7 @@ Results for requests with an `id` are delivered on the SSE stream as `event: jso
 | `initialize` | Yes (merged) | N/A | AuthN only | No |
 | `notifications/initialized` | Forwarded | N/A | AuthN only | No |
 | `tools/list` | Yes | `prefix__name` | **Yes**, filters visible tools | `filter_list` mode narrows by `X-MCP-Intent` |
-| `tools/call` | Routed to one backend | Strip prefix on forward | **Yes**, denies if not allowed | Optional rewrite when name is ambiguous |
+| `tools/call` | Routed to one upstream | Strip prefix on forward | **Yes**, denies if not allowed | Optional rewrite when name is ambiguous |
 | `resources/list` | Yes | `prefix__` on URI | AuthN only (no tool allow-list) | No |
 | `resources/read` | Routed | URI encoding for opaque `__` | AuthN only | No |
 | `prompts/list` | Yes | `prefix__name` | AuthN only | No |

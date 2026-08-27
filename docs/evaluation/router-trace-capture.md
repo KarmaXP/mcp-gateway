@@ -1,6 +1,6 @@
 # Router trace capture (OTLP/Tempo)
 
-Optional procedure for **new** calibration runs when you want Tempo trace figures alongside Prometheus numbers. Canonical lab sessions are in [calibration-results.md](calibration-results.md): multibackend benchmark (2026-05-30) marks Tempo host decomposition **Not measured**; LangGraph agent integration run (2026-06-08) records one representative trace as **Measured** via Grafana datasource proxy.
+Optional procedure for **new** calibration runs when you want Tempo trace figures alongside Prometheus numbers. Canonical lab sessions are in [calibration-results.md](calibration-results.md): multiupstream benchmark (2026-05-30) marks Tempo host decomposition **Not measured**; LangGraph agent integration run (2026-06-08) records one representative trace as **Measured** via Grafana datasource proxy.
 
 ## 1) Spans and attributes to capture
 
@@ -8,15 +8,15 @@ Optional procedure for **new** calibration runs when you want Tempo trace figure
 
 - `mcp.host.request` (root request span)
 - `mcp.router.semantic` (semantic routing decision span)
-- `mcp.backend.call` (selected backend invocation after routing)
+- `mcp.backend.call` (selected upstream invocation after routing)
 
 ### Stable OTEL attribute keys (`internal/telemetry/attrs.go`)
 
-- `mcp.method` (set on host/router/backend spans)
+- `mcp.method` (set on host/router/upstream spans)
 - `mcp.session.id` (root host span)
 - `mcp.jsonrpc.id` (root host span, when request has id)
-- `mcp.tool.name` (set after routing on authz/schema/backend spans)
-- `mcp.backend.id` (backend call span)
+- `mcp.tool.name` (set after routing on authz/schema/upstream spans)
+- `mcp.backend.id` (upstream call span)
 - `mcp.agent.tokens_used` (root host span when header present)
 
 ### Router decision fields (`internal/router/types.go`)

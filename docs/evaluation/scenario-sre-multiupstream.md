@@ -1,6 +1,6 @@
 # SRE scenario: multi-upstream namespaced routing
 
-This scenario validates gateway behavior when multiple MCP backends are exposed behind namespaced tools (canonical names: `k8s__get_pod_logs`, `prom__query_instant`, `gh__list_prs`) with semantic routing enabled.
+This scenario validates gateway behavior when multiple MCP upstreams are exposed behind namespaced tools (canonical names: `k8s__get_pod_logs`, `prom__query_instant`, `gh__list_prs`) with semantic routing enabled.
 
 **HTTP mocks (SRE mock scenario).** For **real stdio MCP + JWT + recorded metrics**, use [scenario-real-upstreams-jwt.md](scenario-real-upstreams-jwt.md) and [calibration-results.md](calibration-results.md).
 
@@ -8,25 +8,25 @@ Use this runbook to exercise multi-upstream namespaced routing with the existing
 
 ## 1) Topology and config shape
 
-Follow the same `backends` layout used in `deployments/gateway.example.yaml` (`id`, `prefix`, `url`, `max_concurrency` per backend). For this scenario, use 2-3 backends with distinct prefixes:
+Follow the same `upstreams` layout used in `deployments/gateway.example.yaml` (`id`, `prefix`, `url`, `max_concurrency` per upstream). For this scenario, use 2-3 upstreams with distinct prefixes:
 
-- `k8s` backend serving Kubernetes tools (`get_pod_logs`, `list_pods`, ...).
-- `prom` backend serving Prometheus query tools (`query_instant`, `query_range`, ...).
-- `gh` backend serving GitHub tools (`list_prs`, `get_pr`, ...).
+- `k8s` upstream serving Kubernetes tools (`get_pod_logs`, `list_pods`, ...).
+- `prom` upstream serving Prometheus query tools (`query_instant`, `query_range`, ...).
+- `gh` upstream serving GitHub tools (`list_prs`, `get_pr`, ...).
 
 Example (adapt URLs and ports to your deployment):
 
 ```yaml
 backends:
-  - id: backend-k8s
+  - id: upstream-k8s
     prefix: k8s
     url: http://127.0.0.1:3201
     max_concurrency: 8
-  - id: backend-prom
+  - id: upstream-prom
     prefix: prom
     url: http://127.0.0.1:3202
     max_concurrency: 8
-  - id: backend-gh
+  - id: upstream-gh
     prefix: gh
     url: http://127.0.0.1:3203
     max_concurrency: 4
@@ -107,22 +107,22 @@ For each `POST /mcp/rpc`, expect gateway internal phase timing in `mcp.gateway.i
 - `phase=router`
 - `phase=mux`
 
-For `tools/call`, expect additional routing and backend execution visibility:
+For `tools/call`, expect additional routing and upstream execution visibility:
 
 - Root request span: `mcp.host.request`
 - Router decision telemetry through semantic router outcomes/duration metrics (layer labels such as `exact`, `rules`, `vector`)
-- Backend call span(s): `mcp.backend.call` associated with selected backend id (`backend-k8s`, `backend-prom`, `backend-gh`)
+- Upstream call span(s): `mcp.backend.call` associated with selected upstream id (`upstream-k8s`, `upstream-prom`, `upstream-gh`)
 
 Operationally, this gives an SRE a single correlated trace to answer:
 
-- Was failure/latency in parsing/security, routing decisioning, or backend execution?
-- Which backend was selected by the router?
-- Did the chosen backend/tool match the namespaced intent?
+- Was failure/latency in parsing/security, routing decisioning, or upstream execution?
+- Which upstream was selected by the router?
+- Did the chosen upstream/tool match the namespaced intent?
 
 ## 5) Evidence checklist
 
-- Multi-backend `tools/list` shows namespaced catalog entries from at least two backends.
-- Successful `tools/call` for 2-3 namespaced tools across different backend prefixes.
+- Multi-upstream `tools/list` shows namespaced catalog entries from at least two upstreams.
+- Successful `tools/call` for 2-3 namespaced tools across different upstream prefixes.
 - Traces/metrics show `parse/security/router/mux` phase coverage for the same session.
 - Router telemetry confirms exact-path or vector-path behavior under `ROUTER_MODE=on`.
 

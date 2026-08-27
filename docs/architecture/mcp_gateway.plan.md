@@ -22,14 +22,13 @@ Project metadata:
 | Field | Value |
 | ------- | -------------------------------------------------------------------------------------------------------- |
 | Title | Design and implementation of a Model Context Protocol (MCP) gateway for platform engineering |
-| Author | Carlos Palomero |
 | Version | 1.0 |
 | Date | April 2026 (plan status aligned with [calibration-results.md](../evaluation/calibration-results.md)) |
 
 
 - **In scope:** Go gateway as the single MCP negotiation point toward N upstream servers; capability aggregation with mandatory **namespacing**; cross-cutting security and telemetry.
 - **Out of scope:** **Frontend** is not part of this gateway (priority: backend, AI integration, operational case). Any minimal UI for demos is explicitly non-core.
-- **Prefix convention:** tools are namespaced as `silo__native_name` (for example `k8s__get_logs`, `prom__query_range`); the host sees prefixed names, backends receive native names after strip.
+- **Prefix convention:** tools are namespaced as `silo__native_name` (for example `k8s__get_logs`, `prom__query_range`); the host sees prefixed names, upstreams receive native names after strip.
 - **Internal gateway hop:** latency measured only inside the gateway process (parse, security, router, mux phases), excluding upstream MCP I/O and LLM work; see [calibration-results.md](../evaluation/calibration-results.md).
 - **Transparent routing:** when semantic routing selects a tool, the multiplexer forwards `tools/call` as if the host had named that namespaced tool directly (subject to `AllowAutoRename` policy).
 
@@ -91,10 +90,10 @@ Expanded implementation specification. This component is the **gateway core**: a
 
 - Accept connections from the **MCP host** (gateway client) according to the chosen remote MCP transport (in this design: HTTP + **Server-Sent Events** for the message session).
 - Maintain the host **session lifecycle**: from the first `initialize` until stream close or administrative timeout.
-- Translate each incoming host **JSON-RPC 2.0** message into one or more backend operations: forward, merge (via the multiplexer), or controlled fan-out per MCP method.
+- Translate each incoming host **JSON-RPC 2.0** message into one or more upstream operations: forward, merge (via the multiplexer), or controlled fan-out per MCP method.
 - Apply **stable namespacing** on tool names and on multiplexed resources/prompts metadata so the host never sees collisions between two distinct servers.
-- Correlate **JSON-RPC identifiers** (request/response `id` and, if applicable, internal sub-ids) end-to-end host ↔ gateway ↔ backend so notifications and responses do not mix across clients or backends.
-- Manage **concurrency** with goroutines and `context.Context`: cascade cancellation when the host closes the connection or when a backend fails in a way that should abort the in-flight request (policy configurable per method).
+- Correlate **JSON-RPC identifiers** (request/response `id` and, if applicable, internal sub-ids) end-to-end host ↔ gateway ↔ upstream so notifications and responses do not mix across clients or upstreams.
+- Manage **concurrency** with goroutines and `context.Context`: cascade cancellation when the host closes the connection or when an upstream fails in a way that should abort the in-flight request (policy configurable per method).
 - Wire security (security), semantic router , and telemetry (telemetry) through **extension points** on the request path so the multiplexer core stays transport-focused.
 
 **Explicitly excludes (other modules):**
@@ -110,17 +109,17 @@ Expanded implementation specification. This component is the **gateway core**: a
 - The host uses the same conceptual contract as with a standard MCP server: MCP messages wrapped in JSON-RPC 2.0.
 - **Requests** from host to gateway: typically HTTP POST (JSON body with the JSON-RPC object or the envelope defined by MCP HTTP transport). The gateway must **validate** a minimal schema: presence of `jsonrpc`, `method`, and `id` or consistent absence for a notification per JSON-RPC 2.0.
 - **Responses / server-initiated:** the gateway pushes **SSE** events (`text/event-stream`). Each event must carry a payload the host can parse as an MCP message (response to `id`, or server notification). Correlation requires preserving JSON-RPC `id` in the implementation except for documented aggregations (e.g. a single synthetic response after fan-in).
-- **MCP methods** supported by the orchestrator are documented in [mcp-capabilities.md](../mcp-capabilities.md) and [ADR 0004](../adr/0004-gateway-scope.md) (gateway-only, backend-only, or aggregated per method).
+- **MCP methods** supported by the orchestrator are documented in [mcp-capabilities.md](../mcp-capabilities.md) and [ADR 0004](../adr/0004-gateway-scope.md) (gateway-only, upstream-only, or aggregated per method).
 
-**Toward each backend (internal surface):**
+**Toward each upstream (internal surface):**
 
-- Each backend is modeled as an **adapter** behind a common interface, e.g. `BackendSession` with `Call(ctx, jsonrpcRequest) (jsonrpcResponse | stream, error)` or equivalent, whether the real server uses stdio, HTTP+SSE, or else.
-- The orchestrator must **not** expose prefixed tool names to the backend: on `tools/call` it must **strip** the agreed prefix and send the native name that server expects, unless the backend is explicitly configured to accept prefixed names (not recommended).
+- Each upstream is modeled as an **adapter** behind a common interface, e.g. `upstream.Client` with `Call(ctx, jsonrpcRequest) (jsonrpcResponse | stream, error)` or equivalent, whether the real server uses stdio, HTTP+SSE, or else.
+- The orchestrator must **not** expose prefixed tool names to the upstream: on `tools/call` it must **strip** the agreed prefix and send the native name that server expects, unless the upstream is explicitly configured to accept prefixed names (not recommended).
 - **Errors:** propagate JSON-RPC 2.0 `error` with stable codes. Gateway application codes (`-32000`…`-32005`) live in `internal/gateway/errcodes` and are tabulated in [OpenAPI](../artifacts/openapi/openapi.yaml) and [errors.md](../errors.md) for hosts and tests.
 
 **Minimal configuration shapes (implementation reference):**
 
-- Ordered backend list: stable `id` (string), URL or command, credentials by reference (secret/K8s secret), **namespace prefix** (e.g. `k8s`, `prom`).
+- Ordered upstream list: stable `id` (string), URL or command, credentials by reference (secret/K8s secret), **namespace prefix** (e.g. `k8s`, `prom`).
 - **Separator** rules between prefix and native name: default double underscore `__` (e.g. `k8s__get_logs` → prefix `k8s`, native `get_logs`). Native tool names containing `__` are **rejected** (`internal/gateway/namespace`); resources/prompts use opaque encoding when the native segment may contain `__`.
 
 #### Data flow
@@ -136,25 +135,25 @@ Expanded implementation specification. This component is the **gateway core**: a
 
 **`initialize` (orchestrator view):**
 
-- The handler does not answer from memory alone: it runs **synthetic negotiation** (expanded in initialize negotiation): query each backend (sequential or concurrent with a concurrency cap), collect `capabilities` and protocol versions, and **merge** into a single `InitializeResult` to the host, recording in internal metadata which capability subset comes from which backend (for traceability and for the router).
-- If a backend does not respond, default policy: **omit** that backend from the catalog and log a warning; if all fail, return a JSON-RPC error to the host.
+- The handler does not answer from memory alone: it runs **synthetic negotiation** (expanded in initialize negotiation): query each upstream (sequential or concurrent with a concurrency cap), collect `capabilities` and protocol versions, and **merge** into a single `InitializeResult` to the host, recording in internal metadata which capability subset comes from which upstream (for traceability and for the router).
+- If an upstream does not respond, default policy: **omit** that upstream from the catalog and log a warning; if all fail, return a JSON-RPC error to the host.
 
 **`tools/list`:**
 
-- The gateway may cache the merged tool catalog with TTL or invalidate on backend reconnect.
-- Flow: for each connected backend, obtain native `tools/list`, **prefix** each `name`, merge lists, dedupe by fully prefixed name; full-name conflicts after prefix are impossible if configured prefixes are unique (golden rule).
+- The gateway may cache the merged tool catalog with TTL or invalidate on upstream reconnect.
+- Flow: for each connected upstream, obtain native `tools/list`, **prefix** each `name`, merge lists, dedupe by fully prefixed name; full-name conflicts after prefix are impossible if configured prefixes are unique (golden rule).
 
 **`tools/call`:**
 
 1. Parse the tool name requested by the host.
-2. **Resolve** prefix → target backend (configuration table or, with semantic router enabled, router decision returning the same logical target).
+2. **Resolve** prefix → target upstream (configuration table or, with semantic router enabled, router decision returning the same logical target).
 3. **Transform** the request body: strip name to native; arguments unchanged except security validation.
-4. Forward to the backend with the same JSON-RPC `id` **or** map `id` if the design uses internal ids; if mapped, keep a `host_id → backend_id` table until the response arrives and rewrite to the host with the host’s original `id` (recommended for transparency).
-5. Return the backend response on the host SSE stream. If the backend returns partial errors or structured MCP content (`content`, `isError`), forward without changing semantics (argument redaction in logs is implemented; full response-body redaction is out of scope v1).
+4. Forward to the upstream with the same JSON-RPC `id` **or** map `id` if the design uses internal ids; if mapped, keep a `host_id → backend_id` table until the response arrives and rewrite to the host with the host’s original `id` (recommended for transparency).
+5. Return the upstream response on the host SSE stream. If the upstream returns partial errors or structured MCP content (`content`, `isError`), forward without changing semantics (argument redaction in logs is implemented; full response-body redaction is out of scope v1).
 
 **Concurrency:**
 
-- Multiple concurrent host `tools/call`s must be able to run in parallel against different backends; use **limits** (per-backend or global semaphore) to avoid saturating downstream services.
+- Multiple concurrent host `tools/call`s must be able to run in parallel against different upstreams; use **limits** (per-upstream or global semaphore) to avoid saturating downstream services.
 - A single host session should serialize or not SSE writes per MCP client guarantees: in general, **serializing writes** to the SSE `ResponseWriter` with a per-session mutex avoids interleaved corrupt frames.
 
 #### Golden rules
@@ -162,12 +161,12 @@ Expanded implementation specification. This component is the **gateway core**: a
 
 | Rule | Rationale |
 | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| **R1: Unique prefix per backend** | Avoids collisions in `tools/list` and ambiguity in `tools/call`. |
-| **R2: Mandatory strip on forward** | Backends see native contracts; only the gateway knows the prefix. |
+| **R1: Unique prefix per upstream** | Avoids collisions in `tools/list` and ambiguity in `tools/call`. |
+| **R2: Mandatory strip on forward** | Upstreams see native contracts; only the gateway knows the prefix. |
 | **R3: Preserve host-visible `id` in the response** | The host JSON-RPC client must correlate without knowing internal ids. |
 | **R4: One coherent SSE stream per host session** | Avoids races and simplifies the client mental model. |
-| **R5: `context` with per-backend-call deadline** | Hung backends must not block goroutines indefinitely; deadlines aligned with SLAs in performance requirements. |
-| **R6: Partial aggregation failure must not kill session** | One down backend does not invalidate others’ `initialize` unless an explicit “strict” policy. |
+| **R5: `context` with per-upstream-call deadline** | Hung upstreams must not block goroutines indefinitely; deadlines aligned with SLAs in performance requirements. |
+| **R6: Partial aggregation failure must not kill session** | One down upstream does not invalidate others’ `initialize` unless an explicit “strict” policy. |
 | **R7: Do not reinterpret MCP results** | The gateway is a broker, not a second LLM; do not alter tool output text except agreed security policies (security). |
 
 
@@ -205,15 +204,15 @@ flowchart TB
 | `internal/gateway/session` | Host sessions, `id` map registry, serialized SSE writes, method dispatch |
 | `internal/gateway/multiplex` | `initialize` / `tools/list` merge, cache invalidation |
 | `internal/gateway/namespace` | Prefix/strip, character validation and uniqueness |
-| `internal/backend` | `Backend`, `Connect` interfaces, timeouts, health |
+| `internal/upstream` | `Upstream`, `Connect` interfaces, timeouts, health |
 | `internal/rpc` | JSON-RPC 2.0 parse/validate (covered by `make ci`) |
 
 
 #### Orchestrator acceptance criteria — **met**
 
-- Complete `initialize` handshake to the host with at least **two** mock backends and a namespaced merged catalog.
+- Complete `initialize` handshake to the host with at least **two** mock upstreams and a namespaced merged catalog.
 - `tools/list` returns a stable ordered union (convention: order by configured prefix, then native name).
-- `tools/call` for tool `pref__tool` hits only the correct backend and the mock receives name `tool`.
+- `tools/call` for tool `pref__tool` hits only the correct upstream and the mock receives name `tool`.
 - Unit tests for **prefix/strip mapping** and **preserved `id`** in responses.
 - SSE format documented in [OpenAPI](../artifacts/openapi/openapi.yaml) and [CONNECTING_AGENTS.md](../CONNECTING_AGENTS.md).
 
@@ -221,7 +220,7 @@ flowchart TB
 
 ### Semantic router
 
-The **semantic router** reduces **context noise** for the agent when the merged tool catalog is large (multiple silos × dozens of tools). It does not replace the orchestrator: it **filters, disambiguates, and chooses destination** before the multiplexer strips the prefix and forwards to the backend. It runs **inside** the gateway; the MCP host still has a single endpoint and a single merged `tools/list`, except optional modes documented below.
+The **semantic router** reduces **context noise** for the agent when the merged tool catalog is large (multiple silos × dozens of tools). It does not replace the orchestrator: it **filters, disambiguates, and chooses destination** before the multiplexer strips the prefix and forwards to the upstream. It runs **inside** the gateway; the MCP host still has a single endpoint and a single merged `tools/list`, except optional modes documented below.
 
 #### Responsibility
 
@@ -260,7 +259,7 @@ type RoutingDecision struct {
  ToolNameNamespaced string
  Confidence float64 // 0..1 or normalized score
  Candidates []ScoredTool // top-K for logs / explainability
- FallbackLayer string // "exact" | "vector" | "rules" | "default_backend"
+ FallbackLayer string // "exact" | "vector" | "rules" | "degraded_exact"
  LatencyMS int64
 }
 
@@ -320,7 +319,7 @@ type ScoredTool struct {
 1. Embed the query; `Query` with configurable `topK` (e.g. 8, 24) and policy filters.
 2. **Score threshold** `T_min`: below it, do not auto-accept top-1 unless there is a **single** candidate after filtering.
 3. **Hybrid BM25 + vector (implemented):** rerank vector TopK with BM25 over names/descriptions; weight **`router.hybrid_alpha`** (reference `0.2` in [calibration-results.md](../evaluation/calibration-results.md)).
-4. **Semantic deduplication:** if two very similar tools from the same backend appear in top-K, apply tie-break (higher score, or configured silo preference).
+4. **Semantic deduplication:** if two very similar tools from the same upstream appear in top-K, apply tie-break (higher score, or configured silo preference).
 
 **Step 4 — Decision and transparent routing:**
 
@@ -331,7 +330,7 @@ type ScoredTool struct {
 **Temporal interaction with orchestrator (recommended strict order):**
 
 ```text
-Incoming JSON-RPC → syntax validation → security (when present) → semantic router router → orchestrator dispatch to backend
+Incoming JSON-RPC → syntax validation → security (when present) → semantic router → orchestrator dispatch to upstream
 ```
 
 #### Golden rules
@@ -399,7 +398,7 @@ flowchart TD
 
 - With a catalog of ≥20 synthetic tools, vector query shrinks the candidate set while respecting `AllowedTools`.
 - Integration test: ambiguous name resolved by vector to the correct tool; no valid candidate returns a stable error.
-- Reproducible benchmark: router eval p95 under budget (performance requirements; excluding MCP backend latency).
+- Reproducible benchmark: router eval p95 under budget (performance requirements; excluding MCP upstream latency).
 - Default `topK`, `score_min`, `AllowAutoRename`, and indexed document format recorded in repo configs and [calibration-results.md](../evaluation/calibration-results.md).
 
 **In-repo harness:** `internal/routertest`, synthetic catalog (`SyntheticCatalog`, 24 tools), golden intents, `TestRouterEvalVectorRecallLexical` (recall@1), `TestRouterEvalEmbedAndQueryP95`, and silo narrowing coverage. Run: `go test ./internal/routertest -run RouterEval -v`. Live calibration: **all-MiniLM-L6-v2** + Qdrant — recall@1 = 1.000 ([calibration-results.md](../evaluation/calibration-results.md)).
@@ -415,7 +414,7 @@ The security layer implements **authentication**, **per-tool authorization**, an
 - **Authentication (AuthN)** of the gateway client: validate credential presentation on the HTTP transport carrying MCP (e.g. `Authorization: Bearer <JWT>` header or client mTLS in corporate deployments). Resolve **subject identity** (`sub`), **issuer** (`iss`), **audience** (`aud`), validity, and if applicable **tenancy** (org, cluster) via agreed claims.
 - **Authorization (AuthZ)** at **namespaced MCP tool** level (`prom__query_range`, `k8s__get_logs`, …): decide whether the subject may **invoke** that specific tool, not only whether they can “talk to the gateway”.
 - **Granular consent** modeled with **Rich Authorization Requests (RAR)** or another documented equivalent: the token or authorization session must reflect **which tools** (or logical tool groups) were accepted by the user or corporate policy, avoiding one broad scope enabling the whole merged catalog.
-- **Argument validation** for `tools/call` against per-tool **JSON Schema** **before** forwarding to the backend (see security golden rules below): types, ranges, patterns, `required`, `additionalProperties: false` where appropriate.
+- **Argument validation** for `tools/call` against per-tool **JSON Schema** **before** forwarding to the upstream (see security golden rules below): types, ranges, patterns, `required`, `additionalProperties: false` where appropriate.
 - **Security audit**: structured logging of denials, requested tool, policy version, `sub` (hashed or truncated for privacy), without dumping sensitive arguments in clear except explicit debug policy.
 - **Supply to semantic router** the `AllowedTools` subset derived from effective policy after AuthZ so vector search **never** promotes forbidden tools.
 
@@ -482,7 +481,7 @@ Parsed JSON-RPC → authn → authz per method/tool → JSON Schema validation (
 
 | Method | Security actions |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `initialize` | Client AuthN; optionally restrict `clientInfo` or versions; do not expose sensitive backend capabilities in the merged result if policy forbids. |
+| `initialize` | Client AuthN; optionally restrict `clientInfo` or versions; do not expose sensitive upstream capabilities in the merged result if policy forbids. |
 | `tools/list` | Filter the merged list **before** sending to the host: only tools ∈ `AllowedTools` (reduces surface metadata leakage). |
 | `tools/call` | AuthZ by tool name; JSON Schema validation; optionally `arguments` size limits (bytes and JSON depth) before schema. |
 | Notifications | Same Bearer JWT as the open SSE session when `AUTH_MODE=jwt` (AuthN on every HTTP request including notifications). |
@@ -492,11 +491,11 @@ Parsed JSON-RPC → authn → authz per method/tool → JSON Schema validation (
 
 1. On **first** session contact, the gateway may require the JWT to include already-granted `authorization_details` or claims derived from a **prior** IdP step (out of scope: consent screens).
 2. **PolicyEngine** expands RAR details to sets of namespaced `tool_name` (glob resolution, groups).
-3. Each `tools/call` checks membership in the set; short denial without calling the backend.
+3. Each `tools/call` checks membership in the set; short denial without calling the upstream.
 
 **JSON Schema flow:**
 
-1. During **catalog ingestion** (merged `tools/list`), attach per-tool **input schema** from backend metadata and policy config (**implemented** in the multiplex reindex path; elevated tools require schema per `policy.elevated_tools`).
+1. During **catalog ingestion** (merged `tools/list`), attach per-tool **input schema** from upstream metadata and policy config (**implemented** in the multiplex reindex path; elevated tools require schema per `policy.elevated_tools`).
 2. On `tools/call`, after AuthZ, run a validator for the chosen **JSON Schema draft** (e.g. 2020-12); reject on failure.
 3. **Performance:** cache compiled schemas by `tool_name` + `schema_version`.
 
@@ -508,7 +507,7 @@ Parsed JSON-RPC → authn → authz per method/tool → JSON Schema validation (
 | **Validate JWT before any business logic** | Avoids useful work for anonymous attackers and simplifies rate limiting. |
 | **Filtered `tools/list` = policy, not UI only** | Host must not see tools it cannot invoke (less enumeration, less agent confusion). |
 | **JSON Schema mandatory for risky tools in prod** | Configurable list of “elevated” tools that **require** strict schema; no schema → deny or `dev` only. |
-| **`additionalProperties: false` by default in corporate schemas** | Limits injection of unexpected fields toward backends that forward to APIs. |
+| **`additionalProperties: false` by default in corporate schemas** | Limits injection of unexpected fields toward upstreams that forward to APIs. |
 | **Do not log tokens or secret-bearing arguments** | Redact `password`, `token`, `kubeconfig`, etc., via a key list. |
 | **JWT keys (JWKS) with cache and rotation** | Fetch JWKS from `iss`, cache TTL, handle unknown `kid`. |
 | **Fail closed** | If PolicyEngine cannot evaluate (store down), **deny** unless explicit degradation mode documented for non-prod. |
@@ -558,12 +557,12 @@ Common Go ecosystem libraries in use: `github.com/golang-jwt/jwt/v5`, `github.co
 | Mode | Behavior |
 | ----- | -------------------------------------------------------------------------------------------------------------------------------- |
 | Local dev | `AUTH_MODE=none` or JWT without RAR: minimal validation only — **not** safe for public exposure ([DEVELOPER.md](../DEVELOPER.md)). |
-| Production-style | `AUTH_MODE=jwt` + RAR merge + JSON Schema + audit — implemented; use in multibackend benchmark ([scenario-real-upstreams-jwt.md](../evaluation/scenario-real-upstreams-jwt.md)). |
+| Production-style | `AUTH_MODE=jwt` + RAR merge + JSON Schema + audit — implemented; use in multiupstream benchmark ([scenario-real-upstreams-jwt.md](../evaluation/scenario-real-upstreams-jwt.md)). |
 
 
 #### Security acceptance criteria — **met**
 
-- Invalid JWT (signature, `exp`) → stable JSON-RPC response without calling backends.
+- Invalid JWT (signature, `exp`) → stable JSON-RPC response without calling upstreams.
 - Tool not consented → `PERMISSION_DENIED` without forward; audit event emitted.
 - `tools/list` for a test subject returns **only** the authorized subset against a larger merged catalog.
 - Unit cases: schemas (valid, wrong type, extra field with `additionalProperties: false`) in `internal/gateway/multiplex` policy/schema tests.
@@ -573,7 +572,7 @@ Common Go ecosystem libraries in use: `github.com/golang-jwt/jwt/v5`, `github.co
 
 ### Observability engine
 
-The **observability engine** provides correlated **distributed traces**, **metrics**, and **structured logs** to operate and evaluate the gateway in SRE-oriented scenarios (MTTR, incident acknowledgment, meeting the latency budget performance requirements). It uses **OpenTelemetry (OTel)** as the single API/SDK and prefers export via **OTLP** to backends chosen in implementation decisions (Jaeger, Tempo, Prometheus, Honeycomb, etc.).
+The **observability engine** provides correlated **distributed traces**, **metrics**, and **structured logs** to operate and evaluate the gateway in SRE-oriented scenarios (MTTR, incident acknowledgment, meeting the latency budget performance requirements). It uses **OpenTelemetry (OTel)** as the single API/SDK and prefers export via **OTLP** to upstreams chosen in implementation decisions (Jaeger, Tempo, Prometheus, Honeycomb, etc.).
 
 #### Responsibility
 
@@ -581,8 +580,8 @@ The **observability engine** provides correlated **distributed traces**, **metri
 
 - Initialize the **OTel SDK** in the gateway process: `Resource` (service name, version, environment), trace **propagators** (`tracecontext`, `baggage` if agreed with the host), and configurable OTLP gRPC/HTTP **exporters**.
 - Build a **span hierarchy** around useful work per incoming MCP request: one **root span** per JSON-RPC message (`mcp.host.request`; granularity documented in `docs/DEVELOPER.md` Observability).
-- Nest **child spans** per internal phase: authentication/authorization (security), semantic routing , **each backend call** in `tools/call` or aggregation fan-out, JSON Schema validation, SSE serialization.
-- Emit **metrics** for latency per **hop** (time inside gateway process vs waiting on backend), error counters by `method`, `backend_id`, and JSON-RPC code, and histograms aligned with **p95 < 50 ms** for the **internal hop** performance requirements.
+- Nest **child spans** per internal phase: authentication/authorization (security), semantic routing , **each upstream call** in `tools/call` or aggregation fan-out, JSON Schema validation, SSE serialization.
+- Emit **metrics** for latency per **hop** (time inside gateway process vs waiting on upstream), error counters by `method`, `backend_id`, and JSON-RPC code, and histograms aligned with **p95 < 50 ms** for the **internal hop** performance requirements.
 - Correlate application **logs** (slog/zap) with `trace_id` and `span_id` via the OTel Logs ↔ trace **bridge**.
 - Expose **health and minimal telemetry** endpoints for Kubernetes (`/healthz`, `/readyz`) without conflating with OTel metrics (those go via OTLP exporter or **Prometheus scrape** of a collector sidecar if using the collector pattern).
 
@@ -613,15 +612,15 @@ The **observability engine** provides correlated **distributed traces**, **metri
 | `mcp.security.authz` | Per-tool policy check | `mcp.host.request` |
 | `mcp.validate.json_schema` | Argument validation | `mcp.host.request` |
 | `mcp.router.semantic` | Signal, Decision pipeline semantic router | `mcp.host.request` |
-| `mcp.backend.call` | One invocation per participating backend | `mcp.host.request` |
-| `mcp.multiplex.initialize` / `mcp.multiplex.tools_list` | Multi-backend negotiation or merge | `mcp.host.request` |
+| `mcp.backend.call` | One invocation per participating upstream | `mcp.host.request` |
+| `mcp.multiplex.initialize` / `mcp.multiplex.tools_list` | Multi-upstream negotiation or merge | `mcp.host.request` |
 
 
 **Recommended standard attributes (OTel semantics + MCP domain):**
 
 - `mcp.method` (string): JSON-RPC / MCP method, e.g. `tools/call`.
 - `mcp.tool.name` (string): namespaced name after router.
-- `mcp.backend.id` (string): configured backend identifier.
+- `mcp.backend.id` (string): configured upstream identifier.
 - `mcp.jsonrpc.id` (stringified): correlation with client.
 - `mcp.session.id`: internal session UUID Orchestrator —
 - `error.type` / `exception.message` on spans with `Error` status (no sensitive data).
@@ -629,16 +628,16 @@ The **observability engine** provides correlated **distributed traces**, **metri
 **Context propagation in Go:**
 
 - Use standard `context.Context`: each handler receives `ctx` with active `span`; child goroutines must use `trace.ContextWithSpan` or OTel Go’s recommended pattern so the **parent is not lost**.
-- Outgoing HTTP calls to MCP backends (if HTTP) should inject `traceparent` via `otelhttp.NewTransport` or equivalent for trace continuity **where the backend accepts it** (many MCP servers ignore propagation; `mcp.backend.call` may remain a child of the gateway only, which is acceptable).
+- Outgoing HTTP calls to MCP upstreams (if HTTP) should inject `traceparent` via `otelhttp.NewTransport` or equivalent for trace continuity **where the upstream accepts it** (many MCP servers ignore propagation; `mcp.backend.call` may remain a child of the gateway only, which is acceptable).
 
 **Metrics, minimum instrumentation required for production observability:**
 
 
 | Metric | Type | Labels | Definition |
 | ------------------------------------------- | --------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `mcp_gateway_request_duration_seconds` | Histogram | `method`, `outcome` | Total handling time from ingress to response on the stream (includes backends). |
+| `mcp_gateway_request_duration_seconds` | Histogram | `method`, `outcome` | Total handling time from ingress to response on the stream (includes upstreams). |
 | `mcp_gateway_internal_duration_seconds` | Histogram | `method`, `phase` | Time **only** in gateway process per phase (`parse`, `security`, `router`, `mux`), basis for < 50 ms p95 budget performance requirements. (OTel instrument: `mcp.gateway.internal.duration_seconds`.) |
-| `mcp_gateway_backend_call_duration_seconds` | Histogram | `backend_id`, `outcome` | Time from send to adapter until backend response. |
+| `mcp_gateway_backend_call_duration_seconds` | Histogram | `backend_id`, `outcome` | Time from send to adapter until upstream response. |
 | `mcp_gateway_requests_total` | Counter | `method`, `outcome` | Request count (`success` / `client_error` / `server_error`). |
 
 
@@ -653,7 +652,7 @@ The **observability engine** provides correlated **distributed traces**, **metri
 1. **Startup:** configure `TracerProvider` and `MeterProvider` with `resource.New()` and OTLP exporters; register graceful shutdown (`Shutdown` with timeout) on process signal.
 2. **HTTP/SSE ingress:** middleware creates or continues span (if host sends `traceparent`, use `Propagators.Extract` to **link** upstream agent traces when present).
 3. **Per JSON-RPC message:** start `mcp.host.request`; nest security, semantic router, orchestrator spans per path; close with `SetStatus` OK or Error per JSON-RPC outcome.
-4. **`tools/call` with backend:** create `mcp.backend.call` per target; record `backend_id`, duration, and adapter error.
+4. **`tools/call` with upstream:** create `mcp.backend.call` per target; record `backend_id`, duration, and adapter error.
 5. **Export:** OTel default batch processor; tune `BatchTimeout` and `MaxExportBatchSize` to avoid extreme latency on the critical path (document trade-off in this spec).
 
 #### Golden rules
@@ -706,16 +705,16 @@ Typical dependencies: `go.opentelemetry.io/otel`, `go.opentelemetry.io/contrib/i
 
 #### Integration with system requirements (performance requirements) — **met**
 
-Internal phase **mean** latency ≪ 50 ms budget under lab load — see [calibration-results.md](../evaluation/calibration-results.md). Grafana dashboard JSON: `docs/artifacts/grafana/mcp-gateway-observability.json` (host → gateway → backend trace example via Tempo in Compose).
+Internal phase **mean** latency ≪ 50 ms budget under lab load — see [calibration-results.md](../evaluation/calibration-results.md). Grafana dashboard JSON: `docs/artifacts/grafana/mcp-gateway-observability.json` (host → gateway → upstream trace example via Tempo in Compose).
 
 #### Telemetry acceptance criteria — **met**
 
 - OTLP traces visible in Tempo with `mcp.host.request` and `mcp.backend.call` in `tools/call` flows.
 - Exported metrics per telemetry interface contract (OTel → Prometheus naming documented in `docs/DEVELOPER.md`).
 - Logs for failed requests include `trace_id` (`internal/telemetry/slog.go`).
-- Integration tests verify trace context in backend goroutines (`internal/telemetry`).
+- Integration tests verify trace context in upstream goroutines (`internal/telemetry`).
 
-**Evidence:** Compose stack (`make docker-up`), calibration, multibackend benchmark and LangGraph agent integration runs, `make ci`.
+**Evidence:** Compose stack (`make docker-up`), calibration, multiupstream benchmark and LangGraph agent integration runs, `make ci`.
 
 ---
 
@@ -737,14 +736,14 @@ This subsection records **stack choices reflected in this repository** versus **
 | **Vector store** | **Qdrant**, HNSW, **metadata filters during ANN** (policy in-index); **HTTP API client** in gateway (`internal/router/store/qdrant.go`); **cosine** distance; **384 dimensions** aligned with embeddings. | Collection naming / rotation, HNSW tuning, auth/TLS in non-local deploys, persistence strategy (see vector store residual). |
 | **Embeddings** | **Local ONNX Runtime**, model **all-MiniLM-L6-v2**; **384-d**, **L2-normalised** outputs; service **`embed:8001`**; image build bakes ONNX (no runtime download). | Indexed text template version, batch/rate limits, optional embedding cache, multilingual needs (embeddings residual). |
 | **Host ↔ gateway transport** | **HTTP POST** (agent requests) + **SSE** (async responses); **JSON-RPC 2.0**; MCP **reference transport** for interoperability. | Normative MCP spec revision pinned in `docs/DEVELOPER.md` and §8 references; TLS termination; body size limits, heartbeats, backpressure (transport residual). |
-| **Trace backend** | **Grafana Tempo** (OTLP); **metrics_generator** RED → Prometheus; exemplars for trace, metric correlation. | Sampling ratios, retention, attribute redaction details (observability backends residual). |
-| **Metrics / OTel topology** | **Prometheus** + **OpenTelemetry Collector** as **sidecar** (gateway → OTLP → Collector → Tempo + Prometheus scrape). | OTLP gRPC vs HTTP from gateway to Collector; prod sampling (observability backends residual). |
+| **Trace upstream** | **Grafana Tempo** (OTLP); **metrics_generator** RED → Prometheus; exemplars for trace, metric correlation. | Sampling ratios, retention, attribute redaction details (observability upstreams residual). |
+| **Metrics / OTel topology** | **Prometheus** + **OpenTelemetry Collector** as **sidecar** (gateway → OTLP → Collector → Tempo + Prometheus scrape). | OTLP gRPC vs HTTP from gateway to Collector; prod sampling (observability upstreams residual). |
 | **AuthN (design-time)** | **JWT Bearer** with **JWKS**; validate `iss`, `aud`, `exp`. Local quickstart runs with **`AUTH_MODE=none`** (dev-only; not for public exposure). | Concrete IdP URLs, key rotation ops, rate limits, mTLS vs JWT for mesh (authentication residual). |
 | **AuthZ / RAR** | **Closed**, canonical RAR `authorization_details` for **`type: "mcp_tool"`** is fixed in **[ADR 0003](../adr/0003-security-rar-jwt-merge-failmode.md)** and OpenAPI schema **`AuthorizationDetailsMcpTool`** (`docs/artifacts/openapi/openapi.yaml`), aligned with `internal/policy/rar.go` (`tool_name`/`tool_pattern` exclusivity, non-`mcp_tool` ignored, glob with `*` and `?` only). | IdP-side issuance UX/policy remains deployment-specific; gateway contract is fixed (authentication). |
 | **Router hyperparameters** | **Closed** for reference deployment: `top_k=8`, `score_min=0.35`, `hybrid_alpha=0.2`, `allow_auto_rename=false` in `deployments/gateway.example.yaml` / `gateway.real.yaml`; recall 1.000 on eval catalog ([calibration-results.md](../evaluation/calibration-results.md)). | Per-environment retuning when embedding model or catalog changes. |
-| **Orchestrator behaviour** | The orchestrator is implemented in the repo. **Repo:** multiplexor implements **`__` namespacing**, **host `id` preservation**, **partial backend omit on `initialize` / list (R6)**, **optional strict mode flags** (`aggregation.strict_initialize`, `aggregation.strict_list`), **operational timeouts from YAML** (`aggregation.init_timeout`, `list_timeout`, `call_timeout`), **per-backend concurrency caps** (`max_concurrency`), **global cap** (`aggregation.max_in_flight`), and **application error codes** (`internal/gateway/errcodes`). | Operator tuning of timeouts, concurrency caps, and strict flags per environment (orchestrator tuning). |
+| **Orchestrator behaviour** | The orchestrator is implemented in the repo. **Repo:** multiplexor implements **`__` namespacing**, **host `id` preservation**, **partial upstream omit on `initialize` / list (R6)**, **optional strict mode flags** (`aggregation.strict_initialize`, `aggregation.strict_list`), **operational timeouts from YAML** (`aggregation.init_timeout`, `list_timeout`, `call_timeout`), **per-upstream concurrency caps** (`max_concurrency`), **global cap** (`aggregation.max_in_flight`), and **application error codes** (`internal/gateway/errcodes`). | Operator tuning of timeouts, concurrency caps, and strict flags per environment (orchestrator tuning). |
 
-**Implementation checklist checklist:** Items **1–7** are reflected in deployment scaffolding, ADRs, OpenAPI, and [calibration-results.md](../evaluation/calibration-results.md). Routine version bumps remain ongoing maintenance.
+**Implementation checklist:** Items **1–7** are reflected in deployment scaffolding, ADRs, OpenAPI, and [calibration-results.md](../evaluation/calibration-results.md). Routine version bumps remain ongoing maintenance.
 
 ---
 
@@ -757,7 +756,7 @@ This subsection records **stack choices reflected in this repository** versus **
 **Rationale:**
 
 - **Performance and data model:** Rust engine with competitive ANN search (e.g. HNSW); fits a tool catalog growing across silos and catalog versions (`catalog_version`) without requiring “hyper-massive” lab scale while leaving headroom.
-- **Pragmatism for a Go backend:** Qdrant runs as a **sidecar service** (single container or Qdrant Cloud), with **HTTP and gRPC** APIs and suitable Go clients, without a Python runtime or coupling the gateway binary to foreign ecosystems.
+- **Pragmatism for a Go upstream:** Qdrant runs as a **sidecar service** (single container or Qdrant Cloud), with **HTTP and gRPC** APIs and suitable Go clients, without a Python runtime or coupling the gateway binary to foreign ecosystems.
 - **Pre-vector filters (semantic router / security requirement):** per-point metadata (`backend_id`, namespaced names, policy) maps to **payload + filter conditions** in query so `AllowedTools` and silo segregation apply in the index, not only in memory.
 - **Operations:** official image, stable docs, natural fit with **Kubernetes** (StatefulSet or managed deploy) for the Platform Engineering operational case.
 
@@ -772,7 +771,7 @@ This subsection records **stack choices reflected in this repository** versus **
 - **Qdrant authentication** in non-local environments (API key, TLS).
 - **Persistence:** Docker volumes vs ephemeral in CI.
 
-**Stability criterion:** Qdrant choice is fixed for this repository; keep `internal/router/store` abstracted for tests and alternate backends.
+**Stability criterion:** Qdrant choice is fixed for this repository; keep `internal/router/store` abstracted for tests and alternate upstreams.
 
 ---
 
@@ -795,9 +794,9 @@ This subsection records **stack choices reflected in this repository** versus **
 
 ---
 
-### 4.3 Telemetry: trace and metric backends (OTLP)
+### 4.3 Telemetry: trace and metric upstreams (OTLP)
 
-**Not 1:1 substitutes:** traces vs metrics vs unified platform. This plan **separates** the discussion in observability backends.
+**Not 1:1 substitutes:** traces vs metrics vs unified platform. This plan **separates** the discussion in observability upstreams.
 
 **Architecture decisions (closed):** **Grafana Tempo** for trace storage (OTLP, `metrics_generator` RED → Prometheus, exemplars); **Prometheus** + **OpenTelemetry Collector** sidecar for decoupled export (rationale in §4.3).
 
@@ -810,7 +809,7 @@ This subsection records **stack choices reflected in this repository** versus **
 - **Retention and privacy:** which attributes to strip before export (telemetry already forbids `arguments` on spans).
 - **Minimum operational dashboard:** reference Grafana JSON `docs/artifacts/grafana/mcp-gateway-observability.json` (**closed**); operator may adapt PromQL to their exporter naming.
 
-**Closure criteria:** one end-to-end trace visible in chosen backend + one demonstrable histogram metric in lab evidence — **met** (Compose Tempo/Prometheus/Grafana; [calibration-results.md](../evaluation/calibration-results.md); dashboard `docs/artifacts/grafana/mcp-gateway-observability.json`).
+**Closure criteria:** one end-to-end trace visible in chosen upstream + one demonstrable histogram metric in lab evidence — **met** (Compose Tempo/Prometheus/Grafana; [calibration-results.md](../evaluation/calibration-results.md); dashboard `docs/artifacts/grafana/mcp-gateway-observability.json`).
 
 ---
 
@@ -871,7 +870,7 @@ This subsection records **stack choices reflected in this repository** versus **
 
 | MCP method / group | Status | Notes |
 |---|---|---|
-| `initialize` | Supported | Aggregated negotiation over available backends. |
+| `initialize` | Supported | Aggregated negotiation over available upstreams. |
 | `notifications/initialized` / `initialized` | Supported | Required to complete handshake before operational RPCs. |
 | `ping` | Supported | Standard utility RPC path. |
 | `tools/list`, `tools/call` | Supported | Primary SRE broker surface; JWT/RAR AuthZ applies to tools only. |
@@ -884,12 +883,12 @@ This subsection records **stack choices reflected in this repository** versus **
 **Repo decisions implemented (aligned with orchestrator, tests in tree):**
 
 - **`jsonrpc` `id` strategy:** **strict preservation** of host `id` on the forward path (notifications omit `id`; `id: null` rejected at parse).
-- **`initialize` with partially down backends:** **omit** failed backends from merge; **JSON-RPC error to host only if all fail** (R6).
+- **`initialize` with partially down upstreams:** **omit** failed upstreams from merge; **JSON-RPC error to host only if all fail** (R6).
 - **Strict aggregation policy flags:** optional fail-closed behavior for `initialize` and list methods via **`aggregation.strict_initialize`** / **`aggregation.strict_list`** (or env equivalents), returning `StrictAggregationFailed` when enabled and an upstream fails.
 - **Merged `tools/list` cache:** TTL configurable (`multiplex.WithListTTL`); **invalidated after successful `initialize`**.
 - **Operational aggregation timeouts:** YAML-backed settings in `aggregation.*` (`init_timeout`, `list_timeout`, `call_timeout`) are wired to multiplexer deadlines.
-- **Per-backend concurrency controls:** upstream-level `max_concurrency` is implemented via backend client semaphores.
-- **Global multiplex concurrency cap:** optional gateway-wide semaphore via `aggregation.max_in_flight` (`0` disables it) now limits concurrent upstream RPCs across all backends.
+- **Per-upstream concurrency controls:** upstream-level `max_concurrency` is implemented via upstream client semaphores.
+- **Global multiplex concurrency cap:** optional gateway-wide semaphore via `aggregation.max_in_flight` (`0` disables it) now limits concurrent upstream RPCs across all upstreams.
 - **Namespacing separator:** **`__`** (double underscore); native names containing the separator are **rejected** (`internal/gateway/namespace`).
 - **Gateway application error codes:** stable constants in **`internal/gateway/errcodes`** (see package doc).
 
@@ -897,7 +896,7 @@ This subsection records **stack choices reflected in this repository** versus **
 
 - Ongoing operational tuning only (timeouts, concurrency caps, strict aggregation flags).
 
-**Closure criteria:** unit tests Orchestrator tests + documentation of behavior when a mock backend fails, **met for current multiplexor scope** (including global semaphore behavior).
+**Closure criteria:** unit tests Orchestrator tests + documentation of behavior when a mock upstream fails, **met for current multiplexor scope** (including global semaphore behavior).
 
 ---
 
@@ -909,10 +908,10 @@ This subsection records **stack choices reflected in this repository** versus **
 - **Log↔trace correlation fields** are closed in `docs/DEVELOPER.md` (**Observability -> Log correlation**): JSON slog on stdout, `trace_id` correlation, and operator guidance for `span_id` / service identity.
 
 - **Root span granularity** is closed in `docs/DEVELOPER.md` (**Observability**): one root span per JSON-RPC message (`mcp.host.request`).
-- **W3C propagation** policy is closed in `docs/DEVELOPER.md` (**Observability**): trace context is always propagated to HTTP upstream backends.
+- **W3C propagation** policy is closed in `docs/DEVELOPER.md` (**Observability**): trace context is always propagated to HTTP upstreams.
 - **LLM tokens metric policy** is closed in `docs/DEVELOPER.md` (**Observability**): `X-Agent-Tokens-Used` is span metadata only (`mcp.agent.tokens_used`), with no Prometheus metric.
 
-**Closure criteria:** Telemetry integration + sample query screenshot in chosen backend — **met** (`docs/DEVELOPER.md` Observability; Grafana dashboard JSON).
+**Closure criteria:** Telemetry integration + sample query screenshot in chosen upstream — **met** (`docs/DEVELOPER.md` Observability; Grafana dashboard JSON).
 
 ---
 
@@ -924,7 +923,7 @@ This subsection records **stack choices reflected in this repository** versus **
 
 - **Go module:** **1.26.1** in `go.mod`; CI uses the same toolchain.
 - **Libraries:** JWT, JSON Schema, Qdrant HTTP client, OTLP — pinned in `go.mod` with a summary table in `docs/DEVELOPER.md`.
-- **CI:** `make ci` (unit, integration with Compose deps, `tools/gen-jwt` tests); optional manual `perf-gate` workflow in `.github/workflows/ci.yml`.
+- **CI:** `make ci` (unit, integration with Compose deps, `cmd/gen-jwt` tests); optional manual `perf-gate` workflow in `.github/workflows/ci.yml`.
 - **Residual:** routine semver bumps and license review when upgrading dependencies.
 
 **Closure criteria:** `go mod verify`, green `make ci`, dependency table in `docs/DEVELOPER.md` — **met**.
@@ -970,14 +969,14 @@ Deliverables **1–7** are **closed** for this repository as reflected in deploy
 ## 5. Implementation guide: handshake (lifecycle)
 
 1. **Step 1:** Client sends `initialize` (relevant MCP fields, timeouts, retries).
-2. **Step 2:** Gateway runs **synthetic negotiation**: query backends (or cache), merge capabilities (multiplexer), apply namespacing and policies, build a single MCP-conformant response.
+2. **Step 2:** Gateway runs **synthetic negotiation**: query upstreams (or cache), merge capabilities (multiplexer), apply namespacing and policies, build a single MCP-conformant response.
 3. **Step 3:** Response to host and establishment of the **SSE channel**; JSON-RPC `id` correlation in events; close and errors.
 
 ```mermaid
 sequenceDiagram
  participant Host
  participant GW as mcp-gateway
- participant BE as MCP backend
+ participant BE as MCP upstream
  Host->>GW: GET /mcp/sse
  GW-->>Host: Mcp-Session-Id
  Host->>GW: POST initialize
@@ -1017,7 +1016,7 @@ sequenceDiagram
 
 **Quality criteria (reference repo):**
 
-- Gateway-added latency **≪ 50 ms** on **internal hop** (no LLM or backends); evidence in [calibration-results.md](../evaluation/calibration-results.md) (Prometheus **mean** per phase).
+- Gateway-added latency **≪ 50 ms** on **internal hop** (no LLM or upstreams); evidence in [calibration-results.md](../evaluation/calibration-results.md) (Prometheus **mean** per phase).
 - JSON-RPC 2.0 parser/validator test coverage in `internal/rpc` and related packages (green `make ci`).
 - **OpenAPI/Swagger** documentation at `docs/artifacts/openapi/openapi.yaml`.
 

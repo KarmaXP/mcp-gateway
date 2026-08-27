@@ -43,7 +43,7 @@ export PORT=${PORT:-8080}
 make run
 ```
 
-Recorded multibackend benchmark and LangGraph agent integration runs in [calibration-results.md](calibration-results.md) used **`PORT=18080`** on the host gateway (compose gateway may still bind **8080**).
+Recorded multiupstream benchmark and LangGraph agent integration runs in [calibration-results.md](calibration-results.md) used **`PORT=18080`** on the host gateway (compose gateway may still bind **8080**).
 
 Gateway health/readiness check (works with current or stricter future readiness):
 
@@ -79,7 +79,7 @@ curl -fsS "http://127.0.0.1:${PORT}/readyz" >/dev/null \
   - Optional catalog override: set `ROUTER_EVAL_CATALOG_PATH=/absolute/path/to/router-eval-catalog.json`.
   - Default file in-repo: `docs/evaluation/router-eval-catalog.json` (`make gen-router-eval-catalog`).
   - If no catalog file is found, the test falls back to `SyntheticCatalog()`.
-4. **Optional load / soak:** if you use `scripts/loadtest`, document command line, duration, and concurrent clients.
+4. **Optional load / soak:** if you use `cmd/loadtest`, document command line, duration, and concurrent clients.
 
 ## Metrics definitions (GoldenCases)
 
@@ -100,11 +100,11 @@ go test ./internal/routertest/... -run TestGoldenCasesMRRAndNDCG -v
 
 Run from the `mcp-gateway/` module root in two terminals.
 
-Examples default to **`PORT=8080`**. To reproduce recorded multibackend and LangGraph agent integration run numbers, use **`PORT=18080`** (or `GATEWAY_URL=http://127.0.0.1:18080` in smoke scripts).
+Examples default to **`PORT=8080`**. To reproduce recorded multiupstream and LangGraph agent integration run numbers, use **`PORT=18080`** (or `GATEWAY_URL=http://127.0.0.1:18080` in smoke scripts).
 
-### Go MCP loadtest (`scripts/loadtest/main.go`)
+### Go MCP loadtest (`cmd/loadtest/main.go`)
 
-See also [scripts/loadtest/README.md](../../scripts/loadtest/README.md). Default direct tool is **`alpha__echo`** (`gateway.example.yaml` + `make demo-upstreams`).
+See also [cmd/loadtest/README.md](../../cmd/loadtest/README.md). Default direct tool is **`alpha__echo`** (`gateway.example.yaml` + `make demo-upstreams`).
 
 ```bash
 # Terminal 1: direct path (exact tool name), router off
@@ -114,7 +114,7 @@ MCP_GATEWAY_CONFIG=deployments/gateway.example.yaml PORT=8080 make run
 
 ```bash
 # Terminal 2
-go run ./scripts/loadtest -url http://127.0.0.1:8080 -mode direct -workers 10 -duration 45s
+go run ./cmd/loadtest -url http://127.0.0.1:8080 -mode direct -workers 10 -duration 45s
 ```
 
 ```bash
@@ -126,23 +126,23 @@ ROUTER_MODE=on EMBED_URL=http://127.0.0.1:8001 QDRANT_URL=http://127.0.0.1:6333 
 ```
 
 ```bash
-go run ./scripts/loadtest -url http://127.0.0.1:8080 -mode semantic -workers 10 -duration 45s
+go run ./cmd/loadtest -url http://127.0.0.1:8080 -mode semantic -workers 10 -duration 45s
 ```
 
 Record the printed `throughput_rps_est`, `latency_p95_ms`, and `latency_p99_ms` for both modes.
 
-### HTTP baseline (`scripts/loadtest/k6_http_baseline.js`)
+### HTTP baseline (`cmd/loadtest/k6_http_baseline.js`)
 
 The k6 script probes `GET /healthz` and `GET /readyz`. Run it once with gateway in direct mode and once with gateway in semantic mode to compare baseline HTTP overhead.
 
 ```bash
 # Direct-mode gateway baseline
-BASE_URL=http://127.0.0.1:8080 k6 run --vus 30 --duration 60s scripts/loadtest/k6_http_baseline.js
+BASE_URL=http://127.0.0.1:8080 k6 run --vus 30 --duration 60s cmd/loadtest/k6_http_baseline.js
 ```
 
 ```bash
 # Semantic-mode gateway baseline (same k6 script, gateway started with ROUTER_MODE=on)
-BASE_URL=http://127.0.0.1:8080 k6 run --vus 30 --duration 60s scripts/loadtest/k6_http_baseline.js
+BASE_URL=http://127.0.0.1:8080 k6 run --vus 30 --duration 60s cmd/loadtest/k6_http_baseline.js
 ```
 
 ## Versioned index text template
@@ -170,7 +170,7 @@ For reproducible runs, record both the catalog identifier and template version t
 
 ## Record (template for new runs)
 
-Use when capturing a **new** calibration session. Canonical numbers for calibration (2026-05-18), multibackend benchmark (2026-05-30), and LangGraph agent integration run (2026-06-08) are already in [calibration-results.md](calibration-results.md). Record measured values only; mark **Not measured** / **Not used** with reason when skipped.
+Use when capturing a **new** calibration session. Canonical numbers for calibration (2026-05-18), multiupstream benchmark (2026-05-30), and LangGraph agent integration run (2026-06-08) are already in [calibration-results.md](calibration-results.md). Record measured values only; mark **Not measured** / **Not used** with reason when skipped.
 
 | Metric / artifact | Command or source | Value | Notes |
 | ----------------- | ----------------- | ----- | ----- |
@@ -202,7 +202,7 @@ P95_THRESHOLD_MS=60 PROMETHEUS_URL=http://127.0.0.1:9090 bash scripts/check_gate
 Behavior:
 
 - Primary source: Prometheus histogram query over `mcp.gateway.internal.duration_seconds` (translated Prom name usually `mcp_gateway_internal_duration_seconds_bucket`, collector namespace may prepend an extra `mcp_`).
-- Fallback (default enabled): if histogram data is unavailable, script runs `go run ./scripts/loadtest` and gates on printed `latency_p95_ms`.
+- Fallback (default enabled): if histogram data is unavailable, script runs `go run ./cmd/loadtest` and gates on printed `latency_p95_ms`.
 - Limitation: loadtest fallback is **approximate** and includes end-to-end client-observed latency (SSE + JSON-RPC roundtrip), so it is not a pure gateway-internal phase metric.
 - CI/manual runs that should not fail on missing metrics can set `SKIP_IF_NO_METRICS=1` and `ALLOW_LOADTEST_FALLBACK=0`.
 
@@ -299,10 +299,10 @@ Procedure:
   - `T_total` = duration of `mcp.host.request`.
   - `T_upstream` = sum of child `mcp.backend.call` durations.
 4. Compute:
-  - Single backend path: `T_internal = T_total - T_upstream`.
+  - Single upstream path: `T_internal = T_total - T_upstream`.
   - Fan-out path: report both
    - `T_upstream_sum = sum(all mcp.backend.call spans)`.
-   - `T_internal_exclusive = T_total - backend critical path`.
+   - `T_internal_exclusive = T_total - upstream critical path`.
 5. Cross-check that trace-derived internal latency trends match Prometheus phase quantiles from the internal phase quantiles section above.
 
 For **new** calibration runs (canonical numbers already in [calibration-results.md](calibration-results.md)): store one Tempo trace URL or screenshot next to quantitative results so decomposition is auditable.
@@ -317,11 +317,11 @@ Canonical numbers live in [calibration-results.md](calibration-results.md):
 | Multiupstream benchmark | 2026-05-30 | `gateway.real.yaml`, stdio MCP, JWT, OTLP; see [scenario-real-upstreams-jwt.md](scenario-real-upstreams-jwt.md) |
 | LangGraph agent integration run | 2026-06-08 | Multiupstream benchmark + MCP host demo, LangGraph agent, Tempo trace, JWT loadtest; see [integration-checklist.md](integration-checklist.md#langgraph-agent-integration-run) |
 
-**Internal 50 ms budget (multibackend benchmark):** evidence uses Prometheus **mean** latency per phase (`tools/call`), all ≪ 50 ms. Histogram p95 is **not used** when sub-ms samples fall into the first 5 s bucket (artefact ~4750 ms).
+**Internal 50 ms budget (multiupstream benchmark):** evidence uses Prometheus **mean** latency per phase (`tools/call`), all ≪ 50 ms. Histogram p95 is **not used** when sub-ms samples fall into the first 5 s bucket (artefact ~4750 ms).
 
 ## Post-calibration (operator tuning, optional)
 
-These are not required for the reference repository; calibration and multibackend benchmark numbers are already recorded in [calibration-results.md](calibration-results.md).
+These are not required for the reference repository; calibration and multiupstream benchmark numbers are already recorded in [calibration-results.md](calibration-results.md).
 
 - **Hybrid reranking:** RRF vs `hybrid_alpha` ablation when retuning router weights.
 - **Vector index tuning:** Qdrant HNSW tuning when recall/latency goals change.

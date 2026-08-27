@@ -41,7 +41,7 @@ container images.
 
 ## Not in scope
 
-- **`backends[].command` is executed by design.** Whoever writes the gateway config already runs
+- **`upstreams[].command` is executed by design.** Whoever writes the gateway config already runs
   code as the gateway process; config is inside the trust boundary. Influencing that config *from
   outside* the boundary is very much in scope.
 - **`AUTH_MODE=none` disables authentication.** It is a documented local-development mode.

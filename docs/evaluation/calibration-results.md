@@ -1,6 +1,6 @@
 # Calibration results
 
-Canonical recorded lab results. Procedure: [`calibration-run.md`](calibration-run.md) (calibration) and [`integration-checklist.md`](integration-checklist.md) (multibackend benchmark).
+Canonical recorded lab results. Procedure: [`calibration-run.md`](calibration-run.md) (calibration) and [`integration-checklist.md`](integration-checklist.md) (multiupstream benchmark).
 
 **Rule:** record measured values only; mark **Not measured** or **Not used** with a one-line reason when skipped.
 
@@ -9,7 +9,7 @@ Canonical recorded lab results. Procedure: [`calibration-run.md`](calibration-ru
 | Run | Date (UTC) | Scope |
 | ----- | ---------- | ----- |
 | Calibration | 2026-05-18 | Router recall, unit benchmarks, client loadtest (`AUTH_MODE=none`, demo mocks) |
-| **Multiupstream benchmark** | 2026-05-30 | Real MCP backends (stdio), JWT, OTLP→Prometheus, smoke load |
+| **Multiupstream benchmark** | 2026-05-30 | Real MCP upstreams (stdio), JWT, OTLP→Prometheus, smoke load |
 | **LangGraph agent integration run** | 2026-06-08 | Multiupstream benchmark plus MCP host demo, LangGraph agent, Tempo, JWT loadtest |
 
 ---
@@ -66,7 +66,7 @@ Gateway: `AUTH_MODE=none ROUTER_MODE=assist_list` + `make demo-upstreams`.
 **Direct (`alpha__echo`):**
 
 ```bash
-go run ./scripts/loadtest -url http://127.0.0.1:18080 -mode direct -workers 10 -duration 45s
+go run ./cmd/loadtest -url http://127.0.0.1:18080 -mode direct -workers 10 -duration 45s
 ```
 
 | Field | Value |
@@ -89,15 +89,15 @@ Latency percentiles above use **successful** iterations only. The high `errors` 
 | Tempo trace decomposition | **Not measured** | Optional step not executed |
 | Semantic loadtest latency | **Not measured** | Zero successful samples |
 
-Calibration supplies recall, unit benchmarks, and direct loadtest reference. Operational latency under JWT + real upstreams is in the **multibackend benchmark** below.
+Calibration supplies recall, unit benchmarks, and direct loadtest reference. Operational latency under JWT + real upstreams is in the **multiupstream benchmark** below.
 
 ---
 
 ## Multiupstream benchmark (2026-05-30)
 
-**Scope:** single session — real MCP backends (stdio), semantic router (`ROUTER_MODE=on`), JWT, OTLP→Prometheus. No SRE HTTP mocks (`make sre-up` not used).
+**Scope:** single session — real MCP upstreams (stdio), semantic router (`ROUTER_MODE=on`), JWT, OTLP→Prometheus. No SRE HTTP mocks (`make sre-up` not used).
 
-Config: `deployments/gateway.real.yaml`. Procedure: [`integration-checklist.md`](integration-checklist.md) (multibackend benchmark), [`scenario-real-upstreams-jwt.md`](scenario-real-upstreams-jwt.md).
+Config: `deployments/gateway.real.yaml`. Procedure: [`integration-checklist.md`](integration-checklist.md) (multiupstream benchmark), [`scenario-real-upstreams-jwt.md`](scenario-real-upstreams-jwt.md).
 
 ### Run metadata
 
@@ -112,7 +112,7 @@ Config: `deployments/gateway.real.yaml`. Procedure: [`integration-checklist.md`]
 | `GATEWAY_URL` | `http://127.0.0.1:18080` |
 | `QDRANT_URL` / `EMBED_URL` | `http://127.0.0.1:6333` / `http://127.0.0.1:8001` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://127.0.0.1:4318` |
-| Backends (real, stdio) | `@modelcontextprotocol/server-everything` → `k8s`; `server-filesystem` → `prom` (root `/private/tmp/mcp-gateway-lab`); `server-memory` → `gh` |
+| Upstreams (real, stdio) | `@modelcontextprotocol/server-everything` → `k8s`; `server-filesystem` → `prom` (root `/private/tmp/mcp-gateway-lab`); `server-memory` → `gh` |
 | JWT traffic | `scripts/smoke_e2e.sh` with admin JWT: 60× parallel + 20× sequential (`prom__read_text_file`) |
 
 **macOS note:** filesystem MCP allowed root is `/private/tmp/...`; tool paths must use `/private/tmp/mcp-gateway-lab/...`, not `/tmp/...`.
@@ -131,7 +131,7 @@ QDRANT_URL=http://127.0.0.1:6333 EMBED_URL=http://127.0.0.1:8001 \
 | ------ | ----- |
 | recall@1 | 1.000 (26/26) |
 | recall@3 | 1.000 (26/26) |
-| Notes | Same catalog as calibration; independent of JWT/backend YAML in the gateway session |
+| Notes | Same catalog as calibration; independent of JWT/upstream YAML in the gateway session |
 
 ### Functional E2E (`scripts/smoke_e2e.sh`, JWT)
 
@@ -172,7 +172,7 @@ sum(rate(mcp_mcp_gateway_internal_duration_seconds_count{method="tools/call",pha
 
 | Artifact | Status | Reason |
 | -------- | ------ | ------ |
-| `scripts/loadtest` direct/semantic | **Not measured (multibackend benchmark)** | Session used JWT smoke + Prom means; loadtest with Bearer was not in that protocol. JWT loadtest recorded in LangGraph agent integration run below. |
+| `cmd/loadtest` direct/semantic | **Not measured (multiupstream benchmark)** | Session used JWT smoke + Prom means; loadtest with Bearer was not in that protocol. JWT loadtest recorded in LangGraph agent integration run below. |
 | Tempo `T_total` / `T_upstream` / `T_internal` | **Not measured** | Tempo is not published on the host in `docker-compose.yaml` (in-cluster only). |
 | Histogram p95 per phase | **Not used** | Artefact ~4750 ms from bucket layout; `check_gateway_p95.sh` FAIL on this series is expected for sub-ms samples. |
 
@@ -180,7 +180,7 @@ sum(rate(mcp_mcp_gateway_internal_duration_seconds_count{method="tools/call",pha
 
 ## LangGraph agent integration run (2026-06-08)
 
-**Scope:** single session extending the multibackend benchmark in the same gateway config — MCP host demo with JWT, a LangGraph agent host, Tempo trace capture, and a JWT-aware loadtest. **Does not replace the multibackend benchmark numbers above**, which remain the primary gateway benchmark.
+**Scope:** single session extending the multiupstream benchmark in the same gateway config — MCP host demo with JWT, a LangGraph agent host, Tempo trace capture, and a JWT-aware loadtest. **Does not replace the multiupstream benchmark numbers above**, which remain the primary gateway benchmark.
 
 Procedure: [integration-checklist.md](integration-checklist.md) (LangGraph agent integration run) and [scenario-real-upstreams-jwt.md](scenario-real-upstreams-jwt.md).
 
@@ -192,7 +192,7 @@ Procedure: [integration-checklist.md](integration-checklist.md) (LangGraph agent
 | Gateway commit | `2e885e9a24397e2b4c6caa36130a040fbc837c9e` (session measurement 2026-06-08; later commits on `main` are documentation and config alignment only) |
 | Environment | Host gateway (`PORT=18080`) + Docker deps (`make docker-up`); macOS, Docker Compose |
 | `MCP_GATEWAY_CONFIG` / `AUTH_MODE` / `ROUTER_MODE` | `deployments/gateway.real.yaml` / `jwt` / `on` |
-| Backends (real, stdio) | `server-everything`→`k8s`; `server-filesystem`→`prom` (root `/private/tmp/mcp-gateway-lab`); `server-memory`→`gh` |
+| Upstreams (real, stdio) | `server-everything`→`k8s`; `server-filesystem`→`prom` (root `/private/tmp/mcp-gateway-lab`); `server-memory`→`gh` |
 | Agent host | External LangGraph MCP client (see [CONNECTING_AGENTS.md](../CONNECTING_AGENTS.md)); not shipped in this repo |
 
 ### Results
@@ -202,13 +202,13 @@ Procedure: [integration-checklist.md](integration-checklist.md) (LangGraph agent
 | `mcp_host_demo` + JWT | **Measured** | SSE session + `tools/list` (namespaced, allow-list filtered to 3 tools) + `tools/call` OK on all three silos: `prom__read_text_file`→"fixture-ok", `k8s__echo`→"Echo: …", `gh__create_entities`→entities created |
 | Agent (LangGraph) `tools/call` | **Measured** | Same `GATEWAY_URL` + Bearer via an external LangGraph host. Ran both as a real `langgraph.StateGraph` (`k8s__echo`→"Echo: …") and via a built-in fallback runner (`prom__read_text_file`→"fixture-ok"); ≥1 `tools/call` succeeded via the agent graph |
 | Tempo trace / decomposition | **Measured** | Captured via the Grafana datasource proxy (Tempo not host-published). One representative `tools/call` trace (`553af62b…`): `mcp.security.authn` 0.049 ms · `mcp.multiplex.tools_list` 2.57 ms · `mcp.security.authz` 0.0025 ms · `mcp.router.semantic` 0.031 ms · `mcp.validate.json_schema` 0.0045 ms · `mcp.backend.call` (filesystem) 0.846 ms. Single-trace point samples, not percentiles. |
-| `scripts/loadtest` with JWT | **Measured (workers=1)** | Bearer + namespaced tool via `-token`/`-tool`/`-args`. `direct` mode, `prom__read_text_file`, 1 worker, 30 s: 10 594 samples, **0 errors**, p50 0.490 ms / p95 0.944 ms / p99 2.031 ms, ≈353 rps (client-observed, includes SSE round-trip + JWT per request). Use one worker under JWT; see [known limitations](../errors.md#known-limitations-multiplexing). |
-| Internal phase means under JWT | **Measured** | Low-rate burst window (`[1m]`, ≈40 `tools/call`): parse 0.0089 · security 0.0049 · mux 0.0064 · router 0.0460 ms, consistent with the multibackend benchmark, no regression. Under sustained load (`[5m]`, ≈353 rps loadtest): parse/security/mux < 0.005 ms, **router rises to ≈3.3 ms** (throughput/contention), still ≪ 50 ms. Means, not histogram p95. |
+| `cmd/loadtest` with JWT | **Measured (workers=1)** | Bearer + namespaced tool via `-token`/`-tool`/`-args`. `direct` mode, `prom__read_text_file`, 1 worker, 30 s: 10 594 samples, **0 errors**, p50 0.490 ms / p95 0.944 ms / p99 2.031 ms, ≈353 rps (client-observed, includes SSE round-trip + JWT per request). Use one worker under JWT; see [known limitations](../errors.md#known-limitations-multiplexing). |
+| Internal phase means under JWT | **Measured** | Low-rate burst window (`[1m]`, ≈40 `tools/call`): parse 0.0089 · security 0.0049 · mux 0.0064 · router 0.0460 ms, consistent with the multiupstream benchmark, no regression. Under sustained load (`[5m]`, ≈353 rps loadtest): parse/security/mux < 0.005 ms, **router rises to ≈3.3 ms** (throughput/contention), still ≪ 50 ms. Means, not histogram p95. |
 | JWT deny (`-32003`) | **Measured** | Restricted principal: `prom__list_directory` is filtered out of `tools/list`; a direct `tools/call` returns `-32003 "tool \"prom__list_directory\" not allowed for this principal"`. |
 | `X-MCP-Intent` call (optional) | **Not measured** | Header is supported on `tools/call`, but `gateway.real.yaml` has `allow_auto_rename:false`, so exact names take the deterministic path and the intent does not rewrite the tool. Semantic rename not exercised. |
-| Router recall regression | **Not re-measured** | Covered by calibration + multibackend benchmark (1.000, 26/26); optional sanity, not repeated this session. |
+| Router recall regression | **Not re-measured** | Covered by calibration + multiupstream benchmark (1.000, 26/26); optional sanity, not repeated this session. |
 
-Known multiplexing caveats (upstream JSON-RPC id forwarding, concurrent `tools/list` fan-out) are documented in [errors.md](../errors.md#known-limitations-multiplexing). Reference clients in this repo use small monotonic ids; multibackend benchmark smoke evidence is unaffected.
+Known multiplexing caveats (upstream JSON-RPC id forwarding, concurrent `tools/list` fan-out) are documented in [errors.md](../errors.md#known-limitations-multiplexing). Reference clients in this repo use small monotonic ids; multiupstream benchmark smoke evidence is unaffected.
 
 ---
 
@@ -216,12 +216,12 @@ Known multiplexing caveats (upstream JSON-RPC id forwarding, concurrent `tools/l
 
 | Claim | Run | Evidence |
 | ----- | --- | -------- |
-| Router recall@1/@3 on eval catalog | Calibration + multibackend regression | 1.000 (26/26) both dates |
+| Router recall@1/@3 on eval catalog | Calibration + multiupstream regression | 1.000 (26/26) both dates |
 | Lexical ranking (calibration) | Calibration | MRR=1.000, nDCG@5=0.907 |
-| Real multibackend MCP + namespacing | Multiupstream benchmark | smoke_e2e ×3 (prom/k8s/gh) |
+| Real multiupstream MCP + namespacing | Multiupstream benchmark | smoke_e2e ×3 (prom/k8s/gh) |
 | JWT allow-list enforcement | Multiupstream benchmark | allow OK; deny -32003 |
 | Internal gateway work ≪ 50 ms | Multiupstream benchmark + LangGraph agent integration run | Prom **mean** by phase (≪ 50 ms at low rate and under 353 rps) |
 | Client-observed throughput/latency (no JWT) | Calibration | loadtest direct p95 ≈ 1.24 ms (includes SSE client path) |
 | MCP host + agent (LangGraph) over JWT | LangGraph agent integration run | host demo ×3 silos + LangGraph `StateGraph` `tools/call` OK |
 | Client-observed latency **under JWT** | LangGraph agent integration run | loadtest direct p95 ≈ 0.944 ms, 0 errors (1 worker, 10.6k samples) |
-| Trace decomposition (internal vs backend) | LangGraph agent integration run | one Tempo trace: internal spans sub-ms, backend.call ≈ 0.85 ms |
+| Trace decomposition (internal vs upstream) | LangGraph agent integration run | one Tempo trace: internal spans sub-ms, upstream.call ≈ 0.85 ms |

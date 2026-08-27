@@ -44,7 +44,7 @@ set_ports() {
 
 start_one() {
   local port="$1" tools="$2" marker="$3" name="$4"
-  go run ./scripts/mock_upstream/main.go \
+  go run ./cmd/mock_upstream/main.go \
     -listen "127.0.0.1:${port}" \
     -tools "${tools//|/,}" \
     -marker "${marker}" \

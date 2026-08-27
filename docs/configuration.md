@@ -8,12 +8,12 @@ Copy [`.env.example`](../.env.example) with `make bootstrap`. Example YAML files
 
 ## Example configs
 
-| File | Backends | Router | Use when |
+| File | Upstreams | Router | Use when |
 |------|----------|--------|----------|
 | [`gateway.demo.yaml`](../deployments/gateway.demo.yaml) | 1× smoke mock `:31400` | `off` | First run (`make demo`, default `make run`) |
-| [`gateway.example.yaml`](../deployments/gateway.example.yaml) | alpha `:3101`, beta `:3102` | `off` (tunable) | Multi-backend lab (`make demo-upstreams`, `make demo-full`) |
+| [`gateway.example.yaml`](../deployments/gateway.example.yaml) | alpha `:3101`, beta `:3102` | `off` (tunable) | Multi-upstream lab (`make demo-upstreams`, `make demo-full`) |
 | [`gateway.sre.example.yaml`](../deployments/gateway.sre.example.yaml) | k8s/prom/gh mocks `:3201–3203` | `on` | SRE walkthrough (`make sre-up`, `make sre-smoke`) |
-| [`gateway.real.yaml`](../deployments/gateway.real.yaml) | stdio MCP (`npx` everything, filesystem, memory) | `on` | Real backends + JWT lab ([scenario-real-upstreams-jwt.md](evaluation/scenario-real-upstreams-jwt.md)) |
+| [`gateway.real.yaml`](../deployments/gateway.real.yaml) | stdio MCP (`npx` everything, filesystem, memory) | `on` | Real upstreams + JWT lab ([scenario-real-upstreams-jwt.md](evaluation/scenario-real-upstreams-jwt.md)) |
 
 Ports: [local-ports.md](local-ports.md).
 
@@ -140,7 +140,7 @@ Health paths are excluded. Subject = JWT `sub` when present, else client IP.
 
 ---
 
-## Backends (`backends:`)
+## Upstreams (`upstreams:`)
 
 Each entry:
 
@@ -172,7 +172,7 @@ Guide: [ADDING_UPSTREAMS.md](ADDING_UPSTREAMS.md).
 | Change | Action |
 |--------|--------|
 | `policy:` (most fields) | **`SIGHUP`** reloads policy engine |
-| `backends:`, `router:`, `aggregation:`, rate limit, origins, audit sink | **Restart** process |
+| `upstreams:`, `router:`, `aggregation:`, rate limit, origins, audit sink | **Restart** process |
 | Environment variables | **Restart** |
 
 ---

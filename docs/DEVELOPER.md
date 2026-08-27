@@ -28,9 +28,9 @@ flowchart LR
   HTTP --> Sess --> Mpx
   Mpx --> R
  end
- subgraph Backends
-  B1[MCP Backend A]
-  B2[MCP Backend B]
+ subgraph Upstreams
+  B1[MCP Upstream A]
+  B2[MCP Upstream B]
  end
  subgraph DataPlane["Data plane (optional)"]
   E[Embed sidecar\nONNX / MiniLM]
@@ -76,7 +76,7 @@ make demo        # recommended first run: no Docker, E2E MCP on localhost
 | **8080** (or `.env` override, e.g. `18080`) | Gateway (`PORT` / `GATEWAY_PORT`) | `make run`, `make stop` (both read `.env`) |
 | **18081** | Gateway (smoke auto-start only) | `make demo` / `make smoke` with `SMOKE_AUTO_START_GATEWAY=1` |
 | **18082** | Gateway (JWT smoke) | `scripts/smoke_jwt.sh`; freed by `make stop` |
-| **31400** | `scripts/smoke_upstream` | Default upstream for `deployments/gateway.demo.yaml` |
+| **31400** | `cmd/smoke_upstream` | Default upstream for `deployments/gateway.demo.yaml` |
 | **3101** / **3102** | Alpha / beta mocks | Host: `gateway.example.yaml` + `make demo-upstreams`. Compose gateway: `gateway.example.docker.yaml` |
 | **3201, 3202, 3203** | SRE mocks (k8s / prom / gh) | `gateway.sre.example.yaml` after `make sre-upstreams` or `make docker-up-sre` |
 
@@ -103,11 +103,11 @@ make lint
 make smoke       # same core checks as demo (temporary config file)
 ```
 
-Default config for new users: [`deployments/gateway.demo.yaml`](../deployments/gateway.demo.yaml). Multi-backend template: [`deployments/gateway.example.yaml`](../deployments/gateway.example.yaml).
+Default config for new users: [`deployments/gateway.demo.yaml`](../deployments/gateway.demo.yaml). Multi-upstream template: [`deployments/gateway.example.yaml`](../deployments/gateway.example.yaml).
 
 ### Minimal config (semantic router on)
 
-For `router.mode: on` you need Qdrant and the embed sidecar (`make docker-up`), plus HTTP backends you can reach (e.g. `make demo-upstreams` for alpha/beta on **3101** / **3102**):
+For `router.mode: on` you need Qdrant and the embed sidecar (`make docker-up`), plus HTTP upstreams you can reach (e.g. `make demo-upstreams` for alpha/beta on **3101** / **3102**):
 
 ```yaml
 backends:
@@ -133,7 +133,7 @@ Required environment (in addition to `PORT` / `AUTH_MODE` as needed):
 | `QDRANT_URL` | `http://127.0.0.1:6333` |
 | `EMBED_URL` | `http://127.0.0.1:8001` |
 
-Host client against multi-upstream: `make demo-upstreams`, then `MCP_GATEWAY_CONFIG=deployments/gateway.example.yaml make run` in another terminal, then `TOOL_NAME=alpha__echo go run ./scripts/mcp_host_demo` (see [`scripts/mcp_host_demo/README.md`](../scripts/mcp_host_demo/README.md)).
+Host client against multi-upstream: `make demo-upstreams`, then `MCP_GATEWAY_CONFIG=deployments/gateway.example.yaml make run` in another terminal, then `TOOL_NAME=alpha__echo go run ./cmd/mcp_host_demo` (see [`cmd/mcp_host_demo/README.md`](../cmd/mcp_host_demo/README.md)).
 
 ### OpenAPI
 
@@ -151,12 +151,12 @@ Full tables for environment variables, YAML blocks, example configs, and reload 
 
 Summary:
 
-- **Backends**, `MCP_GATEWAY_CONFIG` / `MCP_GATEWAY_BACKENDS`; HTTP (`url`) or stdio (`command`). See [ADDING_UPSTREAMS.md](ADDING_UPSTREAMS.md).
+- **Upstreams**, `MCP_GATEWAY_CONFIG` / `MCP_GATEWAY_BACKENDS`; HTTP (`url`) or stdio (`command`). See [ADDING_UPSTREAMS.md](ADDING_UPSTREAMS.md).
 - **MCP methods**, tools (merge + policy + router), resources/prompts (merge, AuthN only). See [mcp-capabilities.md](mcp-capabilities.md).
 - **Auth**, `AUTH_MODE=none|jwt`; tool allow-lists via JWT/RAR; errors in [errors.md](errors.md).
 - **Router**, `ROUTER_MODE` + `QDRANT_URL` + `EMBED_URL`; modes in [CONNECTING_AGENTS.md](CONNECTING_AGENTS.md#semantic-routing).
 - **Telemetry**, `OTEL_EXPORTER_OTLP_ENDPOINT`.
-- **Policy reload**, `SIGHUP` reloads the in-process policy engine only; backends and most wiring require restart ([configuration.md — Reload](configuration.md#reload-vs-restart)). Open SSE sessions keep the same `Mcp-Session-Id` and owner `sub`; **JWT allow-list and `X-MCP-Intent` on each `POST /mcp/rpc`** are applied per request. Reconnect the SSE client if your host caches policy/version client-side.
+- **Policy reload**, `SIGHUP` reloads the in-process policy engine only; upstreams and most wiring require restart ([configuration.md — Reload](configuration.md#reload-vs-restart)). Open SSE sessions keep the same `Mcp-Session-Id` and owner `sub`; **JWT allow-list and `X-MCP-Intent` on each `POST /mcp/rpc`** are applied per request. Reconnect the SSE client if your host caches policy/version client-side.
 
 ## Protocol and dependencies
 
@@ -166,13 +166,13 @@ Direct Go dependencies (`go.mod`) at a glance:
 
 | Module | Purpose | Version |
 |--------|---------|---------|
-| `github.com/golang-jwt/jwt/v5` | JWT parsing/validation in auth middleware | `v5.2.2` |
+| `github.com/golang-jwt/jwt/v5` | JWT parsing/validation in auth middleware | `v5.3.1` |
 | `github.com/google/uuid` | Session UUID generation and IDs | `v1.6.0` |
-| `github.com/lestrrat-go/jwx/v2` | JWKS/JWK handling for JWT verification | `v2.1.3` |
-| `github.com/santhosh-tekuri/jsonschema/v6` | JSON Schema validation for `tools/call` arguments | `v6.0.2` |
+| `github.com/lestrrat-go/jwx/v2` | JWKS/JWK handling for JWT verification | `v2.1.7` |
+| `github.com/santhosh-tekuri/jsonschema/v6` | JSON Schema validation for `tools/call` arguments | `v6.0.3` |
 | `gopkg.in/yaml.v3` | YAML config loading | `v3.0.1` |
-| `go.opentelemetry.io/otel` family | OTel traces/metrics SDK and OTLP exporters | `v1.35.0` (`otelhttp v0.60.0`) |
-| `golang.org/x/sync` | Concurrency primitives (`errgroup`, semaphores) | `v0.20.0` |
+| `go.opentelemetry.io/otel` family | OTel traces/metrics SDK and OTLP exporters | `v1.45.0` (`otelhttp v0.70.0`) |
+| `golang.org/x/sync` | Concurrency primitives (`errgroup`, semaphores) | `v0.22.0` |
 
 ## Health and readiness semantics
 
@@ -180,8 +180,8 @@ Direct Go dependencies (`go.mod`) at a glance:
 - `GET /readyz` returns `200 ok` by default, and when semantic routing is active (`router.mode` / `ROUTER_MODE` set to `on`, `assist_list`, or `filter_list`) it performs dependency probes before declaring ready:
  - Qdrant: `QDRANT_URL/readyz`, then fallback to `QDRANT_URL/healthz` if `/readyz` is unavailable.
  - Embed sidecar: `EMBED_URL/healthz`.
-- Probes use short per-request timeouts and return `503` with a hint (`not ready: ...`) if any required dependency is not healthy.
-- Upstream MCP backends are intentionally not probed from `/readyz`: there is no universal, side-effect-free readiness endpoint across stdio and HTTP upstream transports, and a failing backend is handled as partial failure at request time.
+- Probes run concurrently with short per-request timeouts. If any required dependency is unhealthy, `/readyz` returns `503` with the body `not ready`; which dependency failed is in the gateway's own log, not in the response.
+- Upstream MCP servers are intentionally not probed from `/readyz`: there is no universal, side-effect-free readiness endpoint across stdio and HTTP upstream transports, and a failing upstream is handled as partial failure at request time.
 
 ## Docker / compose networking
 
@@ -222,7 +222,7 @@ With `make docker-up`, Compose brings up a minimal observability stack (exact se
 - Application metrics include semantic router outcomes and latency (`mcp.gateway.semantic_router.*`) with **`layer`** labels (`exact`, `rules`, `vector`, …), **`indexed_tools`** (gauge after each successful catalog reindex), and an **active SSE sessions** gauge (`mcp.gateway.active_sse_sessions`). **Internal hop** time (gateway-only, excludes upstream MCP I/O) is recorded as a histogram **`mcp.gateway.internal.duration_seconds`** with labels **`method`** (JSON-RPC method when known; `unknown` during JWT on `POST /mcp/rpc` before parse) and **`phase`**: `parse`, `security`, `router`, `mux`. After OTel → Prometheus translation, series often appear as `mcp_mcp_gateway_internal_duration_seconds_*`. For sub-ms internal work, prefer **mean latency per phase** over histogram p95 when bucket layout starts at 5 s — see [calibration-results.md](evaluation/calibration-results.md).
 - Traces: child span **`mcp.security.authn`** wraps JWT validation (under **`mcp.host.request`** for `POST /mcp/rpc` when `AUTH_MODE=jwt`); **`mcp.security.authz`** remains on `tools/call` allow-list enforcement in the multiplexer.
 - Tracing policy decisions (closed): each processed JSON-RPC message creates exactly one root span, **`mcp.host.request`**.
-- W3C propagation policy (closed): `traceparent` / `tracestate` are always propagated on outgoing HTTP upstream backend calls.
+- W3C propagation policy (closed): `traceparent` / `tracestate` are always propagated on outgoing HTTP upstream calls.
 - Agent token policy (closed): `X-Agent-Tokens-Used` is recorded only as span attribute **`mcp.agent.tokens_used`** when valid; there is no Prometheus token-usage metric.
 - **Security-oriented counters** (low-cardinality labels only; no user IDs or request IDs): `mcp.gateway.policy.decisions`, `mcp.gateway.auth.jwks.lookups`, `mcp.gateway.tool_args.validation`, `mcp.gateway.ratelimit.events`, `mcp.gateway.payload.bytes_rejected`. **Session backpressure:** `mcp.gateway.session.broadcast_tasks_dropped`, `mcp.gateway.session.notifications_dropped` (label **`reason`**: `broadcast_queue_full`, `notification_outbound_full`). Label enums are defined in `internal/defaults/metrics.go`. Import [`artifacts/grafana/mcp-gateway-observability.json`](artifacts/grafana/mcp-gateway-observability.json) for a **Security** row with PromQL regex matchers.
 
@@ -256,7 +256,7 @@ Policy for new metrics:
 - Do not add unbounded labels (request IDs, subjects, raw intent text, full tool names).
 - Keep counters/histograms at bounded enums; put tool-level detail on spans instead.
 - `mcp.tool.name` is currently a span attribute (`internal/telemetry/attrs.go` and multiplexer span instrumentation), not a Prometheus metric label.
-- `mcp.backend.id` is currently a span attribute for backend call tracing, not a metric label.
+- `mcp.backend.id` is currently a span attribute for upstream call tracing, not a metric label.
 
 ### Log correlation
 
@@ -309,26 +309,23 @@ Use **`go test -tags=integration -short ./...`** to skip tests that call `testin
 
 ## Git commit identity
 
-Public contributors may prefer not to expose a work email in `git log`. This repo uses the GitHub **noreply** address for commits when privacy is enabled:
-
-- **`120461080+KarmaXP@users.noreply.github.com`** (GitHub user `KarmaXP`)
-
-Enable **Settings → Emails → Keep my email addresses private** on GitHub, then set locally (without changing global git config for other repos):
+Contributors who would rather not expose a work address in `git log` can commit under a GitHub
+noreply address instead. Enable **Settings → Emails → Keep my email addresses private** on GitHub,
+copy the `ID+username@users.noreply.github.com` address it shows you, and set it for this repository
+only, so your global git config is untouched:
 
 ```bash
-git config user.email "120461080+KarmaXP@users.noreply.github.com"
-git config user.name "Carlos Palomero"
+git config user.email "YOUR_ID+YOUR_USERNAME@users.noreply.github.com"
+git config user.name "Your Name"
 ```
 
 Or per command:
 
 ```bash
-GIT_AUTHOR_EMAIL="120461080+KarmaXP@users.noreply.github.com" \
-GIT_COMMITTER_EMAIL="120461080+KarmaXP@users.noreply.github.com" \
+GIT_AUTHOR_EMAIL="YOUR_ID+YOUR_USERNAME@users.noreply.github.com" \
+GIT_COMMITTER_EMAIL="YOUR_ID+YOUR_USERNAME@users.noreply.github.com" \
 git commit ...
 ```
-
-To rewrite **existing** commits that used another address, use `git filter-repo` or `git filter-branch` and then **`git push --force-with-lease`** (rewrites history; coordinate if others clone the repo).
 
 ## Further reading
 
