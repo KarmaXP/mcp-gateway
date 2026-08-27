@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/KarmaXP/mcp-gateway/internal/gateway/mcpwire"
@@ -36,6 +35,8 @@ const (
 	percentileP99 = 99
 
 	percentileIndexDivisor = 100
+
+	errorSampleMaxRunes = 160
 
 	exitStatusGeneralError = 1
 	exitStatusInvalidUsage = 2
@@ -94,7 +95,7 @@ func main() {
 
 	var samples []time.Duration
 	var mu sync.Mutex
-	var errs atomic.Uint64
+	errs := &errorTally{counts: map[string]uint64{}}
 
 	deadline := time.Now().Add(*duration)
 	var wg sync.WaitGroup
@@ -105,13 +106,13 @@ func main() {
 			defer wg.Done()
 			for i := 0; i < *warmup; i++ {
 				if _, err := oneIteration(client, *base, *mode, cfg); err != nil {
-					errs.Add(1)
+					errs.record(err)
 				}
 			}
 			for time.Now().Before(deadline) {
 				d, err := oneIteration(client, *base, *mode, cfg)
 				if err != nil {
-					errs.Add(1)
+					errs.record(err)
 					continue
 				}
 				mu.Lock()
@@ -123,7 +124,10 @@ func main() {
 	wg.Wait()
 
 	sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
-	fmt.Printf("mode=%s workers=%d window=%s samples=%d errors=%d\n", *mode, *workers, *duration, len(samples), errs.Load())
+	fmt.Printf("mode=%s workers=%d window=%s samples=%d errors=%d\n", *mode, *workers, *duration, len(samples), errs.count())
+	if line := errs.summary(); line != "" {
+		fmt.Println(line)
+	}
 	if len(samples) == 0 {
 		fmt.Println("no successful samples")
 		os.Exit(exitStatusGeneralError)
@@ -138,6 +142,54 @@ func main() {
 	fmt.Printf("latency_p99_ms=%.3f\n", percentileMs(samples, percentileP99))
 	fmt.Printf("latency_min_ms=%.3f\n", float64(samples[0].Microseconds())/microsecondsPerMillis)
 	fmt.Printf("latency_max_ms=%.3f\n", float64(samples[len(samples)-1].Microseconds())/microsecondsPerMillis)
+}
+
+type errorTally struct {
+	mu     sync.Mutex
+	counts map[string]uint64
+	total  uint64
+}
+
+func (t *errorTally) record(err error) {
+	if err == nil {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.total++
+	t.counts[truncateRunes(err.Error(), errorSampleMaxRunes)]++
+}
+
+func (t *errorTally) count() uint64 {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.total
+}
+
+func (t *errorTally) summary() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.total == 0 {
+		return ""
+	}
+	worst, seen := "", uint64(0)
+	for msg, n := range t.counts {
+		if n > seen || (n == seen && msg < worst) {
+			worst, seen = msg, n
+		}
+	}
+	return fmt.Sprintf("most common error (%d of %d, %d distinct): %s", seen, t.total, len(t.counts), worst)
+}
+
+func truncateRunes(s string, limit int) string {
+	if len(s) <= limit {
+		return s
+	}
+	r := []rune(s)
+	if len(r) <= limit {
+		return s
+	}
+	return string(r[:limit]) + "..."
 }
 
 func percentileMs(d []time.Duration, p int) float64 {
