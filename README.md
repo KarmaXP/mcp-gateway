@@ -16,9 +16,11 @@
 <br/>
 
 [![CI](https://github.com/KarmaXP/mcp-gateway/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/KarmaXP/mcp-gateway/actions/workflows/ci.yml?query=branch%3Amain)
+[![Coverage](https://img.shields.io/badge/coverage-77%25-22c55e)](scripts/check-coverage.sh)
 [![License](https://img.shields.io/github/license/KarmaXP/mcp-gateway)](LICENSE)
 [![Go](https://img.shields.io/github/go-mod/go-version/KarmaXP/mcp-gateway)](go.mod)
-[![MCP](https://img.shields.io/badge/MCP-Protocol-7C3AED)](https://modelcontextprotocol.io/)
+[![MCP](https://img.shields.io/badge/MCP-2024--11--05-7C3AED)](https://modelcontextprotocol.io/)
+[![Transports](https://img.shields.io/badge/transports-HTTP%2BSSE_%2F_stdio-0ea5e9)](docs/ADDING_UPSTREAMS.md)
 [![OpenAPI](https://img.shields.io/badge/OpenAPI-3.1-6BA539?logo=openapiinitiative&logoColor=white)](docs/artifacts/openapi/openapi.yaml)
 
 <br/>
@@ -204,7 +206,8 @@ Measured runs with commits and replay commands in the linked docs.
 [![Recall@1](https://img.shields.io/badge/Recall@1-1.000_(26%2F26)-22c55e)](docs/evaluation/calibration-results.md)
 [![Recall@3](https://img.shields.io/badge/Recall@3-1.000_(26%2F26)-22c55e)](docs/evaluation/calibration-results.md)
 [![nDCG@5](https://img.shields.io/badge/nDCG@5-0.907-0ea5e9)](docs/evaluation/calibration-results.md)
-[![JWT deny](https://img.shields.io/badge/JWT_deny_-32003-f97316)](docs/evaluation/calibration-results.md)
+[![p95](https://img.shields.io/badge/p95-0.944_ms_(JWT,_1_worker)-0ea5e9)](docs/evaluation/calibration-results.md)
+[![JWT deny](https://img.shields.io/badge/JWT_deny---32003-f97316)](docs/evaluation/calibration-results.md)
 
 </div>
 
