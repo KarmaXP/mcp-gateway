@@ -4,9 +4,9 @@
 
 # ---- Stage 1: Build ----
 # Use the floating alpine tag so the image resolves regardless of which Alpine
-# version ships with Go 1.26 (currently 3.22; avoid pinning the alpine minor
+# version ships with Go 1.27 (currently 3.24; avoid pinning the alpine minor
 # here since CGO_ENABLED=0 produces a fully static binary anyway).
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS builder
 
 WORKDIR /src
 
