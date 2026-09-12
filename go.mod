@@ -1,6 +1,6 @@
 module github.com/KarmaXP/mcp-gateway
 
-go 1.26
+go 1.26.0
 
 toolchain go1.26.6
 
@@ -19,7 +19,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.46.0
 	go.opentelemetry.io/otel/trace v1.46.0
 	golang.org/x/sync v0.22.0
-	golang.org/x/time v0.15.0
+	golang.org/x/time v0.16.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
