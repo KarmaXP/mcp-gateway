@@ -172,7 +172,7 @@ Direct Go dependencies (`go.mod`) at a glance:
 | `github.com/santhosh-tekuri/jsonschema/v6` | JSON Schema validation for `tools/call` arguments | `v6.0.3` |
 | `gopkg.in/yaml.v3` | YAML config loading | `v3.0.1` |
 | `go.opentelemetry.io/otel` family | OTel traces/metrics SDK and OTLP exporters | `v1.46.0` (`otelhttp v0.71.0`) |
-| `golang.org/x/sync` | Concurrency primitives (`errgroup`, semaphores) | `v0.22.0` |
+| `golang.org/x/sync` | Concurrency primitives (`errgroup`, semaphores) | `v0.23.0` |
 
 ## Health and readiness semantics
 
