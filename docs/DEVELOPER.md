@@ -164,15 +164,15 @@ Summary:
 
 Direct Go dependencies (`go.mod`) at a glance:
 
-| Module | Purpose | Version |
-|--------|---------|---------|
-| `github.com/golang-jwt/jwt/v5` | JWT parsing/validation in auth middleware | `v5.3.1` |
-| `github.com/google/uuid` | Session UUID generation and IDs | `v1.6.0` |
-| `github.com/lestrrat-go/jwx/v2` | JWKS/JWK handling for JWT verification | `v2.1.7` |
-| `github.com/santhosh-tekuri/jsonschema/v6` | JSON Schema validation for `tools/call` arguments | `v6.0.3` |
-| `gopkg.in/yaml.v3` | YAML config loading | `v3.0.1` |
-| `go.opentelemetry.io/otel` family | OTel traces/metrics SDK and OTLP exporters | `v1.46.0` (`otelhttp v0.71.0`) |
-| `golang.org/x/sync` | Concurrency primitives (`errgroup`, semaphores) | `v0.24.0` |
+| Module | Purpose | Version                        |
+|--------|---------|--------------------------------|
+| `github.com/golang-jwt/jwt/v5` | JWT parsing/validation in auth middleware | `v5.3.1`                       |
+| `github.com/google/uuid` | Session UUID generation and IDs | `v1.6.0`                       |
+| `github.com/lestrrat-go/jwx/v2` | JWKS/JWK handling for JWT verification | `v2.1.7`                       |
+| `github.com/santhosh-tekuri/jsonschema/v6` | JSON Schema validation for `tools/call` arguments | `v6.0.3`                       |
+| `gopkg.in/yaml.v3` | YAML config loading | `v3.0.1`                       |
+| `go.opentelemetry.io/otel` family | OTel traces/metrics SDK and OTLP exporters | `v1.47.0` (`otelhttp v0.72.0`) |
+| `golang.org/x/sync` | Concurrency primitives (`errgroup`, semaphores) | `v0.24.0`                      |
 
 ## Health and readiness semantics
 
